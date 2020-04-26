@@ -23,3 +23,8 @@ Easiest to copy from the address bar from the first page of search results (in G
         });
         ...
 ```
+
+## Run search
+```
+node server.js
+```
