@@ -2,10 +2,14 @@
   "name": "scholar-scraper",
   "version": "0.1.0",
   "private": true,
-  "scripts": {},
+  "scripts": {
+    "migrate": "node_modules/.bin/sequelize db:migrate"
+  },
   "dependencies": {
+    "body-parser": "^1.19.0",
     "chalk": "^4.0.0",
     "core-js": "^3.6.4",
+    "express": "^4.17.1",
     "puppeteer": "^3.0.1",
     "puppeteer-extra": "^3.1.9",
     "puppeteer-extra-plugin-stealth": "^2.4.9",

@@ -5,7 +5,7 @@
 npm install
 ```
 
-## Change search query in server.js
+## Change search query in scraper.js
 
 Easiest to copy from the address bar from the first page of search results (in Google Scholar website).
 
@@ -24,7 +24,17 @@ Easiest to copy from the address bar from the first page of search results (in G
         ...
 ```
 
+## Init Sqlite database
+
+```
+npm run migrate
+```
+
 ## Run search
 ```
-node server.js
+node scraper.js
 ```
+
+## Api
+
+There is also a simple rest api (api.js) to serve records from the sqlite database. I use it to classify the records.
