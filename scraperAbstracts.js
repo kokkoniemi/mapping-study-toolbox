@@ -20,7 +20,7 @@ const success = chalk.keyword("green");
             const record = await db.Record.findOne({
                 offset: i,
             });
-            if (record.abstract === null) {
+            if (record.abstract === null && !!record.url) {
                 const url = new URL(record.url);
 
                 const abstract = await async function () {
@@ -42,7 +42,7 @@ const success = chalk.keyword("green");
                         case "arxiv.org":
                             return await scrapeArxiv(page, url);
                         default:
-                        // do nothing
+                            return null;
                     }
                 }();
                 record.set("abstract", abstract);
@@ -143,12 +143,16 @@ async function scrapeAcm(page, url) {
     });
     const waitTime = 500 + Math.floor(Math.random() * Math.floor(2000)); // To look like a human behaviour
     await page.waitFor(waitTime);
-    await page.waitForSelector(".abstractSection", { timeout: 0 });
-    const res = await page.evaluate(() => {
-        const resNode = document.querySelector(".abstractSection");
-        return resNode.innerText;
-    });
-    return res;
+    try {
+        await page.waitForSelector(".abstractSection", { timeout: 5000 });
+        const res = await page.evaluate(() => {
+            const resNode = document.querySelector(".abstractSection");
+            return resNode.innerText;
+        });
+        return res;
+    } catch (err) {
+        return null;
+    }
 }
 
 async function scrapeTandfonline(page, url) {
@@ -158,12 +162,16 @@ async function scrapeTandfonline(page, url) {
     });
     const waitTime = 500 + Math.floor(Math.random() * Math.floor(2000)); // To look like a human behaviour
     await page.waitFor(waitTime);
-    await page.waitForSelector(".abstractSection", { timeout: 0 });
-    const res = await page.evaluate(() => {
-        const resNode = document.querySelector(".abstractSection");
-        return resNode.innerText;
-    });
-    return res;
+    try {
+        await page.waitForSelector(".abstractSection", { timeout: 5000 });
+        const res = await page.evaluate(() => {
+            const resNode = document.querySelector(".abstractSection");
+            return resNode.innerText;
+        });
+        return res;
+    } catch (error) {
+        return null;
+    }
 }
 
 async function scrapeWiley(page, url) {
@@ -187,7 +195,7 @@ async function scrapeWiley(page, url) {
             return resNode.innerText;
         });
     }
-    
+
     return res;
 }
 

@@ -4,12 +4,17 @@ const db = require("../models");
 
 
 router.get("/records", function (req, res) {
-    let { offset, limit } = req.query;
+    let { offset, limit, status } = req.query;
     offset = !offset ? 0 : parseInt(offset);
     limit = !limit ? 25 : parseInt(limit);
+    const where = {};
+    if (status !== undefined) {
+        where.status = status === "null" ? null : status;
+    }
     return db.Record.findAll({
         offset,
         limit,
+        where
     }).then((records) => res.send(records))
     .catch((err) => res.send(err));
 });

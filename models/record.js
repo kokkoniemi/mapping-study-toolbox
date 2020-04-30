@@ -6,7 +6,8 @@ module.exports = (sequelize, DataTypes) => {
     author: DataTypes.STRING,
     description: DataTypes.TEXT,
     status: DataTypes.STRING,
-    abstract: DataTypes.TEXT
+    abstract: DataTypes.TEXT,
+    databases: DataTypes.JSON,
   }, {});
   Record.associate = function(models) {
     // associations can be defined here
