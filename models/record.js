@@ -8,28 +8,35 @@ module.exports = (sequelize, DataTypes) => {
     status: DataTypes.STRING,
     abstract: DataTypes.TEXT,
     databases: DataTypes.JSON,
-  }, {});
+    alternateUrls: DataTypes.JSON,
+  }, {
+    paranoid: true
+  });
 
   Record.associate = function (models) {
     // associations can be defined here
   };
 
   /**
-   * Fetches all records that have matching search_url either in url-field or
+   * Fetches all records that have matching search_urls either in url-field or
    * as an entry in json-array in alternateUrls
    */
-  Record.getAllByUrl = async function (search_url) {
+  Record.getAllByUrls = async function (search_urls) {
+    if (!Array.isArray(search_urls)) {
+      throw new Error("Search urls must be an array");
+    }
     const recordInstances = await sequelize.query(
       `
-      SELECT Records.* FROM Records WHERE url LIKE ? 
+      SELECT Records.* FROM Records WHERE url IN (:urls) AND deletedAt IS NULL
       UNION
       SELECT Records.*
         FROM Records, json_each(Records.alternateUrls)
       WHERE json_valid(Records.alternateUrls)
-        AND json_each.value LIKE ?
+        AND json_each.value IN (:urls) 
+        AND Records.deletedAt IS NULL
       `,
       {
-        replacements: [search_url, search_url],
+        replacements: { urls: search_urls },
         type: sequelize.QueryTypes.SELECT
       }
     );
