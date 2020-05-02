@@ -80,12 +80,17 @@ async function scrapeScienceDirect(page, url) {
     });
     const waitTime = 500 + Math.floor(Math.random() * Math.floor(2000)); // To look like a human behaviour
     await page.waitFor(waitTime);
-    await page.waitForSelector("#abstracts", { timeout: 0 });
-    const res = await page.evaluate(() => {
-        const resNode = document.querySelector("#abstracts");
-        return resNode.innerText;
-    });
-    return res;
+    try {
+        await page.waitForSelector("#abstracts", { timeout: 5000 });
+        const res = await page.evaluate(() => {
+            const resNode = document.querySelector("#abstracts");
+            return resNode.innerText;
+        });
+        return res;
+    } catch (err) {
+        return null;
+    }
+
 }
 
 async function scrapeSpringer(page, url) {

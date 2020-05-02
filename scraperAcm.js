@@ -1,6 +1,7 @@
 const puppeteer = require("puppeteer-extra");
 const chalk = require("chalk");
 const db = require("./models");
+const { saveRecord } = require("./helpers");
 const StealthPlugin = require("puppeteer-extra-plugin-stealth");
 
 const error = chalk.bold.red;
@@ -9,7 +10,6 @@ const success = chalk.keyword("green");
 puppeteer.use(StealthPlugin());
 
 let scrape = null;
-let dublicates = [];
 
 (async () => {
     let browser = null;
@@ -35,11 +35,6 @@ let dublicates = [];
 
         await browser.close();
         console.log(success("Browser Closed"));
-        dublicates.forEach(d => {
-            d.dublicates.forEach(dd => {
-                console.log(d, dd.id, dd.title);
-            });
-        });
     } catch (err) {
         console.log(error(err));
         await browser.close();
@@ -89,41 +84,7 @@ async function processPage(page) {
 
     for (let i = 0; i < res.length; i++) {
         const record = res[i];
-        // 1. Check if there is dublicates
-        const recordInstances = await db.Record.getAllByUrls([record.url, ...record.alternateUrls]);
-
-        if (recordInstances.length) {
-            await scrape.set('dublicates', scrape.dublicates + 1);
-            await scrape.save();
-            dublicates.push({ record, dublicates: recordInstances.map(item => ({ title: item.title, id: item.id })) });
-        }
-
-        for (let j = 0; j < recordInstances.length; j++) {
-            recordInstance = recordInstances[j];
-            if (recordInstance.databases && !recordInstance.databases.includes(record.databases[0])) {
-                await recordInstance.set('databases', [...recordInstance.databases, ...record.databases]);
-                await recordInstance.save();
-            }
-        }
-
-        if (!recordInstances.length) {
-            // 2. Create a new record even if there is a namesake, since it might not be a dublicate
-            const recordInstance = await db.Record.create({ ...record });
-
-            // 3. If dublicates not found, check if there is namesakes, since those might also be dublicates
-            const namesakes = await db.Record.findAll({
-                where: {
-                    title: recordInstance.title,
-                    id: { [db.Sequelize.Op.ne]: recordInstance.id }
-                }
-            });
-            await namesakes.forEach(namesake => {
-                scrape.set('namesakes', [...scrape.namesakes, [namesake.id, recordInstance.id]]);
-            });
-        }
-        // 4. log the total amount
-        await scrape.set('total', scrape.total + 1);
-        await scrape.save();
+        await saveRecord(record, db, scrape);
     }
 
     await nextPage(page);
@@ -140,7 +101,6 @@ async function nextPage(page) {
         }
         return null;
     });
-    console.log(nextLink);
     if (nextLink) {
         await page.goto(nextLink, {
             waitUntil: 'domcontentloaded',

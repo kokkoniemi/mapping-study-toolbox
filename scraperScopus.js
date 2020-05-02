@@ -3,26 +3,34 @@ const chalk = require("chalk");
 const db = require("./models");
 const StealthPlugin = require("puppeteer-extra-plugin-stealth");
 const qs = require('querystring');
+const { saveRecord } = require("./helpers");
 
 const error = chalk.bold.red;
 const success = chalk.keyword("green");
 
 puppeteer.use(StealthPlugin());
+let scrape = null;
+
 
 (async () => {
+    const url = `https://www-scopus-com.ezproxy.jyu.fi/results/results.uri?numberOfFields=0&src=s&clickedLink=&edit=&editSaveSearch=&origin=searchbasic&authorTab=&affiliationTab=&advancedTab=&scint=1&menu=search&tablin=&searchterm1=%28%22project-based+learning%22+OR+%22capstone+project%22+OR+%22software+project%22+OR+%22team+projects%22+OR+%22group+projects%22+OR+%22problem+based+learning%22%29+AND+%28%22group+work%22+OR+%22team+work%22%29+AND+%28%22Computer+science+education%22+OR+%22Software+engineering+education%22%29+AND+student&field1=ALL&dateType=Publication_Date_Type&yearFrom=Before+1960&yearTo=Present&loadDate=7&documenttype=All&accessTypes=All&resetFormLink=&st1=%28%22project-based+learning%22+OR+%22capstone+project%22+OR+%22software+project%22+OR+%22team+projects%22+OR+%22group+projects%22+OR+%22problem+based+learning%22%29+AND+%28%22group+work%22+OR+%22team+work%22%29+AND+%28%22Computer+science+education%22+OR+%22Software+engineering+education%22%29+AND+student&st2=&sot=b&sdt=b&sl=259&s=ALL%28%28%22project-based+learning%22+OR+%22capstone+project%22+OR+%22software+project%22+OR+%22team+projects%22+OR+%22group+projects%22+OR+%22problem+based+learning%22%29+AND+%28%22group+work%22+OR+%22team+work%22%29+AND+%28%22Computer+science+education%22+OR+%22Software+engineering+education%22%29+AND+student%29&sid=af976f2797ccb38594ced0ff3e16a8ef&searchId=af976f2797ccb38594ced0ff3e16a8ef&txGid=536d2b118b38b1090328a0ffafe914fd&sort=plf-f&originationType=b&rr=`;
+    scrape = await db.Import.create({
+        database: "scopus",
+        query: url,
+        total: 0,
+        dublicates: 0,
+        namesakes: []
+    });
+
     let browser = null;
     try {
         browser = await puppeteer.launch({ headless: false });
         let page = await browser.newPage();
-        const url = `https://www-scopus-com.ezproxy.jyu.fi/results/results.uri?numberOfFields=0&src=s&clickedLink=&edit=&editSaveSearch=&origin=searchbasic&authorTab=&affiliationTab=&advancedTab=&scint=1&menu=search&tablin=&searchterm1=%28%22project-based+learning%22+OR+%22capstone+project%22+OR+%22software+project%22+OR+%22team+projects%22+OR+%22group+projects%22+OR+%22problem+based+learning%22%29+AND+%28%22group+work%22+OR+%22team+work%22%29+AND+%28%22Computer+science+education%22+OR+%22Software+engineering+education%22%29+AND+student&field1=ALL&dateType=Publication_Date_Type&yearFrom=Before+1960&yearTo=Present&loadDate=7&documenttype=All&accessTypes=All&resetFormLink=&st1=%28%22project-based+learning%22+OR+%22capstone+project%22+OR+%22software+project%22+OR+%22team+projects%22+OR+%22group+projects%22+OR+%22problem+based+learning%22%29+AND+%28%22group+work%22+OR+%22team+work%22%29+AND+%28%22Computer+science+education%22+OR+%22Software+engineering+education%22%29+AND+student&st2=&sot=b&sdt=b&sl=259&s=ALL%28%28%22project-based+learning%22+OR+%22capstone+project%22+OR+%22software+project%22+OR+%22team+projects%22+OR+%22group+projects%22+OR+%22problem+based+learning%22%29+AND+%28%22group+work%22+OR+%22team+work%22%29+AND+%28%22Computer+science+education%22+OR+%22Software+engineering+education%22%29+AND+student%29&sid=af976f2797ccb38594ced0ff3e16a8ef&searchId=af976f2797ccb38594ced0ff3e16a8ef&txGid=536d2b118b38b1090328a0ffafe914fd&sort=plf-f&originationType=b&rr=`;
         await page.goto(url, {
             waitUntil: "domcontentloaded",
             timeout: 0,
         });
 
-        // const urlStr = 'https://www-scopus-com.ezproxy.jyu.fi/redirect/linking.uri?targetURL=https%3a%2f%2fdoi.org%2f10.1590%2f1807-7692bar2019180103&locationID=2&categoryID=4&eid=2-s2.0-85073293772&issn=18077692&linkType=ViewAtPublisher&year=2019&origin=resultslist&dig=18e3c8c6278bc56d3f472cbd69e98647&recordRank=20';
-        // const url = new URL(urlStr);
-        // console.log({ url: qs.parse(url.search.substring(1)) });
         await processPage(page);
 
         await browser.close();
@@ -53,34 +61,25 @@ async function processPage(page) {
 
             pageResults.push({
                 title: titleNode.innerText,
-                url: url !== null ? url.search.substring(1) : null,
+                url: url.search.substring(1),
                 author: authorNode.innerText,
                 description: yearNode.innerText + " | " + sourceNode.innerText,
+                alternateUrls: [],
                 databases: ["scopus"]
             });
         }
         return pageResults;
     });
 
-    console.log(res);
 
-    res.forEach(async (record) => {
+    for (let i = 0; i < res.length; i++) {
+        const record = res[i];
         record.url = qs.parse(record.url).targetURL;
-        const recordInstance = await db.Record.findOne({
-            where: {
-                url: record.url
-            }
-        });
-        if (recordInstance &&
-            recordInstance.databases &&
-            !recordInstance.databases.includes(record.databases[0])
-        ) {
-            recordInstance.set('databases', [...recordInstance.databases, ...record.databases]);
-            recordInstance.save()
-        } else if (!recordInstance) {
-            db.Record.create({ ...record });
+        if (record.url.substring(0, 4) === "Ajax") {
+            record.url = null;
         }
-    });
+        await saveRecord(record, db, scrape);
+    }
 
     await nextPage(page);
 }
@@ -92,13 +91,13 @@ async function nextPage(page) {
         const resNode = document.querySelector(".pagination");
         const nextBtn = resNode.querySelector("[title='Next page']");
         if (nextBtn) {
-            nextBtn.click();
+            setTimeout(() => { window.setSelectedLink("NextPageButton"); }, 100);
             return true;
         }
         return false;
     });
     if (isNext) {
-        page.waitFor(200);
+        await page.waitFor(10000);
         await processPage(page);
     }
 }

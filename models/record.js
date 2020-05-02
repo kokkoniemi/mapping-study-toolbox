@@ -5,10 +5,10 @@ module.exports = (sequelize, DataTypes) => {
     url: DataTypes.STRING,
     author: DataTypes.STRING,
     description: DataTypes.TEXT,
-    status: DataTypes.STRING,
+    status: DataTypes.STRING,       // null,"excluded","included","uncertain"
     abstract: DataTypes.TEXT,
-    databases: DataTypes.JSON,
-    alternateUrls: DataTypes.JSON,
+    databases: DataTypes.JSON,      // JSON array
+    alternateUrls: DataTypes.JSON,  // JSON array
   }, {
     paranoid: true
   });
@@ -37,7 +37,9 @@ module.exports = (sequelize, DataTypes) => {
       `,
       {
         replacements: { urls: search_urls },
-        type: sequelize.QueryTypes.SELECT
+        type: sequelize.QueryTypes.SELECT,
+        model: Record,
+        mapToModel: true
       }
     );
     return recordInstances;
