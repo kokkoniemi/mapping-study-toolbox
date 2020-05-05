@@ -1,7 +1,7 @@
 const puppeteer = require("puppeteer-extra");
 const chalk = require("chalk");
-const db = require("./models");
-const { saveRecord } = require("./helpers");
+const db = require("../models");
+const { saveRecord } = require("../helpers");
 const StealthPlugin = require("puppeteer-extra-plugin-stealth");
 
 const error = chalk.bold.red;
@@ -14,7 +14,7 @@ let browser = null;
 
 (async () => {
     try {
-        const url = `https://www.sciencedirect.com/search/advanced?qs=%28%22project-based%20learning%22%20OR%20%22capstone%20project%22%20OR%20%22software%20project%22%20OR%20%22team%20projects%22%20OR%20%22group%20projects%22%20OR%20%22problem%20based%20learning%22%29%20AND%20%28%22Computer%20science%20education%22%20OR%20%22Software%20engineering%20education%22%29`;
+        const url = `https://www.sciencedirect.com/search/advanced?qs=%28%22project-based%20learning%22%20OR%20%22capstone%20project%22%20OR%20%22software%20project%22%20OR%20%22team%20projects%22%20OR%20%22group%20projects%22%20OR%20%22problem%20based%20learning%22%29%20AND%20%28%22Computer%20science%20education%22%20OR%20%22Software%20engineering%20education%22%29&date=2010-2020`;
         scrape = await db.Import.create({
             database: "sciencedirect",
             query: url,

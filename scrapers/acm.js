@@ -1,7 +1,7 @@
 const puppeteer = require("puppeteer-extra");
 const chalk = require("chalk");
-const db = require("./models");
-const { saveRecord } = require("./helpers");
+const db = require("../models");
+const { saveRecord } = require("../helpers");
 const StealthPlugin = require("puppeteer-extra-plugin-stealth");
 
 const error = chalk.bold.red;
@@ -14,7 +14,7 @@ let scrape = null;
 (async () => {
     let browser = null;
     try {
-        const url = `https://dl.acm.org/action/doSearch?AllField=%28%22project-based+learning%22+OR+%22capstone+project%22+OR+%22software+project%22+OR+%22team+projects%22+OR+%22group+projects%22+OR+%22problem+based+learning%22%29+AND+%28%22group+work%22+OR+%22team+work%22%29+AND+%28%22Computer+science+education%22+OR+%22Software+engineering+education%22%29+AND+student`;
+        const url = `https://dl.acm.org/action/doSearch?AllField=%28%22project-based+learning%22+OR+%22capstone+project%22+OR+%22software+project%22+OR+%22team+projects%22+OR+%22group+projects%22+OR+%22problem+based+learning%22%29+AND+%28%22group+work%22+OR+%22team+work%22%29+AND+%28%22Computer+science+education%22+OR+%22Software+engineering+education%22%29+AND+student&AfterYear=2010&BeforeYear=2020`;
         // initialize a scrape log
         scrape = await db.Import.create({
             database: "acm",

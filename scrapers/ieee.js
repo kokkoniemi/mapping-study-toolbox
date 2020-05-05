@@ -1,7 +1,7 @@
 const puppeteer = require("puppeteer-extra");
 const chalk = require("chalk");
-const db = require("./models");
-const { saveRecord } = require("./helpers");
+const db = require("../models");
+const { saveRecord } = require("../helpers");
 // const StealthPlugin = require("puppeteer-extra-plugin-stealth");
 
 const error = chalk.bold.red;
@@ -14,7 +14,7 @@ let browser = null;
 
 (async () => {
     try {
-        const url = `https://ieeexplore.ieee.org/search/searchresult.jsp?newsearch=true&queryText=(%22project-based%20learning%22%20OR%20%22capstone%20project%22%20OR%20%22software%20project%22%20OR%20%22team%20projects%22%20OR%20%22group%20projects%22%20OR%20%22problem%20based%20learning%22)%20AND%20(%22group%20work%22%20OR%20%22team%20work%22)`;
+        const url = `https://ieeexplore.ieee.org/search/searchresult.jsp?queryText=(%22project-based%20learning%22%20OR%20%22capstone%20project%22%20OR%20%22software%20project%22%20OR%20%22team%20projects%22%20OR%20%22group%20projects%22%20OR%20%22problem%20based%20learning%22)%20AND%20(%22group%20work%22%20OR%20%22team%20work%22)&highlight=true&returnFacets=ALL&returnType=SEARCH&ranges=2010_2019_Year`;
         scrape = await db.Import.create({
             database: "ieeexplore",
             query: url,

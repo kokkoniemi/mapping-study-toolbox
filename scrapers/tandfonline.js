@@ -1,8 +1,8 @@
 const puppeteer = require("puppeteer-extra");
 const chalk = require("chalk");
-const db = require("./models");
+const db = require("../models");
 const StealthPlugin = require("puppeteer-extra-plugin-stealth");
-const { saveRecord } = require("./helpers");
+const { saveRecord } = require("../helpers");
 
 const error = chalk.bold.red;
 const success = chalk.keyword("green");
@@ -11,7 +11,7 @@ puppeteer.use(StealthPlugin());
 let scrape = null;
 
 (async () => {
-    const url = `https://www.tandfonline.com/action/doSearch?field1=AllField&text1=%28%22project-based+learning%22+OR+%22capstone+project%22+OR+%22software+project%22+OR+%22team+projects%22+OR+%22group+projects%22+OR+%22problem+based+learning%22%29+AND+%28%22group+work%22+OR+%22team+work%22%29+AND+%28%22Computer+science+education%22+OR+%22Software+engineering+education%22%29&Ppub=&pageSize=10&subjectTitle=&startPage=0`;
+    const url = `https://www.tandfonline.com/action/doSearch?field1=AllField&text1=%28%22project-based+learning%22+OR+%22capstone+project%22+OR+%22software+project%22+OR+%22team+projects%22+OR+%22group+projects%22+OR+%22problem+based+learning%22%29+AND+%28%22group+work%22+OR+%22team+work%22%29+AND+%28%22Computer+science+education%22+OR+%22Software+engineering+education%22%29&Ppub=&AfterYear=2010&BeforeYear=2020`;
     scrape = await db.Import.create({
         database: "tandfonline",
         query: url,

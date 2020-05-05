@@ -1,19 +1,28 @@
 const puppeteer = require("puppeteer-extra");
 const chalk = require("chalk");
-const db = require("./models");
+const db = require("../models");
+const { saveRecord } = require("../helpers");
 const StealthPlugin = require("puppeteer-extra-plugin-stealth");
 
 const error = chalk.bold.red;
 const success = chalk.keyword("green");
 
 puppeteer.use(StealthPlugin());
+let scrape = null;
 
 (async () => {
     let browser = null;
     try {
+        const url = `https://scholar.google.fi/scholar?q=%28%22project-based+learning%22+OR+%22capstone+project%22+OR+%22software+project%22+OR+%22team+projects%22+OR+%22group+projects%22+OR+%22problem+based+learning%22%29+AND+%28%22group+work%22+OR+%22team+work%22%29+AND+%28%22Computer+science+education%22+OR+%22Software+engineering+education%22%29+AND+student&hl=fi&as_sdt=0%2C5&as_ylo=2010&as_yhi=2020`;
+        scrape = await db.Import.create({
+            database: "scholar",
+            query: url,
+            total: 0,
+            dublicates: 0,
+            namesakes: []
+        });
         browser = await puppeteer.launch({ headless: false });
         let page = await browser.newPage();
-        const url = `https://scholar.google.fi/scholar?hl=fi&as_sdt=0%2C5&q=%28%22project-based+learning%22+OR+%22capstone+project%22+OR+%22software+project%22+OR+%22team+projects%22+OR+%22group+projects%22+OR+%22problem+based+learning%22%29+AND+%28%22group+work%22+OR+%22team+work%22%29+AND+%28%22Computer+science+education%22+OR+%22Software+engineering+education%22%29+AND+student&btnG=`;
         await page.goto(url, {
             waitUntil: "domcontentloaded",
             timeout: 0,
@@ -66,23 +75,10 @@ async function processPage(page) {
         return pageResults;
     });
 
-    res.forEach(async (record) => {
-        const recordInstance = await db.Record.findOne({
-            where: {
-                title: record.title,
-                author: record.author,
-            }
-        });
-        if (recordInstance &&
-            recordInstance.databases &&
-            !recordInstance.databases.includes(record.databases[0])
-        ) {
-            recordInstance.set('databases', [...recordInstance.databases, ...record.databases]);
-            recordInstance.save()
-        } else if (!recordInstance) {
-            db.Record.create({ ...record });
-        }
-    });
+    for (let i = 0; i < res.length; i++) {
+        const record = res[i];
+        await saveRecord(record, db, scrape);
+    }
 
     await nextPage(page);
 }
