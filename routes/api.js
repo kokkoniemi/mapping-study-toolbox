@@ -14,7 +14,8 @@ router.get("/records", function (req, res) {
     return db.Record.findAll({
         offset,
         limit,
-        where
+        where,
+        include: 'Publication'
     }).then((records) => res.send(records))
     .catch((err) => res.send(err));
 });

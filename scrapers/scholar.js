@@ -13,23 +13,37 @@ let scrape = null;
 (async () => {
     let browser = null;
     try {
-        const url = `https://scholar.google.fi/scholar?q=%28%22project-based+learning%22+OR+%22capstone+project%22+OR+%22software+project%22+OR+%22team+projects%22+OR+%22group+projects%22+OR+%22problem+based+learning%22%29+AND+%28%22group+work%22+OR+%22team+work%22%29+AND+%28%22Computer+science+education%22+OR+%22Software+engineering+education%22%29+AND+student&hl=fi&as_sdt=0%2C5&as_ylo=2010&as_yhi=2020`;
+        const urls = [
+            `https://scholar.google.fi/scholar?q=%28%22project-based+learning%22+OR+%22capstone+project%22+OR+%22software+project%22+OR+%22team+projects%22+OR+%22group+projects%22+OR+%22problem+based+learning%22%29+AND+%28%22group+work%22+OR+%22team+work%22%29+AND+%28%22Computer+science+education%22+OR+%22Software+engineering+education%22%29+AND+student&hl=fi&as_sdt=0%2C5&as_ylo=2010&as_yhi=2010`,
+            `https://scholar.google.fi/scholar?q=%28%22project-based+learning%22+OR+%22capstone+project%22+OR+%22software+project%22+OR+%22team+projects%22+OR+%22group+projects%22+OR+%22problem+based+learning%22%29+AND+%28%22group+work%22+OR+%22team+work%22%29+AND+%28%22Computer+science+education%22+OR+%22Software+engineering+education%22%29+AND+student&hl=fi&as_sdt=0%2C5&as_ylo=2011&as_yhi=2011`,
+            `https://scholar.google.fi/scholar?q=%28%22project-based+learning%22+OR+%22capstone+project%22+OR+%22software+project%22+OR+%22team+projects%22+OR+%22group+projects%22+OR+%22problem+based+learning%22%29+AND+%28%22group+work%22+OR+%22team+work%22%29+AND+%28%22Computer+science+education%22+OR+%22Software+engineering+education%22%29+AND+student&hl=fi&as_sdt=0%2C5&as_ylo=2012&as_yhi=2012`,
+            `https://scholar.google.fi/scholar?q=%28%22project-based+learning%22+OR+%22capstone+project%22+OR+%22software+project%22+OR+%22team+projects%22+OR+%22group+projects%22+OR+%22problem+based+learning%22%29+AND+%28%22group+work%22+OR+%22team+work%22%29+AND+%28%22Computer+science+education%22+OR+%22Software+engineering+education%22%29+AND+student&hl=fi&as_sdt=0%2C5&as_ylo=2013&as_yhi=2013`,
+            `https://scholar.google.fi/scholar?q=%28%22project-based+learning%22+OR+%22capstone+project%22+OR+%22software+project%22+OR+%22team+projects%22+OR+%22group+projects%22+OR+%22problem+based+learning%22%29+AND+%28%22group+work%22+OR+%22team+work%22%29+AND+%28%22Computer+science+education%22+OR+%22Software+engineering+education%22%29+AND+student&hl=fi&as_sdt=0%2C5&as_ylo=2014&as_yhi=2014`,
+            `https://scholar.google.fi/scholar?q=%28%22project-based+learning%22+OR+%22capstone+project%22+OR+%22software+project%22+OR+%22team+projects%22+OR+%22group+projects%22+OR+%22problem+based+learning%22%29+AND+%28%22group+work%22+OR+%22team+work%22%29+AND+%28%22Computer+science+education%22+OR+%22Software+engineering+education%22%29+AND+student&hl=fi&as_sdt=0%2C5&as_ylo=2015&as_yhi=2015`,
+            `https://scholar.google.fi/scholar?q=%28%22project-based+learning%22+OR+%22capstone+project%22+OR+%22software+project%22+OR+%22team+projects%22+OR+%22group+projects%22+OR+%22problem+based+learning%22%29+AND+%28%22group+work%22+OR+%22team+work%22%29+AND+%28%22Computer+science+education%22+OR+%22Software+engineering+education%22%29+AND+student&hl=fi&as_sdt=0%2C5&as_ylo=2016&as_yhi=2016`,
+            `https://scholar.google.fi/scholar?q=%28%22project-based+learning%22+OR+%22capstone+project%22+OR+%22software+project%22+OR+%22team+projects%22+OR+%22group+projects%22+OR+%22problem+based+learning%22%29+AND+%28%22group+work%22+OR+%22team+work%22%29+AND+%28%22Computer+science+education%22+OR+%22Software+engineering+education%22%29+AND+student&hl=fi&as_sdt=0%2C5&as_ylo=2017&as_yhi=2017`,
+            `https://scholar.google.fi/scholar?q=%28%22project-based+learning%22+OR+%22capstone+project%22+OR+%22software+project%22+OR+%22team+projects%22+OR+%22group+projects%22+OR+%22problem+based+learning%22%29+AND+%28%22group+work%22+OR+%22team+work%22%29+AND+%28%22Computer+science+education%22+OR+%22Software+engineering+education%22%29+AND+student&hl=fi&as_sdt=0%2C5&as_ylo=2018&as_yhi=2018`,
+            `https://scholar.google.fi/scholar?q=%28%22project-based+learning%22+OR+%22capstone+project%22+OR+%22software+project%22+OR+%22team+projects%22+OR+%22group+projects%22+OR+%22problem+based+learning%22%29+AND+%28%22group+work%22+OR+%22team+work%22%29+AND+%28%22Computer+science+education%22+OR+%22Software+engineering+education%22%29+AND+student&hl=fi&as_sdt=0%2C5&as_ylo=2019&as_yhi=2019`,
+            `https://scholar.google.fi/scholar?q=%28%22project-based+learning%22+OR+%22capstone+project%22+OR+%22software+project%22+OR+%22team+projects%22+OR+%22group+projects%22+OR+%22problem+based+learning%22%29+AND+%28%22group+work%22+OR+%22team+work%22%29+AND+%28%22Computer+science+education%22+OR+%22Software+engineering+education%22%29+AND+student&hl=fi&as_sdt=0%2C5&as_ylo=2020&as_yhi=2020`
+        ]
         scrape = await db.Import.create({
             database: "scholar",
-            query: url,
+            query: "https://scholar.google.fi/scholar?q=%28%22project-based+learning%22+OR+%22capstone+project%22+OR+%22software+project%22+OR+%22team+projects%22+OR+%22group+projects%22+OR+%22problem+based+learning%22%29+AND+%28%22group+work%22+OR+%22team+work%22%29+AND+%28%22Computer+science+education%22+OR+%22Software+engineering+education%22%29+AND+student&hl=fi&as_sdt=0%2C5&as_ylo=2010&as_yhi=2020",
             total: 0,
             dublicates: 0,
             namesakes: []
         });
-        browser = await puppeteer.launch({ headless: false });
+        browser = await puppeteer.launch({ headless: false, executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", slowMo: 100 });
         let page = await browser.newPage();
-        await page.goto(url, {
-            waitUntil: "domcontentloaded",
-            timeout: 0,
-        });
-
-        await processPage(page);
-
+        for (let url of urls) {
+            await page.goto(url, {
+                waitUntil: "domcontentloaded",
+                timeout: 0,
+            });
+    
+            await processPage(page);
+        }
+    
         await browser.close();
         console.log(success("Browser Closed"));
     } catch (err) {
@@ -40,7 +54,7 @@ let scrape = null;
 })();
 
 async function processPage(page) {
-    const waitTime = 2000 + Math.floor(Math.random() * Math.floor(2000)); // To look like a human behaviour
+    const waitTime = 4000 + Math.floor(Math.random() * Math.floor(2000)); // To look like a human behaviour
     await page.waitFor(waitTime);
     await page.waitForSelector("#gs_res_ccl_mid", { timeout: 0 });
     await page.waitForSelector(".gs_r", { timeout: 0 });
@@ -65,8 +79,9 @@ async function processPage(page) {
             const description = node.querySelector("div.gs_rs").innerText.trim();
 
             pageResults.push({
-                title: titleNode.innerText,
+                title: titleNode.querySelector("a").innerText,
                 url: url.href,
+                alternateUrls: [],
                 author: author,
                 description: description,
                 databases: ["scholar"]

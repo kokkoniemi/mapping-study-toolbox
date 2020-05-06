@@ -9,6 +9,9 @@ const success = chalk.keyword("green");
 // puppeteer.use(StealthPlugin());
 
 const scrapePublication = async (record, url, page) => {
+    if (record.publicationId !== null) {
+        return;
+    }
     if (await record.getPublication() === null && !!record.url) {
         const pub = await async function () {
             if (url.host === "dl.acm.org") {
@@ -26,23 +29,27 @@ const scrapePublication = async (record, url, page) => {
             }
         }();
 
-        if (pub) {
-            console.log(pub);
-            let pubInstance = await db.Publication.findOne({
-                where: {
-                    name: pub.name,
-                }
-            });
-            if (!pubInstance) {
-                record.createPublication({
-                    name: pub.name,
-                    alternateNames: [...(pub.alternateNames ? pub.alternateNames : [])],
-                    jufoLevel: null,
-                    database: pub.database
+        try {
+            if (pub) {
+                console.log(pub);
+                let pubInstance = await db.Publication.findOne({
+                    where: {
+                        name: pub.name,
+                    }
                 });
-            } else {
-                record.setPublication(pubInstance);
+                if (!pubInstance) {
+                    record.createPublication({
+                        name: pub.name,
+                        alternateNames: [...(pub.alternateNames ? pub.alternateNames : [])],
+                        jufoLevel: null,
+                        database: pub.database
+                    });
+                } else {
+                    record.setPublication(pubInstance);
+                }
             }
+        } catch (err) {
+            console.log(error(err));
         }
     }
 }
@@ -93,16 +100,16 @@ const scrapeAbstract = async (record, url, page) => {
             let url = new URL(record.url);
 
             if (url.host === "doi.org") {
-                page.goto(url.href, {
+                await page.goto(url.href, {
                     waitUntil: "domcontentloaded",
                     timeout: 0,
                 });
-                const newUrl = page.evaluate(() => {
+                const newUrl = await page.evaluate(() => {
                     return document.location.href;
                 });
                 url = new URL(newUrl);
             }
-            // scrapeAbstract(record, url, page);
+            await scrapeAbstract(record, url, page);
             await scrapePublication(record, url, page);
         }
         await browser.close();
@@ -144,6 +151,7 @@ async function scrapeScienceDirect(page, url) {
         });
         return res;
     } catch (err) {
+        console.log(error(err));
         return null;
     }
 
@@ -169,6 +177,7 @@ async function scrapeSpringer(page, url) {
                 return resNode.innerText;
             });
         } catch (err) {
+            console.log(error(err));
             res = null;
         }
     } else if (currentUrl.pathname.substring(0, 8) === "/article") {
@@ -212,6 +221,7 @@ async function scrapeAcm(page, url) {
         });
         return res;
     } catch (err) {
+        console.log(error(err));
         return null;
     }
 }
@@ -230,7 +240,8 @@ async function scrapeTandfonline(page, url) {
             return resNode.innerText;
         });
         return res;
-    } catch (error) {
+    } catch (err) {
+        console.log(error(err));
         return null;
     }
 }
@@ -317,6 +328,7 @@ async function scrapeAcmPub(page, url) {
         }
         return null;
     } catch (err) {
+        console.log(error(err));
         return null;
     }
 }
@@ -353,6 +365,7 @@ async function scrapeIEEEPub(page, url) {
         }
         return null;
     } catch (err) {
+        console.log(error(err));
         return null;
     }
 }
@@ -383,6 +396,7 @@ async function scrapeTandfonlinePub(page, url) {
         }
         return null;
     } catch (err) {
+        console.log(error(err));
         return null;
     }
 }
@@ -412,6 +426,7 @@ async function scrapeScienceDirectPub(page, url) {
         }
         return null;
     } catch (err) {
+        console.log(error(err));
         return null;
     }
 }
@@ -442,6 +457,7 @@ async function scrapeSpringerPub(page, url) {
         }
         return null;
     } catch (err) {
+        console.log(error(err));
         return null;
     }
 }

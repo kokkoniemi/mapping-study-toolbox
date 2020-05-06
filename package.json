@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "start": "node server.js",
     "migrate": "node_modules/.bin/sequelize db:migrate"
   },
   "dependencies": {
@@ -26,7 +27,7 @@
     "babel-eslint": "^10.1.0",
     "eslint": "^6.7.2",
     "eslint-plugin-prettier": "^3.1.1",
-    "node-sass": "^4.12.0",
+    "node-sass": "^4.14.1",
     "prettier": "^1.19.1",
     "sequelize-cli": "^5.5.1",
     "vue-template-compiler": "^2.6.11"
