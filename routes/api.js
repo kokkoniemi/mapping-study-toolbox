@@ -32,11 +32,11 @@ router.put("/records/:id", function (req, res) {
     const id = parseInt(req.params.id);
     return db.Record.findByPk(id)
     .then((record) => {
-        const { status } = req.body;
+        const { status, editedBy } = req.body;
         if (![null, "uncertain", "excluded", "included"].includes(status)) {
             throw new Error("Illegal value for 'status'");
         }
-        return record.update({ status })
+        return record.update({ status, editedBy })
         .then(() => res.send(record))
         .catch((err) => res.status(400).send(err));
     });
