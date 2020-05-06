@@ -1,11 +1,18 @@
 # scholar-parser
 
+## System requirements
+```
+node.js
+npm
+sqlite3
+```
+
 ## Project setup
 ```
 npm install
 ```
 
-## Change search query in scraper.js
+## Change search query in scraper[scraper-name].js
 
 Easiest to copy from the address bar from the first page of search results (in Google Scholar website).
 
@@ -32,9 +39,9 @@ npm run migrate
 
 ## Run search
 ```
-node scraper.js
+node scraper/[scraper-name].js
 ```
 
 ## Api
 
-There is also a simple rest api (api.js) to serve records from the sqlite database. I use it to classify the records.
+There is also a simple rest api (server.js) to serve records from the sqlite database. I use it to classify the records.
