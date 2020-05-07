@@ -1,8 +1,8 @@
-# scholar-parser
+# mapping-study-toolbox
 
 ## System requirements
 ```
-node.js
+node.js v.12 or above
 npm
 sqlite3
 ```
