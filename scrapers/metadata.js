@@ -9,10 +9,7 @@ const success = chalk.keyword("green");
 // puppeteer.use(StealthPlugin());
 
 const scrapePublication = async (record, url, page) => {
-    if (record.publicationId !== null) {
-        return;
-    }
-    if (await record.getPublication() === null && !!record.url) {
+    if (record.Publication === null && !!record.url) {
         const pub = await async function () {
             if (url.host === "dl.acm.org") {
                 return await scrapeAcmPub(page, url);
@@ -31,13 +28,14 @@ const scrapePublication = async (record, url, page) => {
 
         try {
             if (pub) {
-                console.log(pub);
+                console.log(record.title, pub);
                 let pubInstance = await db.Publication.findOne({
                     where: {
                         name: pub.name,
                     }
                 });
                 if (!pubInstance) {
+                    console.log("created publication!");
                     record.createPublication({
                         name: pub.name,
                         alternateNames: [...(pub.alternateNames ? pub.alternateNames : [])],
@@ -45,6 +43,7 @@ const scrapePublication = async (record, url, page) => {
                         database: pub.database
                     });
                 } else {
+                    console.log("set publication!");
                     record.setPublication(pubInstance);
                 }
             }
@@ -96,7 +95,11 @@ const scrapeAbstract = async (record, url, page) => {
         for (let i = 0; i < rowCount; i++) {
             const record = await db.Record.findOne({
                 offset: i,
+                include: 'Publication'
             });
+            if (!record) {
+                continue;
+            }
             let url = new URL(record.url);
 
             if (url.host === "doi.org") {
@@ -109,7 +112,7 @@ const scrapeAbstract = async (record, url, page) => {
                 });
                 url = new URL(newUrl);
             }
-            await scrapeAbstract(record, url, page);
+            // await scrapeAbstract(record, url, page);
             await scrapePublication(record, url, page);
         }
         await browser.close();

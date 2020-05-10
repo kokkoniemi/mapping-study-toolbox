@@ -11,7 +11,7 @@ puppeteer.use(StealthPlugin());
 let scrape = null;
 
 (async () => {
-    const url = `https://www.tandfonline.com/action/doSearch?field1=AllField&text1=%28%22project-based+learning%22+OR+%22capstone+project%22+OR+%22software+project%22+OR+%22team+projects%22+OR+%22group+projects%22+OR+%22problem+based+learning%22%29+AND+%28%22group+work%22+OR+%22team+work%22%29+AND+%28%22Computer+science+education%22+OR+%22Software+engineering+education%22%29&Ppub=&AfterYear=2010&BeforeYear=2020`;
+    const url = `https://www.tandfonline.com/action/doSearch?field1=AllField&text1=%28%22project-based+learning%22+OR+capstone+OR+%22software+project%22+OR+%22software+projects%22+OR+%22team+project%22+OR+%22team+projects%22+OR+%22group+project%22+OR+%22group+projects%22+OR+%22problem+based+learning%22%29+AND+%28%22group+work%22+OR+%22team+work%22+OR+teamwork%29+AND+%28%22Computer+science+education%22+OR+%22Computing+education%22+OR+%22Software+engineering+education%22%29&Ppub=&AfterYear=2010&BeforeYear=2020`;
     scrape = await db.Import.create({
         database: "tandfonline",
         query: url,

@@ -24,7 +24,7 @@ router.get("/records", function (req, res) {
 
 router.get("/records/:id", function (req, res) {
     const id = parseInt(req.params.id);
-    return db.Record.findByPk(id)
+    return db.Record.findByPk(id, {include: 'Publication'})
         .then((record) => res.send(record))
         .catch((err) => res.send(err));
 });
@@ -32,7 +32,7 @@ router.get("/records/:id", function (req, res) {
 // only enable updating the status of the record
 router.put("/records/:id", function (req, res) {
     const id = parseInt(req.params.id);
-    return db.Record.findByPk(id)
+    return db.Record.findByPk(id, {include: 'Publication'})
         .then((record) => {
             const { status, editedBy } = req.body;
             if (![null, "uncertain", "excluded", "included"].includes(status)) {

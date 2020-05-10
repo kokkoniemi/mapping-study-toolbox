@@ -14,25 +14,31 @@ let browser = null;
 
 (async () => {
     try {
-        const url = `https://www.sciencedirect.com/search/advanced?qs=%28%22project-based%20learning%22%20OR%20%22capstone%20project%22%20OR%20%22software%20project%22%20OR%20%22team%20projects%22%20OR%20%22group%20projects%22%20OR%20%22problem%20based%20learning%22%29%20AND%20%28%22Computer%20science%20education%22%20OR%20%22Software%20engineering%20education%22%29&date=2010-2020`;
-        scrape = await db.Import.create({
-            database: "sciencedirect",
-            query: url,
-            total: 0,
-            dublicates: 0,
-            namesakes: []
-        });
+        const urls = [
+            `https://www.sciencedirect.com/search/advanced?qs=%28%22software%20project%22%20OR%20%22team%20project%22%20OR%20%22group%20project%22%29%20AND%20%28%22group%20work%22%20OR%20%22team%20work%22%20OR%20teamwork%29%20AND%20%28%22Computer%20science%20education%22%20OR%20%22Computing%20education%22%20OR%20%22Software%20engineering%20education%22%29&date=2010-2020`,
+            `https://www.sciencedirect.com/search/advanced?qs=%28%22software%20projects%22%20OR%20%22team%20projects%22%20OR%20%22group%20projects%22%29%20AND%20%28%22group%20work%22%20OR%20%22team%20work%22%20OR%20teamwork%29%20AND%20%28%22Computer%20science%20education%22%20OR%20%22Computing%20education%22%20OR%20%22Software%20engineering%20education%22%29&date=2010-2020`,
+            `https://www.sciencedirect.com/search/advanced?qs=%28capstone%20OR%20%22project-based%20learning%22%20OR%20%22problem%20based%20learning%22%29%20AND%20%28%22group%20work%22%20OR%20%22team%20work%22%20OR%20teamwork%29%20AND%20%28%22Computer%20science%20education%22%20OR%20%22Computing%20education%22%20OR%20%22Software%20engineering%20education%22%29&date=2010-2020`
+        ];
 
         browser = await puppeteer.launch({ headless: false });
         let page = await browser.newPage();
 
-        await page.goto(url, {
-            waitUntil: "domcontentloaded",
-            timeout: 0,
-        });
-
-        await processPage(page);
-
+        for (const url of urls) {
+            scrape = await db.Import.create({
+                database: "sciencedirect",
+                query: url,
+                total: 0,
+                dublicates: 0,
+                namesakes: []
+            });
+            await page.goto(url, {
+                waitUntil: "domcontentloaded",
+                timeout: 0,
+            });
+    
+            await processPage(page);
+        }
+        
         await browser.close();
         console.log(success("Browser Closed"));
     } catch (err) {

@@ -14,7 +14,7 @@ let browser = null;
 
 (async () => {
     try {
-        const url = `https://ieeexplore.ieee.org/search/searchresult.jsp?queryText=(%22project-based%20learning%22%20OR%20%22capstone%20project%22%20OR%20%22software%20project%22%20OR%20%22team%20projects%22%20OR%20%22group%20projects%22%20OR%20%22problem%20based%20learning%22)%20AND%20(%22group%20work%22%20OR%20%22team%20work%22)&highlight=true&returnFacets=ALL&returnType=SEARCH&ranges=2010_2019_Year`;
+        const url = `https://ieeexplore.ieee.org/search/searchresult.jsp?action=search&matchBoolean=true&queryText=((%22project-based%20learning%22%20OR%20capstone%20OR%20%22software%20project%22%20OR%20%22software%20projects%22%20OR%20%22team%20project%22%20OR%20%22team%20projects%22%20OR%20%22group%20project%22%20OR%20%22group%20projects%22%20OR%20%22problem%20based%20learning%22)%20AND%20(%22group%20work%22%20OR%20%22team%20work%22%20OR%20teamwork)%20%20AND%20(%22Computer%20science%20education%22%20OR%20%22Computing%20education%22%20OR%20%22Software%20engineering%20education%22))&highlight=true&returnType=SEARCH&matchPubs=true&ranges=2010_2019_Year&returnFacets=ALL&refinements=ContentType:Conferences&refinements=ContentType:Journals`;
         scrape = await db.Import.create({
             database: "ieeexplore",
             query: url,
@@ -81,27 +81,31 @@ async function processPage(page) {
             timeout: 0,
         });
         await recordPage.waitFor(1000);
+        try {
+            await recordPage.waitForSelector(".abstract-desktop-div");
 
-        await recordPage.waitForSelector(".abstract-desktop-div");
+            const info = await recordPage.evaluate(() => {
+                const abstractNode = document.querySelector(".abstract-desktop-div");
+                const doiNode = document.querySelector(".stats-document-abstract-doi");
+                const url = new URL(document.location.href);
+                const pathname = url.pathname.split("/");
+                return {
+                    abstract: abstractNode.querySelector(".u-mb-1").querySelector("div").innerText.trim(),
+                    alternateUrls: [
+                        ...(doiNode !== null ? [doiNode.querySelector("a").getAttribute("href")] : []),
+                        `https://ieeexplore.ieee.org/abstract/document/${pathname[pathname.length - 1]}`,
+                        `https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=${pathname[pathname.length - 1]}`
+                    ],
+                };
+            });
 
-        const info = await recordPage.evaluate(() => {
-            const abstractNode = document.querySelector(".abstract-desktop-div");
-            const doiNode = document.querySelector(".stats-document-abstract-doi");
-            const url = new URL(document.location.href);
-            const pathname = url.pathname.split("/");
-            return {
-                abstract: abstractNode.querySelector(".u-mb-1").querySelector("div").innerText.trim(),
-                alternateUrls: [
-                    ...(doiNode !== null ? [doiNode.querySelector("a").getAttribute("href")] : []),
-                    `https://ieeexplore.ieee.org/abstract/document/${pathname[pathname.length - 1]}`,
-                    `https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=${pathname[pathname.length - 1]}`
-                ],
-            };
-        });
+            record = { ...record, ...info };
+            console.log(record);
+            await saveRecord(record, db, scrape);
 
-        record = {...record, ...info};
-        console.log(record);
-        await saveRecord(record, db, scrape);
+        } catch (err) {
+            console.log(error(err));
+        }
     }
     recordPage.close();
 
