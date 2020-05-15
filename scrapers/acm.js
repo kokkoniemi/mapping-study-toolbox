@@ -14,7 +14,7 @@ let scrape = null;
 (async () => {
     let browser = null;
     try {
-        const url = `https://dl.acm.org/action/doSearch?fillQuickSearch=false&AfterMonth=1&AfterYear=2010&BeforeMonth=12&BeforeYear=2020&AllField=AllField%3A%28%28%22project-based+learning%22+OR+capstone+OR+%22software+project%22+OR+%22software+projects%22+OR+%22team+project%22+OR+%22team+projects%22+OR+%22group+project%22+OR+%22group+projects%22+OR+%22problem+based+learning%22%29+AND+%28%22group+work%22+OR+%22team+work%22+OR+teamwork%29+AND+%28%22Computer+science+education%22+OR+%22Computing+education%22+OR+%22Software+engineering+education%22%29%29&expand=all`;
+        const url = `https://dl.acm.org/action/doSearch?fillQuickSearch=false&field1=AllField&text1=%28%22project-based+learning%22++OR++%22project+based+learning%22++OR++pbl+OR++capstone++OR++%22student+project%22++OR++%22student+projects%22++OR++%22team+project%22++OR++%22team+projects%22++OR++%22group+project%22++OR++%22group+projects%22++OR++%22problem-based+learning%22++OR++%22problem+based+learning%22%29++AND++%28%22group+work%22++OR++%22team+work%22++OR++teamwork%29++AND+%28%22computing%22++OR++%22computer+science%22++OR++%22software+engineering%22%29&AfterMonth=1&AfterYear=2010&BeforeMonth=12&BeforeYear=2020&expand=dl`;
         // initialize a scrape log
         scrape = await db.Import.create({
             database: "acm",

@@ -4,10 +4,10 @@ const db = require("../models");
 const { saveRecord } = require("../helpers");
 
 (async () => {
-    const input = fs.readFileSync(__dirname + '/ProQuestDocuments-2020-05-14.csv', 'utf-8');
+    const input = fs.readFileSync(__dirname + '/webofscience.csv', 'utf-8');
     let scrape = await db.Import.create({
-        database: "proquest",
-        query: '/ProQuestDocuments-2020-05-14.csv',
+        database: "webofscience",
+        query: '/webofscience.csv',
         total: 0,
         dublicates: 0,
         namesakes: []
@@ -21,12 +21,12 @@ const { saveRecord } = require("../helpers");
 
     for (record of records) {
         await saveRecord({
-            title: record.Title,
-            author: record.Authors + " | " + record.pubtitle + " " + record.pubdate,
-            abstract: record.Abstract,
-            url: record.digitalObjectIdentifier ? `https://doi.org/${record.digitalObjectIdentifier.trim()}` : record.DocumentURL,
+            title: record.TI,
+            author: record.AF + " | " + record.SO + " " + record.PY + " " + record.JI,
+            abstract: record.AB,
+            url: record.DI ? `https://doi.org/${record.DI}` : record.UT,
             alternateUrls: [],
-            databases: ["proquest"]
+            databases: ["webofscience"]
         }, db, scrape);
     }
     console.log(records);

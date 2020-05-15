@@ -77,8 +77,8 @@ const scrapeAbstract = async (record, url, page) => {
                     return null;
             }
         }();
-        record.set("abstract", abstract);
-        record.save();
+        await record.set("abstract", abstract);
+        await record.save();
     }
 }
 
@@ -92,28 +92,29 @@ const scrapeAbstract = async (record, url, page) => {
         let page = await browser.newPage();
 
         let rowCount = await db.Record.count({});
-        for (let i = 0; i < rowCount; i++) {
+        for (let i = 3000; i < rowCount; i++) {
             const record = await db.Record.findOne({
                 offset: i,
-                include: 'Publication'
+                // include: 'Publication'
             });
-            if (!record) {
+            if (!record || record.id <= 3985) {
                 continue;
             }
             let url = new URL(record.url);
 
-            if (url.host === "doi.org") {
-                await page.goto(url.href, {
-                    waitUntil: "domcontentloaded",
-                    timeout: 0,
-                });
-                const newUrl = await page.evaluate(() => {
-                    return document.location.href;
-                });
-                url = new URL(newUrl);
-            }
-            // await scrapeAbstract(record, url, page);
-            await scrapePublication(record, url, page);
+            // if (url.host === "doi.org") {
+            //     await page.goto(url.href, {
+            //         waitUntil: "domcontentloaded",
+            //         timeout: 0,
+            //     });
+            //     await page.waitFor(2000);
+            //     const newUrl = await page.evaluate(() => {
+            //         return document.location.href;
+            //     });
+            //     url = new URL(newUrl);
+            // }
+            await scrapeAbstract(record, url, page);
+            // await scrapePublication(record, url, page);
         }
         await browser.close();
         console.log(success("Browser Closed"));

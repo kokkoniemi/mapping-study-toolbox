@@ -11,7 +11,7 @@ puppeteer.use(StealthPlugin());
 let scrape = null;
 
 (async () => {
-    const url = `https://www.tandfonline.com/action/doSearch?field1=AllField&text1=%28%22project-based+learning%22+OR+capstone+OR+%22software+project%22+OR+%22software+projects%22+OR+%22team+project%22+OR+%22team+projects%22+OR+%22group+project%22+OR+%22group+projects%22+OR+%22problem+based+learning%22%29+AND+%28%22group+work%22+OR+%22team+work%22+OR+teamwork%29+AND+%28%22Computer+science+education%22+OR+%22Computing+education%22+OR+%22Software+engineering+education%22%29&Ppub=&AfterYear=2010&BeforeYear=2020`;
+    const url = `https://www.tandfonline.com/action/doSearch?text1=%28%22project-based+learning%22+OR+%22project+based+learning%22+OR+pbl+OR+capstone+OR+%22student+project%22+OR+%22student+projects%22+OR+%22team+project%22+OR+%22team+projects%22+OR+%22group+project%22+OR+%22group+projects%22+OR+%22problem-based+learning%22+OR+%22problem+based+learning%22%29+AND+%28%22group+work%22+OR+%22team+work%22+OR+teamwork%29+AND+%28%22computing%22+OR+%22computer+science%22+OR+%22software+engineering%22%29&ConceptID=4261&ConceptID=4451&AfterYear=2010&BeforeYear=2020`;
     scrape = await db.Import.create({
         database: "tandfonline",
         query: url,
@@ -101,7 +101,7 @@ async function nextPage(page) {
         return false;
     });
     if (isNext) {
-        await page.waitFor(5000); // might process same page twice if wait time is too short
+        await page.waitFor(10000); // might process same page twice if wait time is too short
         await processPage(page);
     }
 }

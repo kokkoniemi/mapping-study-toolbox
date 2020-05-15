@@ -15,9 +15,9 @@ let browser = null;
 (async () => {
     try {
         const urls = [
-            `https://www.sciencedirect.com/search/advanced?qs=%28%22software%20project%22%20OR%20%22team%20project%22%20OR%20%22group%20project%22%29%20AND%20%28%22group%20work%22%20OR%20%22team%20work%22%20OR%20teamwork%29%20AND%20%28%22Computer%20science%20education%22%20OR%20%22Computing%20education%22%20OR%20%22Software%20engineering%20education%22%29&date=2010-2020`,
-            `https://www.sciencedirect.com/search/advanced?qs=%28%22software%20projects%22%20OR%20%22team%20projects%22%20OR%20%22group%20projects%22%29%20AND%20%28%22group%20work%22%20OR%20%22team%20work%22%20OR%20teamwork%29%20AND%20%28%22Computer%20science%20education%22%20OR%20%22Computing%20education%22%20OR%20%22Software%20engineering%20education%22%29&date=2010-2020`,
-            `https://www.sciencedirect.com/search/advanced?qs=%28capstone%20OR%20%22project-based%20learning%22%20OR%20%22problem%20based%20learning%22%29%20AND%20%28%22group%20work%22%20OR%20%22team%20work%22%20OR%20teamwork%29%20AND%20%28%22Computer%20science%20education%22%20OR%20%22Computing%20education%22%20OR%20%22Software%20engineering%20education%22%29&date=2010-2020`
+            `https://www.sciencedirect.com/search/advanced?qs=%28%22project-based%20learning%22%20%20OR%20%20%22project%20based%20learning%22%20%20OR%20%20pbl%20%20OR%20%20%22problem-based%20learning%22%20%20OR%20%20%22problem%20based%20learning%22%29%20%20AND%20%20%28%22group%20work%22%20%20OR%20%20%22team%20work%22%20%20OR%20%20teamwork%29%20%20AND%20%28%22computing%22%20%20OR%20%20%22computer%20science%22%20%20OR%20%20%22software%20engineering%22%29&date=2010-2020&articleTypes=FLA%2CABS%2CCRP%2CDIS%2CPGL%2CRPL%2CSCO`,
+            `https://www.sciencedirect.com/search/advanced?qs=%28capstone%20%20OR%20%20%22student%20project%22%20%20%20OR%20%20%22team%20project%22%20%20OR%20%20%22group%20project%22%29%20%20AND%20%20%28%22group%20work%22%20%20OR%20%20%22team%20work%22%20%20OR%20%20teamwork%29%20%20AND%20%28%22computing%22%20%20OR%20%20%22computer%20science%22%20%20OR%20%20%22software%20engineering%22%29&date=2010-2020&articleTypes=FLA%2CABS%2CCRP%2CDIS%2CPGL%2CRPL%2CSCO`,
+            `https://www.sciencedirect.com/search/advanced?qs=%28%22student%20projects%22%20%20OR%20%20%22team%20projects%22%20%20OR%20%20%22group%20projects%22%29%20%20AND%20%20%28%22group%20work%22%20%20OR%20%20%22team%20work%22%20%20OR%20%20teamwork%29%20%20AND%20%28%22computing%22%20%20OR%20%20%22computer%20science%22%20%20OR%20%20%22software%20engineering%22%29&date=2010-2020&articleTypes=FLA%2CABS%2CCRP%2CDIS%2CPGL%2CRPL%2CSCO`
         ];
 
         browser = await puppeteer.launch({ headless: false });
@@ -99,14 +99,15 @@ async function processPage(page) {
         const info = await recordPage.evaluate(async () => {
             const abstractNode = document.querySelector("#abstracts");
             const doiNode = document.querySelector("#doi-link");
+            await new Promise(function (resolve) { setTimeout(resolve, 200) });
             let pdfLink = document.querySelector("#pdfLink");
-            if (pdfLink !== null && ["Download full text in PDF", "Download PDF"].includes(pdfLink.querySelector(".button-text").innerText)) {
+            if (pdfLink !== null && ["Download full text in PDF", "Download PDF"].includes(pdfLink.querySelector(".button-text").innerText.trim())) {
                 pdfLink.click();
-                await new Promise(function (resolve) { setTimeout(resolve, 2000) }); // wait 200 ms
+                await new Promise(function (resolve) { setTimeout(resolve, 2000) }); // wait 2000 ms
                 const popover = document.querySelector("#popover-content-download-pdf-popover");
                 pdfLink = popover ? popover.querySelector(".link-button-primary") : null;
             }
-            let abstract = null;
+            let abstract = '';
             if (abstractNode) {
                 for (let n of abstractNode.querySelectorAll(".abstract")) {
                     for (let nn of n.querySelectorAll("div")) {
