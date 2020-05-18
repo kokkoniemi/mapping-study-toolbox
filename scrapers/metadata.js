@@ -57,24 +57,24 @@ const scrapeAbstract = async (record, url, page) => {
     if (record.abstract === null && !!record.url) {
         const abstract = await async function () {
             switch (url.host) {
-                case "ieeexplore.ieee.org":
-                    return await scrapeIEEE(page, url);
-                case "www.sciencedirect.com":
-                    return await scrapeScienceDirect(page, url);
-                case "link.springer.com":
-                    return await scrapeSpringer(page, url);
-                case "dl.acm.org":
-                    return await scrapeAcm(page, url);
-                case "idp.springer.com":
-                    return await scrapeSpringer(page, url);
-                case "www.tandfonline.com":
-                    return await scrapeTandfonline(page, url);
-                case "onlinelibrary.wiley.com":
-                    return await scrapeWiley(page, url);
-                case "arxiv.org":
-                    return await scrapeArxiv(page, url);
-                default:
-                    return null;
+            case "ieeexplore.ieee.org":
+                return await scrapeIEEE(page, url);
+            case "www.sciencedirect.com":
+                return await scrapeScienceDirect(page, url);
+            case "link.springer.com":
+                return await scrapeSpringer(page, url);
+            case "dl.acm.org":
+                return await scrapeAcm(page, url);
+            case "idp.springer.com":
+                return await scrapeSpringer(page, url);
+            case "www.tandfonline.com":
+                return await scrapeTandfonline(page, url);
+            case "onlinelibrary.wiley.com":
+                return await scrapeWiley(page, url);
+            case "arxiv.org":
+                return await scrapeArxiv(page, url);
+            default:
+                return null;
             }
         }();
         await record.set("abstract", abstract);
@@ -97,7 +97,7 @@ const scrapeAbstract = async (record, url, page) => {
                 offset: i,
                 // include: 'Publication'
             });
-            if (!record || record.id <= 3985) {
+            if (!record || record.id < 4776) {
                 continue;
             }
             let url = new URL(record.url);
@@ -114,7 +114,7 @@ const scrapeAbstract = async (record, url, page) => {
             //     url = new URL(newUrl);
             // }
             await scrapeAbstract(record, url, page);
-            // await scrapePublication(record, url, page);
+            await scrapePublication(record, url, page);
         }
         await browser.close();
         console.log(success("Browser Closed"));

@@ -20,7 +20,7 @@ const { saveRecord } = require("../helpers");
         delimiter: ';'
     });
 
-    for (record of records) {
+    for (const record of records) {
         const q = qs.parse(record['PDF Link'].substring(record['PDF Link'].indexOf('?') + 1));
         await saveRecord({
             title: record['Document Title'],

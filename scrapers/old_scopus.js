@@ -2,7 +2,7 @@ const puppeteer = require("puppeteer-extra");
 const chalk = require("chalk");
 const db = require("../models");
 const StealthPlugin = require("puppeteer-extra-plugin-stealth");
-const qs = require('querystring');
+// const qs = require('querystring');
 const { saveRecord } = require("../helpers");
 
 const error = chalk.bold.red;
@@ -37,7 +37,7 @@ let scrape = null;
         await page.waitForSelector("#srchResultsList", { timeout: 0 });
         const link = await page.evaluate(() => {
             const resNode = document.querySelector('#srchResultsList');
-            const pageNode = resNode.querySelector(".searchArea");
+            // const pageNode = resNode.querySelector(".searchArea");
             return resNode.querySelector("[data-type='docTitle']").querySelector("a").getAttribute("href");
         });
         await page.goto(link, {
@@ -73,7 +73,7 @@ async function processPage(page) {
 
         let abstract = null;
         if (abstractNode) {
-            for (p of abstractNode.querySelectorAll("p")) {
+            for (const p of abstractNode.querySelectorAll("p")) {
                 abstract += p.innerText + "\n\n";
             }
         }

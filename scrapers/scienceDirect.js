@@ -93,7 +93,9 @@ async function processPage(page) {
             await recordPage.waitForSelector("#abstracts", {
                 timeout: 5000,
             });
-        } catch (err) { }
+        } catch (err) {
+            // do nothing
+        }
 
 
         const info = await recordPage.evaluate(async () => {

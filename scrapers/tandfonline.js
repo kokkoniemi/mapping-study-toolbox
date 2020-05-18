@@ -68,9 +68,9 @@ async function processPage(page) {
                 author: author,
                 description: description,
                 alternateUrls: [
-                    ...(pathname[pathname.length - 3] === "full" 
-                    ? [`https://www.tandfonline.com/doi/abs/${pathname[pathname.length - 2]}/${pathname[pathname.length - 1]}`]
-                    : [`https://www.tandfonline.com/doi/full/${pathname[pathname.length - 2]}/${pathname[pathname.length - 1]}`]),
+                    ...(pathname[pathname.length - 3] === "full"
+                        ? [`https://www.tandfonline.com/doi/abs/${pathname[pathname.length - 2]}/${pathname[pathname.length - 1]}`]
+                        : [`https://www.tandfonline.com/doi/full/${pathname[pathname.length - 2]}/${pathname[pathname.length - 1]}`]),
                     `https://doi.org/${pathname[pathname.length - 2]}/${pathname[pathname.length - 1]}`
                 ],
                 databases: ["tandfonline"]

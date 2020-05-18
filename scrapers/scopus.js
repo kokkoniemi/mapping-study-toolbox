@@ -19,7 +19,7 @@ const { saveRecord } = require("../helpers");
         delimiter: ','
     });
 
-    for (record of records) {
+    for (const record of records) {
         await saveRecord({
             title: record.Title,
             author: record.Authors + " | " + record['Source title'] + " Volume " + record.Volume + " " + record.Year,

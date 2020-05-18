@@ -87,7 +87,9 @@ async function processPage(page) {
             await recordPage.waitForSelector(".Abstract", {
                 timeout: 5000,
             });
-        } catch (err) { }
+        } catch (err) {
+            // do nothing
+        }
 
         const url = new URL(record.url);
         let abstract = null;
@@ -117,7 +119,9 @@ async function processPage(page) {
                         const resNode = document.querySelector("#Abs1-section");
                         return resNode.innerText;
                     });
-                } catch (err) { }
+                } catch (err) {
+                    // do nothing
+                }
             }
         } else if (url.pathname.substring(0, 19) === "/referenceworkentry") {
             // Living reference work entry

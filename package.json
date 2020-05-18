@@ -19,18 +19,12 @@
     "user-agents": "^1.0.559"
   },
   "devDependencies": {
-    "@vue/cli-plugin-babel": "~4.3.0",
-    "@vue/cli-plugin-eslint": "~4.3.0",
-    "@vue/cli-plugin-vuex": "~4.3.0",
-    "@vue/cli-service": "~4.3.0",
-    "@vue/eslint-config-prettier": "^6.0.0",
     "babel-eslint": "^10.1.0",
     "csv-parse": "^4.9.0",
     "eslint": "^6.7.2",
     "eslint-plugin-prettier": "^3.1.1",
     "node-sass": "^4.14.1",
     "prettier": "^1.19.1",
-    "sequelize-cli": "^5.5.1",
-    "vue-template-compiler": "^2.6.11"
+    "sequelize-cli": "^5.5.1"
   }
 }

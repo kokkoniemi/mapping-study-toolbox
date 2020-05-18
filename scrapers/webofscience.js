@@ -19,7 +19,7 @@ const { saveRecord } = require("../helpers");
         delimiter: ';'
     });
 
-    for (record of records) {
+    for (const record of records) {
         await saveRecord({
             title: record.TI,
             author: record.AF + " | " + record.SO + " " + record.PY + " " + record.JI,
