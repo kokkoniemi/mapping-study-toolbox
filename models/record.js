@@ -9,7 +9,8 @@ module.exports = (sequelize, DataTypes) => {
     abstract: DataTypes.TEXT,
     databases: DataTypes.JSON,      // JSON array
     alternateUrls: DataTypes.JSON,  // JSON array
-    editedBy: DataTypes.STRING
+    editedBy: DataTypes.STRING,
+    comment: DataTypes.TEXT
   }, {
     paranoid: true
   });

@@ -24,21 +24,25 @@ router.get("/records", function (req, res) {
 
 router.get("/records/:id", function (req, res) {
     const id = parseInt(req.params.id);
-    return db.Record.findByPk(id, {include: 'Publication'})
+    return db.Record.findByPk(id, { include: 'Publication' })
         .then((record) => res.send(record))
         .catch((err) => res.send(err));
 });
 
-// only enable updating the status of the record
+// only enable updating the status or comment of the record
 router.put("/records/:id", function (req, res) {
     const id = parseInt(req.params.id);
-    return db.Record.findByPk(id, {include: 'Publication'})
+    return db.Record.findByPk(id, { include: 'Publication' })
         .then((record) => {
-            const { status, editedBy } = req.body;
-            if (![null, "uncertain", "excluded", "included"].includes(status)) {
+            const { status, editedBy, comment } = req.body;
+            if (status && ![null, "uncertain", "excluded", "included"].includes(status)) {
                 throw new Error("Illegal value for 'status'");
             }
-            return record.update({ status, editedBy })
+            return record.update({
+                ...(status !== undefined ? { status } : {}),
+                ...(comment !== undefined ? { comment } : {}),
+                editedBy
+            })
                 .then(() => res.send(record))
                 .catch((err) => res.status(400).send(err));
         });
