@@ -1,5 +1,9 @@
 # mapping-study-toolbox
 
+This repository includes a GUI frontend for classifying literature in inclusion/exclusion phase of mapping studies or literature reviews. Additionally, the toolbox has a backend server for the GUI and several scrapers and importer scripts for fetching the search results into the database.
+
+The GUI can be accessed from https://localhost:3000 when the backend is running. It is actually a packaged build version of the GUI, which is developed in a separate repository ([classify-literature-gui](https://github.com/kokkoniemi/classify-literature-gui)).
+
 ## System requirements
 ```
 node.js v.12 or above
@@ -11,8 +15,9 @@ sqlite3
 ```
 npm install
 ```
+## Scraping search results
 
-## Change search query in scraper[scraper-name].js
+### Change search query in scraper[scraper-name].js
 
 Easiest to copy from the address bar from the first page of search results (in Google Scholar website).
 
@@ -31,17 +36,24 @@ Easiest to copy from the address bar from the first page of search results (in G
         ...
 ```
 
-## Init Sqlite database
+### Init Sqlite database
 
 ```
 npm run migrate
 ```
 
-## Run search
+### Run search
 ```
 node scraper/[scraper-name].js
 ```
 
-## Api
+## Api and GUI
 
-There is also a simple rest api (server.js) to serve records from the sqlite database. I use it to classify the records.
+There is a simple rest api (server.js) to serve records from the sqlite database. I use it to classify the records.
+
+To use the api run:
+```shell
+npm start
+```
+
+Now the api runs at https://localhost:3000/api/, and the GUI frontend is served at https://localhost:3000.
