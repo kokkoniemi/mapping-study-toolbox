@@ -19,7 +19,7 @@ npm install
 
 ### Change search query in scraper[scraper-name].js
 
-Easiest to copy from the address bar from the first page of search results (in Google Scholar website).
+It may be easiest to copy from the browser address bar from the first page of search results (e.g., in Google Scholar search result page in the following example).
 
 ```javascript
 
