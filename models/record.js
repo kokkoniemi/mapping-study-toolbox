@@ -17,6 +17,7 @@ module.exports = (sequelize, DataTypes) => {
 
   Record.associate = function (models) {
     Record.belongsTo(models.Publication);
+    Record.belongsToMany(models.MappingOption, { through: models.RecordMappingOption });
   };
 
   /**
