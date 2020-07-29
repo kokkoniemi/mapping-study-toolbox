@@ -81,9 +81,10 @@ router.delete("/records/:recordId/mapping-options/:mappingOptionId", function (r
 router.get("/mapping-questions", function (req, res) {
     return db.MappingQuestion.count().then(count => {
         db.MappingQuestion.findAll({
-            include: 'MappingOptions',
+            include: db.MappingOption,
             order: [
-                ['position', 'ASC']
+                ['position', 'ASC'],
+                [db.MappingOption, 'position', 'ASC']
             ]
         }).then((questions) => res.send({ count, questions }))
     })

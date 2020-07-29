@@ -1,9 +1,9 @@
 const { Sequelize, DataTypes } = require('sequelize');
-const isAfter = require('date-fns/is_after');
+const isBefore = require('date-fns/isBefore');
 
 const paths = {
-    db1: '',
-    db2: '',
+    db1: '/Users/koksu/Documents/gradu/group-edu-frameworks/data/database-mikko.sqlite3',
+    db2: '/Users/koksu/Documents/gradu/group-edu-frameworks/data/database-peer-reviewed.sqlite3',
 };
 
 const recordAttributes = {
@@ -17,7 +17,8 @@ const recordAttributes = {
     databases: DataTypes.JSON,      // JSON array
     alternateUrls: DataTypes.JSON,  // JSON array
     editedBy: DataTypes.STRING,
-    publicationId: DataTypes.INTEGER
+    publicationId: DataTypes.INTEGER,
+    comment: DataTypes.STRING,
 };
 
 const sequelize1 = new Sequelize({
@@ -49,14 +50,16 @@ const Record2 = sequelize2.define('Record', recordAttributes, {
         const r2 = await Record2.findByPk(r1.id);
         const r1date = new Date(r1.updatedAt);
         const r2date = new Date(r2.updatedAt);
-        if (isAfter(r2date, r1date)) {
-            // update r2 status & editedBy to r1
-            await r1.set('status', r2.status);
-            await r1.set('editedBy', r2.editedBy);
-            await r1.save();
-        } else if (isAfter(r1date, r2date)) {
+        if (r1.status !== null && r2.status === null) {
             // update r1 status & editedBy to r2
             await r2.set('status', r1.status);
+            await r2.set('comment', r1.comment);
+            await r2.set('editedBy', r1.editedBy);
+            await r2.save();
+        }
+        if (r2.id >= 2000) {
+            await r2.set('status', r1.status);
+            await r2.set('comment', r1.comment);
             await r2.set('editedBy', r1.editedBy);
             await r2.save();
         }
