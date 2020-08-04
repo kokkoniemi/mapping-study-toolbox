@@ -5,7 +5,7 @@ module.exports = {
     es6: true,
     browser: true
   },
-  extends: ["eslint:recommended"],
+  extends: ["standard", "eslint:recommended", "prettier", "prettier/babel"],
   parserOptions: {
     parser: "babel-eslint",
     ecmaVersion: 2018
@@ -14,6 +14,5 @@ module.exports = {
     "no-console": process.env.NODE_ENV === "production" ? "warn" : "off",
     "no-debugger": process.env.NODE_ENV === "production" ? "warn" : "off",
     "no-unsused-labels": "off",
-    "indent": 1
   }
 };
