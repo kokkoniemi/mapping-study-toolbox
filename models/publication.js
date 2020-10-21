@@ -4,7 +4,8 @@ module.exports = (sequelize, DataTypes) => {
         name: DataTypes.STRING,
         alternateNames: DataTypes.JSON,
         jufoLevel: DataTypes.INTEGER,
-        database: DataTypes.STRING
+        database: DataTypes.STRING,
+        poorPeerReview: DataTypes.BOOLEAN
     }, {
         paranoid: true
     });

@@ -1,12 +1,16 @@
 const db = require("../models");
 
 const listing = (req, res) => {
-    let { offset, limit, status } = req.query;
+    let { offset, limit, status, id } = req.query;
     offset = !offset ? 0 : parseInt(offset);
     limit = !limit ? 25 : parseInt(limit);
+    id = !id ? null : parseInt(id);
     const where = {};
     if (status !== undefined) {
         where.status = status === "null" ? null : status;
+    }
+    if (id) {
+        where.id = id;
     }
     return db.Record.count({ where }).then(count => {
         db.Record.findAll({
@@ -36,13 +40,25 @@ const update = (req, res) => {
             if (status && ![null, "uncertain", "excluded", "included"].includes(status)) {
                 throw new Error("Illegal value for 'status'");
             }
+            
             return record.update({
                 ...(status !== undefined ? { status } : {}),
                 ...(comment !== undefined ? { comment } : {}),
                 ...(MappingOptions !== undefined ? { MappingOptions } : {}),
                 editedBy
             })
-                .then(() => res.send(record))
+                .then(() => {
+                    db.ActivityLog.create({
+                        recordId: parseInt(record.id),
+                        description: `${editedBy} updated ${[
+                            ...(status !== undefined ? ['status'] : []),
+                            ...(comment !== undefined ? ['comment'] : []),
+                            ...(MappingOptions !== undefined ? ['mapping options'] : [])
+                        ].join(", ")}.`
+                    }).then(() => {
+                        res.send(record);
+                    }).catch((err) => res.status(400).send(err));
+                })
                 .catch((err) => res.status(400).send(err));
         });
 };
@@ -57,8 +73,15 @@ const createOption = (req, res) => {
     })
         .then(() => {
             db.MappingOption.findByPk(mappingOptionId)
-                .then(option => res.send(option))
-                .catch(err => res.status(400).send(err))
+                .then(option => {
+                    db.ActivityLog.create({
+                        recordId,
+                        description: 'A mapping option has been created'
+                    }).then(() => {
+                        res.send(option);
+                    }).catch(err => res.status(400).send(err));
+                })
+                .catch(err => res.status(400).send(err));
         })
         .catch((err) => res.status(400).send(err));
 };
@@ -69,7 +92,12 @@ const removeOption = (req, res) => {
     return db.RecordMappingOption.destroy({
         where: { mappingOptionId, recordId }
     }).then((option) => {
-        res.send(`${mappingOptionId} deleted successfully`);
+        db.ActivityLog.create({
+            recordId,
+            description: 'A mapping option has been removed'
+        }).then(() => {
+            res.send(`${mappingOptionId} deleted successfully`);
+        }).catch(err => res.status(400).send(err));
     }).catch(err => res.status(400).send(err));
 };
 

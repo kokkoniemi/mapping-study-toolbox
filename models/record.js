@@ -1,6 +1,10 @@
 'use strict';
 module.exports = (sequelize, DataTypes) => {
     const Record = sequelize.define('Record', {
+        id: {
+            type: DataTypes.INTEGER,
+            primaryKey: true
+        },
         title: DataTypes.TEXT,
         url: DataTypes.STRING,
         author: DataTypes.STRING,
@@ -18,6 +22,7 @@ module.exports = (sequelize, DataTypes) => {
     Record.associate = function (models) {
         Record.belongsTo(models.Publication);
         Record.belongsToMany(models.MappingOption, { through: models.RecordMappingOption });
+        Record.hasMany(models.ActivityLog);
     };
 
     /**

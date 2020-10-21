@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const records = require("./records");
 const mappingQuestions = require("./mappingQuestions");
+const logs = require("./logs");
 
 // RECORDS
 
@@ -32,5 +33,7 @@ router.post("/mapping-questions/:id/mapping-options", mappingQuestions.createOpt
 router.put("/mapping-questions/:id/mapping-options/:optionId", mappingQuestions.updateOption);
 
 router.delete("/mapping-questions/:id/mapping-options/:optionId", mappingQuestions.removeOption);
+
+router.get("/logs", logs.listing);
 
 module.exports = router;
