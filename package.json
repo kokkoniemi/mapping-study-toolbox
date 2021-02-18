@@ -4,13 +4,17 @@
   "private": true,
   "scripts": {
     "start": "node server.js",
+    "open": "open http://localhost:3000 && node server.js",
     "migrate": "node_modules/.bin/sequelize db:migrate"
   },
   "dependencies": {
     "body-parser": "^1.19.0",
     "chalk": "^4.0.0",
     "core-js": "^3.6.4",
+    "date-fns": "^2.16.1",
     "express": "^4.17.1",
+    "express-fileupload": "^1.2.1",
+    "pdfjs-dist": "^2.6.347",
     "sequelize": "^5.21.7",
     "sqlite3": "^4.1.1"
   },
