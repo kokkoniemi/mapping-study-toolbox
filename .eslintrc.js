@@ -5,7 +5,7 @@ module.exports = {
     es6: true,
     browser: true
   },
-  extends: ["standard", "eslint:recommended", "prettier", "prettier/babel"],
+  extends: ["standard", "eslint:recommended"],
   parserOptions: {
     parser: "babel-eslint",
     ecmaVersion: 2018
