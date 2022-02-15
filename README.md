@@ -5,16 +5,43 @@ This repository includes a GUI frontend for classifying literature in inclusion/
 The GUI can be accessed from https://localhost:3000 when the backend is running. It is actually a packaged build version of the GUI, which is developed in a separate repository ([classify-literature-gui](https://github.com/kokkoniemi/classify-literature-gui)).
 
 ## System requirements
-```
-node.js v.12 or above
-npm
-sqlite3
-```
+
+- node.js v16 or above (You can use [nvm](https://github.com/nvm-sh/nvm) to change node version on command line)
+- npm
+- sqlite3
 
 ## Project setup
+### 1. Clone the project with submodules
+```
+git clone https://github.com/kokkoniemi/mapping-study-toolbox.git --recurse-submodules
+```
+### 2. Install node modules
 ```
 npm install
 ```
+
+### 3. Change the config file to point to your database
+- Copy config/config.example.json to config/config.json
+- Change the development `storage` key, i.e.
+    ```
+    {
+        "development": {
+            "dialect": "sqlite",
+            "storage": "/Users/mikkokokkoniemi/Documents/mapping-db.sqlite3",
+            "logging": false
+        },
+        "test": {
+            "dialect": "sqlite",
+            "storage": ":memory"
+        },
+        "production": {
+            "dialect": "sqlite",
+            "storage": "database.sqlite3",
+            "logging": false
+        }
+    }
+    ```
+
 ## Scraping search results
 
 ### Change search query in scraper[scraper-name].js
@@ -37,14 +64,14 @@ It may be easiest to copy from the browser address bar from the first page of se
 ```
 
 ### Init Sqlite database
-
+This is safe and does not affect the existing data in the database.
 ```
 npm run migrate
 ```
 
 ### Run search
 ```
-node scraper/[scraper-name].js
+node scrapers/[scraper-name].js
 ```
 
 ## Api and GUI
