@@ -12,7 +12,8 @@ const listing = (req, res) => {
         where[db.Sequelize.Op.or] = [
             {comment: {[db.Sequelize.Op.substring]: search}},
             {title: {[db.Sequelize.Op.substring]: search}},
-            {author: {[db.Sequelize.Op.substring]: search}}
+            {author: {[db.Sequelize.Op.substring]: search}},
+            {databases: {[db.Sequelize.Op.substring]: search}}
         ]
         
     }
