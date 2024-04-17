@@ -1,12 +1,20 @@
 const db = require("../models");
 
 const listing = (req, res) => {
-    let { offset, limit, status } = req.query;
+    let { offset, limit, status, search } = req.query;
     offset = !offset ? 0 : parseInt(offset);
     limit = !limit ? 25 : parseInt(limit);
     const where = {};
     if (status !== undefined) {
         where.status = status === "null" ? null : status;
+    }
+    if (search !== undefined) {
+        where[db.Sequelize.Op.or] = [
+            {comment: {[db.Sequelize.Op.substring]: search}},
+            {title: {[db.Sequelize.Op.substring]: search}},
+            {author: {[db.Sequelize.Op.substring]: search}}
+        ]
+        
     }
     return db.Record.count({ where }).then(count => {
         db.Record.findAll({

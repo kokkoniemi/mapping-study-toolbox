@@ -6,7 +6,7 @@ The GUI can be accessed from https://localhost:3000 when the backend is running.
 
 ## System requirements
 
-- node.js v16 or above (You can use [nvm](https://github.com/nvm-sh/nvm) to change node version on command line)
+- node.js v20 or above (You can use [nvm](https://github.com/nvm-sh/nvm) to change node version on command line)
 - npm
 - sqlite3
 
