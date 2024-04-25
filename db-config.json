@@ -1,0 +1,5 @@
+{
+    "dialect": "sqlite",
+    "storage": "<path to sqlite3 file>",
+    "logging": false
+}

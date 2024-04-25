@@ -24,4 +24,4 @@ app.use(express.static('public'));
 const routes = require("./routes/api");
 app.use("/api", routes);
 
-app.listen(port, () => console.log(`Api listening on port ${port}`));
+app.listen(port, () => console.log(`The application is running on: http://localhost:${port}`));
