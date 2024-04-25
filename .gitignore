@@ -23,3 +23,6 @@ yarn-error.log*
 *.sqlite3
 
 config/config.json
+mapping-tool-linux-x64
+mapping-tool-macos-arm64
+mapping-tool-win-x64.exe
