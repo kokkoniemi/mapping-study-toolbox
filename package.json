@@ -9,7 +9,8 @@
   "bin": "server.js",
   "pkg": {
     "assets": [
-      "./public/**/*"
+      "./public/**/*",
+      "./node_modules/sqlite3/build/**/*"
     ],
     "scripts": [
       "./node_modules/*",
@@ -19,6 +20,7 @@
     ],
     "targets": [
       "node18-linux-x64",
+      "node18-linux-arm64",
       "node18-macos-arm64",
       "node18-win-x64"
     ],

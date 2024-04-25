@@ -1,4 +1,5 @@
 const express = require("express");
+const path = require("path");
 const app = express();
 const port = 3000;
 
@@ -19,7 +20,7 @@ const corsConfig = function (req, res, next) {
 
 app.use(corsConfig);
 
-app.use(express.static('public'));
+app.use(express.static(path.join(__dirname, 'public')));
 
 const routes = require("./routes/api");
 app.use("/api", routes);
