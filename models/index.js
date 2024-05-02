@@ -4,7 +4,11 @@ const fs = require('fs');
 const path = require('path');
 const Sequelize = require('sequelize');
 const basename = path.basename(__filename);
-const config = JSON.parse(fs.readFileSync(path.join(path.dirname(process.execPath), 'db-config.json'), 'utf-8'));
+let configPath = path.join(__dirname, '..', 'db-config.json');
+if (!fs.existsSync(configPath)) {
+    configPath = path.join(path.dirname(process.execPath), 'db-config.json');
+}
+const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
 const db = {};
 
 let sequelize;
