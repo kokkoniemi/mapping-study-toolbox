@@ -23,24 +23,13 @@ npm install
 ```
 
 ### 3. Change the config file to point to your database
-- Copy config/config.example.json to config/config.json
-- Change the development `storage` key, i.e.
+- Change db-config.json to point to the database
+- Change the `storage` key, i.e.
     ```
     {
-        "development": {
-            "dialect": "sqlite",
-            "storage": "/Users/mikkokokkoniemi/Documents/mapping-db.sqlite3",
-            "logging": false
-        },
-        "test": {
-            "dialect": "sqlite",
-            "storage": ":memory"
-        },
-        "production": {
-            "dialect": "sqlite",
-            "storage": "database.sqlite3",
-            "logging": false
-        }
+      "dialect": "sqlite",
+      "storage": "/Users/mikko/Documents/mapping-db.sqlite3",
+      "logging": false
     }
     ```
 
