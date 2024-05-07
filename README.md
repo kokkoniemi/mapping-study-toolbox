@@ -4,6 +4,8 @@ This repository includes a GUI frontend for classifying literature in inclusion/
 
 The GUI can be accessed from https://localhost:3000 when the backend is running. It is actually a packaged build version of the GUI, which is developed in a separate repository ([classify-literature-gui](https://github.com/kokkoniemi/classify-literature-gui)).
 
+![Screenshot of the GUI](screenshot.png)
+
 ## System requirements
 
 - node.js v20 or above (You can use [nvm](https://github.com/nvm-sh/nvm) to change node version on command line)
