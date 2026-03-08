@@ -3,7 +3,7 @@ const REQUEST_TIMEOUT_MS = 10000;
 const REQUEST_RETRY_COUNT = 3;
 const REQUEST_RETRY_DELAY_MS = 300;
 
-type HttpMethod = "GET" | "POST" | "PUT" | "DELETE";
+type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 type Primitive = string | number | boolean;
 export type QueryValue = Primitive | null | undefined | Primitive[];
 export type QueryParams = Record<string, QueryValue>;
@@ -139,6 +139,11 @@ export const http = {
     data: TBody,
     { params }: { params?: QueryParams | undefined } = {},
   ) => request<TResponse, TBody>("PUT", path, { params, data }),
+  patch: <TResponse, TBody = unknown>(
+    path: string,
+    data: TBody,
+    { params }: { params?: QueryParams | undefined } = {},
+  ) => request<TResponse, TBody>("PATCH", path, { params, data }),
   delete: <TResponse>(path: string, { params }: { params?: QueryParams | undefined } = {}) =>
     request<TResponse>("DELETE", path, { params }),
 };
@@ -176,6 +181,7 @@ export interface RecordItem {
   author: string;
   url: string;
   databases: string[];
+  alternateUrls: string[];
   abstract: string | null;
   description: string | null;
   createdAt: string;
@@ -203,6 +209,18 @@ interface MappingOptionsIndexResponse {
 }
 
 type UpdateRecordPayload = Record<string, unknown>;
+export type PatchRecordPayload = Partial<{
+  title: string;
+  author: string;
+  url: string;
+  status: RecordStatus;
+  comment: string | null;
+  abstract: string | null;
+  description: string | null;
+  databases: string[];
+  alternateUrls: string[];
+  editedBy: string;
+}>;
 type SaveMappingOptionPayload = {
   mappingOptionId: number;
   mappingQuestionId: number;
@@ -228,6 +246,8 @@ export const records = {
   get: (id: number, params?: QueryParams) => http.get<RecordItem>(`records/${id}`, { params }),
   update: (id: number, data: UpdateRecordPayload, params?: QueryParams) =>
     http.put<RecordItem, UpdateRecordPayload>(`records/${id}`, data, { params }),
+  patch: (id: number, data: PatchRecordPayload, params?: QueryParams) =>
+    http.patch<RecordItem, PatchRecordPayload>(`records/${id}`, data, { params }),
   mappingOptions: {
     save: (id: number, data: SaveMappingOptionPayload, params?: QueryParams) =>
       http.post<MappingOption, SaveMappingOptionPayload>(`records/${id}/mapping-options`, data, {

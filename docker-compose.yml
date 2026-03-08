@@ -8,10 +8,7 @@ services:
     init: true
     stop_signal: SIGTERM
     stop_grace_period: 10s
-    command: >
-      sh -c "if [ ! -f config/config.json ]; then cp config/config.example.json config/config.json; fi &&
-      node_modules/.bin/sequelize db:migrate &&
-      exec node --watch --import tsx server.ts"
+    command: /workspace/docker/dev-backend.sh
     volumes:
       - ./:/workspace
       - backend_node_modules:/workspace/node_modules
@@ -41,7 +38,7 @@ services:
     init: true
     stop_signal: SIGTERM
     stop_grace_period: 10s
-    command: node ./node_modules/vite/bin/vite.js --host 0.0.0.0 --port 8080
+    command: /workspace/docker/dev-frontend.sh
     volumes:
       - ./:/workspace
       - ui_node_modules:/workspace/ui/node_modules

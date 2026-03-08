@@ -83,6 +83,25 @@ describe("http", () => {
     expect(init.body).toBe(JSON.stringify({ title: "Question" }));
   });
 
+  it("sends JSON body for PATCH requests", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(
+        new Response(JSON.stringify({ id: 1, title: "Updated" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+
+    await http.patch<{ id: number; title: string }, { title: string }>("records/1", {
+      title: "Updated",
+    });
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(init.method).toBe("PATCH");
+    expect(init.body).toBe(JSON.stringify({ title: "Updated" }));
+  });
+
   it("retries transient GET network failures", async () => {
     vi.useFakeTimers();
     const fetchMock = vi

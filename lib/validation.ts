@@ -111,3 +111,48 @@ export const parseOptionalNullableString = (
 
   return parseString(value, fieldName, { ...options, optional: false });
 };
+
+type StringArrayOptions = {
+  optional?: boolean;
+  trim?: boolean;
+  allowEmptyItems?: boolean;
+  maxItemLength?: number;
+  maxItems?: number;
+};
+
+export const parseStringArray = (
+  value: unknown,
+  fieldName: string,
+  options: StringArrayOptions = {},
+) => {
+  if (value === undefined || value === null) {
+    if (options.optional) {
+      return undefined;
+    }
+    throw badRequest(`${fieldName} is required`);
+  }
+
+  if (!Array.isArray(value)) {
+    throw badRequest(`${fieldName} must be an array`);
+  }
+
+  if (options.maxItems !== undefined && value.length > options.maxItems) {
+    throw badRequest(`${fieldName} must have at most ${options.maxItems} items`);
+  }
+
+  return value.map((item, index) =>
+  {
+    const parsed = parseString(item, `${fieldName}[${index}]`, {
+      optional: false,
+      trim: options.trim,
+      allowEmpty: options.allowEmptyItems ?? false,
+      maxLength: options.maxItemLength,
+    });
+
+    if (parsed === undefined) {
+      throw badRequest(`${fieldName}[${index}] is required`);
+    }
+
+    return parsed;
+  });
+};

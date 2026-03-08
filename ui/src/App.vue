@@ -5,6 +5,7 @@ import { storeToRefs } from "pinia";
 import { defaultStore } from "./stores/default";
 import Sidebar from "./components/Sidebar.vue";
 import Classifier from "./components/Classifier.vue";
+import DataTable from "./components/DataTable.vue";
 
 const store = defaultStore();
 const { nick, tab } = storeToRefs(store);
@@ -18,7 +19,7 @@ const nickname = computed({
   },
 });
 
-const updateTab = (value: "inc-exc" | "map") => {
+const updateTab = (value: "inc-exc" | "map" | "data") => {
   store.updateTab(value);
 };
 </script>
@@ -37,12 +38,20 @@ const updateTab = (value: "inc-exc" | "map") => {
           class="app-tab"
           @click="updateTab('map')"
         >Map literature</li>
+        <li
+          :class="{'app-tab--active': tab === 'data'}"
+          class="app-tab"
+          @click="updateTab('data')"
+        >Data</li>
       </ul>
       <input type="text" :class="[!nick && 'empty']" placeholder="Nickname" v-model="nickname" />
     </div>
-    <div class="main-container" v-if="nick">
+    <div class="main-container" v-if="nick && tab !== 'data'">
       <Sidebar />
       <Classifier />
+    </div>
+    <div v-else-if="nick" class="data-container">
+      <DataTable />
     </div>
     <div v-else class="message">Start by typing your nickname or initials in the blinking box above</div>
   </div>
@@ -63,6 +72,10 @@ const updateTab = (value: "inc-exc" | "map") => {
   position: relative;
   padding-left: 220px;
   padding-bottom: 100px;
+  min-height: 700px;
+}
+
+.data-container {
   min-height: 700px;
 }
 .app-name {

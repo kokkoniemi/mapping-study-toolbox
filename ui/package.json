@@ -17,6 +17,8 @@
     "test:run": "vitest run"
   },
   "dependencies": {
+    "@handsontable/vue3": "^16.2.0",
+    "handsontable": "^16.2.0",
     "pinia": "^3.0.4",
     "vue": "^3.5.29"
   },

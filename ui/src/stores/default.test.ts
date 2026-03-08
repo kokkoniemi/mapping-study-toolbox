@@ -7,6 +7,7 @@ import { defaultStore } from "./default";
 const apiMocks = vi.hoisted(() => ({
   recordsIndex: vi.fn(),
   recordsUpdate: vi.fn(),
+  recordsPatch: vi.fn(),
   recordsMappingSave: vi.fn(),
   recordsMappingDelete: vi.fn(),
   mappingQuestionsIndex: vi.fn(),
@@ -20,6 +21,7 @@ vi.mock("../helpers/api", () => ({
   records: {
     index: apiMocks.recordsIndex,
     update: apiMocks.recordsUpdate,
+    patch: apiMocks.recordsPatch,
     mappingOptions: {
       save: apiMocks.recordsMappingSave,
       delete: apiMocks.recordsMappingDelete,
@@ -60,6 +62,7 @@ const makeRecord = (overrides: Partial<RecordItem> = {}): RecordItem => ({
   author: "Author",
   url: "https://example.com",
   databases: ["db"],
+  alternateUrls: [],
   abstract: null,
   description: null,
   createdAt: "2026-01-01T00:00:00.000Z",
@@ -73,6 +76,7 @@ const makeRecord = (overrides: Partial<RecordItem> = {}): RecordItem => ({
 const resetApiMocks = () => {
   apiMocks.recordsIndex.mockReset();
   apiMocks.recordsUpdate.mockReset();
+  apiMocks.recordsPatch.mockReset();
   apiMocks.recordsMappingSave.mockReset();
   apiMocks.recordsMappingDelete.mockReset();
   apiMocks.mappingQuestionsIndex.mockReset();
@@ -202,6 +206,48 @@ describe("defaultStore", () => {
     });
   });
 
+  it("patchRecord updates row and clears draft/saving state", async () => {
+    const store = defaultStore();
+    store.pageItems = [makeRecord({ id: 42, title: "Before" })];
+    store.nick = "mk";
+    store.setCellDraft(42, "title", "After");
+
+    apiMocks.recordsPatch.mockResolvedValue({
+      status: 200,
+      data: makeRecord({ id: 42, title: "After" }),
+    });
+
+    await store.patchRecord(42, { title: "After" });
+
+    expect(apiMocks.recordsPatch).toHaveBeenCalledWith(42, {
+      title: "After",
+      editedBy: "mk",
+    });
+    expect(store.pageItems[0]?.title).toBe("After");
+    expect(store.getCellState(42, "title")).toMatchObject({
+      saving: false,
+      error: null,
+      draft: undefined,
+    });
+  });
+
+  it("setRecordArrayField serializes chip arrays via patch endpoint", async () => {
+    const store = defaultStore();
+    store.pageItems = [makeRecord({ id: 9, databases: ["db"] })];
+
+    apiMocks.recordsPatch.mockResolvedValue({
+      status: 200,
+      data: makeRecord({ id: 9, databases: ["scopus", "wos"] }),
+    });
+
+    await store.setRecordArrayField(9, "databases", ["scopus", "wos"]);
+
+    expect(apiMocks.recordsPatch).toHaveBeenCalledWith(9, {
+      databases: ["scopus", "wos"],
+    });
+    expect(store.pageItems[0]?.databases).toEqual(["scopus", "wos"]);
+  });
+
   it("createMappingQuestion appends created question with empty MappingOptions", async () => {
     const store = defaultStore();
     store.mappingQuestions = [makeQuestion({ id: 1, position: 0 })];
@@ -228,6 +274,7 @@ describe("defaultStore", () => {
 
     store.pageItems = [current];
     store.currentItemId = 1;
+    store.mappingQuestions = [makeQuestion({ id: 10, MappingOptions: [] })];
 
     apiMocks.mappingQuestionsOptionSave.mockResolvedValue({
       status: 200,
@@ -290,5 +337,40 @@ describe("defaultStore", () => {
 
     expect(apiMocks.recordsMappingDelete).toHaveBeenCalledWith(1, 2);
     expect(store.pageItems[0]?.MappingOptions.map((option) => option.id)).toEqual([1]);
+  });
+
+  it("createMappingOptionAndLink creates option and links it to row", async () => {
+    const store = defaultStore();
+    store.pageItems = [makeRecord({ id: 3, MappingOptions: [] })];
+    store.mappingQuestions = [makeQuestion({ id: 9, MappingOptions: [] })];
+
+    apiMocks.mappingQuestionsOptionSave.mockResolvedValue({
+      status: 200,
+      data: makeOption({ id: 400, mappingQuestionId: 9, title: "New tag" }),
+    });
+    apiMocks.recordsMappingSave.mockResolvedValue({
+      status: 200,
+      data: makeOption({ id: 400, mappingQuestionId: 9, title: "New tag" }),
+    });
+    apiMocks.mappingQuestionsIndex.mockResolvedValue({
+      status: 200,
+      data: {
+        count: 1,
+        questions: [makeQuestion({ id: 9, MappingOptions: [makeOption({ id: 400, mappingQuestionId: 9 })] })],
+      },
+    });
+
+    await store.createMappingOptionAndLink(3, 9, "New tag", "#abc");
+
+    expect(apiMocks.mappingQuestionsOptionSave).toHaveBeenCalledWith(9, {
+      title: "New tag",
+      position: 0,
+      color: "#abc",
+    });
+    expect(apiMocks.recordsMappingSave).toHaveBeenCalledWith(3, {
+      mappingQuestionId: 9,
+      mappingOptionId: 400,
+    });
+    expect(store.pageItems[0]?.MappingOptions.map((option) => option.id)).toEqual([400]);
   });
 });

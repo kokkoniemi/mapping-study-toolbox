@@ -8,6 +8,7 @@ import {
   parseObject,
   parseOptionalNullableString,
   parseString,
+  parseStringArray,
 } from "../lib/validation";
 import db from "../models";
 import type { RecordStatus } from "../models/types";
@@ -51,6 +52,35 @@ const parseStatusBody = (value: unknown): RecordStatus | undefined => {
 
   throw badRequest(`status must be one of: ${VALID_STATUSES_TEXT.join(", ")}`);
 };
+
+const parseStatusRequired = (value: unknown): RecordStatus => {
+  if (value === null) {
+    return null;
+  }
+
+  if (typeof value !== "string") {
+    throw badRequest("status must be a string or null");
+  }
+
+  if (VALID_STATUSES.includes(value as RecordStatus)) {
+    return value as RecordStatus;
+  }
+
+  throw badRequest(`status must be one of: ${VALID_STATUSES_TEXT.join(", ")}`);
+};
+
+type RecordPatchPayload = Partial<{
+  title: string;
+  author: string;
+  url: string;
+  status: RecordStatus;
+  comment: string | null;
+  abstract: string | null;
+  description: string | null;
+  databases: string[];
+  alternateUrls: string[];
+  editedBy: string;
+}>;
 
 export const listing = async (req: Request, res: Response) => {
   const offset = parseInteger(req.query.offset, "offset", { defaultValue: 0, min: 0 });
@@ -131,6 +161,121 @@ export const update = async (req: Request, res: Response) => {
     ...(editedBy !== undefined ? { editedBy } : {}),
   });
 
+  return res.send(record);
+};
+
+export const patch = async (req: Request, res: Response) => {
+  const id = parseInteger(req.params.id, "id", { min: 1 });
+  const body = parseObject(req.body, "body");
+
+  assertAllowedKeys(
+    body,
+    [
+      "title",
+      "author",
+      "url",
+      "status",
+      "comment",
+      "abstract",
+      "description",
+      "databases",
+      "alternateUrls",
+      "editedBy",
+    ],
+    "record patch body",
+  );
+
+  const updates: RecordPatchPayload = {};
+
+  if ("title" in body) {
+    updates.title = parseString(body.title, "title", { trim: true, allowEmpty: false, maxLength: 500 });
+  }
+
+  if ("author" in body) {
+    updates.author = parseString(body.author, "author", {
+      trim: true,
+      allowEmpty: false,
+      maxLength: 500,
+    });
+  }
+
+  if ("url" in body) {
+    updates.url = parseString(body.url, "url", { trim: true, allowEmpty: false, maxLength: 2000 });
+  }
+
+  if ("status" in body) {
+    updates.status = parseStatusRequired(body.status);
+  }
+
+  if ("comment" in body) {
+    const value = parseOptionalNullableString(body.comment, "comment", {
+      trim: false,
+      maxLength: 10000,
+    });
+    if (value === undefined) {
+      throw badRequest("comment is required");
+    }
+    updates.comment = value;
+  }
+
+  if ("abstract" in body) {
+    const value = parseOptionalNullableString(body.abstract, "abstract", {
+      trim: false,
+      maxLength: 20000,
+    });
+    if (value === undefined) {
+      throw badRequest("abstract is required");
+    }
+    updates.abstract = value;
+  }
+
+  if ("description" in body) {
+    const value = parseOptionalNullableString(body.description, "description", {
+      trim: false,
+      maxLength: 20000,
+    });
+    if (value === undefined) {
+      throw badRequest("description is required");
+    }
+    updates.description = value;
+  }
+
+  if ("databases" in body) {
+    updates.databases = parseStringArray(body.databases, "databases", {
+      trim: true,
+      allowEmptyItems: false,
+      maxItemLength: 500,
+      maxItems: 200,
+    });
+  }
+
+  if ("alternateUrls" in body) {
+    updates.alternateUrls = parseStringArray(body.alternateUrls, "alternateUrls", {
+      trim: true,
+      allowEmptyItems: false,
+      maxItemLength: 2000,
+      maxItems: 200,
+    });
+  }
+
+  if ("editedBy" in body) {
+    updates.editedBy = parseString(body.editedBy, "editedBy", {
+      trim: true,
+      allowEmpty: false,
+      maxLength: 120,
+    });
+  }
+
+  if (Object.keys(updates).length === 0) {
+    throw badRequest("record patch body must contain at least one supported field");
+  }
+
+  const record = await db.Record.findByPk(id, { include: ["Publication", "MappingOptions"] });
+  if (!record) {
+    throw notFound(`Record ${id} not found`);
+  }
+
+  await record.update(updates);
   return res.send(record);
 };
 

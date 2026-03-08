@@ -22,6 +22,8 @@ After the first build, normal startup is faster:
 docker compose up
 ```
 
+When `package-lock.json` (backend or `ui/`) changes, dependencies are automatically refreshed inside containers on next startup.
+
 This starts:
 - backend (auto-migrates sqlite and hot-reloads on backend file changes)
 - frontend Vite dev server (hot-reloads on UI changes)
@@ -100,11 +102,20 @@ node scrapers/[scraper-name].js
 The backend (`server.ts`) exposes only the API at `http://localhost:3000/api`.
 The frontend runs separately with Vite dev server.
 
+GUI tabs:
+- `Include/exclude literature`: focused classification flow
+- `Map literature`: mapping questions/options flow
+- `Data`: spreadsheet-like editable table for records and mapping assignments
+  - built with Handsontable (`non-commercial-and-evaluation` license key in development)
+
 ### Run UI dev server
 ```shell
 npm run ui:dev
 ```
 UI dev server runs on http://localhost:8080 and calls backend API at http://localhost:3000/api/.
+
+### Data tab backend endpoint
+- `PATCH /api/records/:id` for partial record updates used by the Data tab.
 
 ### Build UI for deployment/static hosting
 ```shell

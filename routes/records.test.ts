@@ -26,6 +26,7 @@ const dbMock = vi.hoisted(() => ({
 vi.mock("../models", () => ({ default: dbMock }));
 
 import { createOption, listing, removeOption, update } from "./records";
+import { patch } from "./records";
 
 const mockResponse = () => {
   const res = {
@@ -136,5 +137,55 @@ describe("routes/records", () => {
       where: { mappingOptionId: 12, recordId: 3 },
     });
     expect(res.send).toHaveBeenCalledWith("12 deleted successfully");
+  });
+
+  it("patch updates partial record fields including arrays", async () => {
+    const record = { update: vi.fn().mockResolvedValue(undefined), id: 1 };
+    dbMock.Record.findByPk.mockResolvedValue(record);
+
+    const req = {
+      params: { id: "1" },
+      body: {
+        title: "Updated title",
+        status: "uncertain",
+        databases: ["scopus", "wos"],
+        alternateUrls: ["https://example.com/a"],
+      },
+    } as unknown as Request;
+    const res = mockResponse();
+
+    await patch(req, res);
+
+    expect(dbMock.Record.findByPk).toHaveBeenCalledWith(1, { include: ["Publication", "MappingOptions"] });
+    expect(record.update).toHaveBeenCalledWith({
+      title: "Updated title",
+      status: "uncertain",
+      databases: ["scopus", "wos"],
+      alternateUrls: ["https://example.com/a"],
+    });
+    expect(res.send).toHaveBeenCalledWith(record);
+  });
+
+  it("patch rejects unsupported keys", async () => {
+    const req = {
+      params: { id: "1" },
+      body: { invalidField: "x" },
+    } as unknown as Request;
+    const res = mockResponse();
+
+    await expect(patch(req, res)).rejects.toBeInstanceOf(ApiError);
+    expect(dbMock.Record.findByPk).not.toHaveBeenCalled();
+  });
+
+  it("patch returns not found when record does not exist", async () => {
+    dbMock.Record.findByPk.mockResolvedValue(null);
+
+    const req = {
+      params: { id: "999" },
+      body: { title: "A" },
+    } as unknown as Request;
+    const res = mockResponse();
+
+    await expect(patch(req, res)).rejects.toBeInstanceOf(ApiError);
   });
 });

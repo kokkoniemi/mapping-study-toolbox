@@ -108,6 +108,50 @@ describeWhenSocketAllowed("API integration", () => {
     });
   });
 
+  it("PATCH /api/records/:id updates record fields", async () => {
+    const record = {
+      id: 1,
+      status: "uncertain",
+      title: "Updated",
+      update: vi.fn().mockResolvedValue(undefined),
+    };
+    dbMock.Record.findByPk.mockResolvedValue(record);
+
+    const app = createApp();
+    const response = await request(app).patch("/api/records/1").send({
+      title: "Updated",
+      status: "uncertain",
+      databases: ["scopus"],
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      id: 1,
+      title: "Updated",
+      status: "uncertain",
+    });
+    expect(record.update).toHaveBeenCalledWith({
+      title: "Updated",
+      status: "uncertain",
+      databases: ["scopus"],
+    });
+  });
+
+  it("PATCH /api/records/:id with invalid alternateUrls returns standardized validation error", async () => {
+    const app = createApp();
+
+    const response = await request(app).patch("/api/records/1").send({
+      alternateUrls: "https://example.com",
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body).toMatchObject({
+      error: {
+        code: "VALIDATION_ERROR",
+      },
+    });
+  });
+
   it("GET /api/records/:id missing record returns NOT_FOUND", async () => {
     dbMock.Record.findByPk.mockResolvedValue(null);
 
