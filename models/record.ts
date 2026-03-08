@@ -1,7 +1,9 @@
-import type { Sequelize } from "sequelize";
+import { QueryTypes, type Sequelize } from "sequelize";
 
-const defineRecord = (sequelize: Sequelize, DataTypes: any) => {
-  const Record: any = sequelize.define(
+import type { DbModels, ModelFactory, RecordModelStatic } from "./types";
+
+const defineRecord: ModelFactory<RecordModelStatic> = (sequelize: Sequelize, DataTypes) => {
+  const Record = sequelize.define(
     "Record",
     {
       title: DataTypes.TEXT,
@@ -18,9 +20,9 @@ const defineRecord = (sequelize: Sequelize, DataTypes: any) => {
     {
       paranoid: true,
     },
-  );
+  ) as RecordModelStatic;
 
-  Record.associate = (models: any) => {
+  Record.associate = (models: DbModels) => {
     Record.belongsTo(models.Publication);
     Record.belongsToMany(models.MappingOption, { through: models.RecordMappingOption });
   };
@@ -46,13 +48,13 @@ const defineRecord = (sequelize: Sequelize, DataTypes: any) => {
       `,
       {
         replacements: { urls: searchUrls },
-        type: (sequelize as any).QueryTypes.SELECT,
+        type: QueryTypes.SELECT,
         model: Record,
         mapToModel: true,
       },
     );
 
-    return recordInstances;
+    return recordInstances as Awaited<ReturnType<RecordModelStatic["getAllByUrls"]>>;
   };
 
   return Record;

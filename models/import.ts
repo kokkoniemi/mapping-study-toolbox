@@ -1,7 +1,9 @@
 import type { Sequelize } from "sequelize";
 
-const defineImport = (sequelize: Sequelize, DataTypes: any) => {
-  const Import: any = sequelize.define(
+import type { ImportModelStatic, ModelFactory } from "./types";
+
+const defineImport: ModelFactory<ImportModelStatic> = (sequelize: Sequelize, DataTypes) => {
+  const Import = sequelize.define(
     "Import",
     {
       database: DataTypes.STRING, // Where is the data scraped from
@@ -13,9 +15,9 @@ const defineImport = (sequelize: Sequelize, DataTypes: any) => {
     {
       paranoid: true,
     },
-  );
+  ) as ImportModelStatic;
 
-  Import.associate = (_models: any) => {
+  Import.associate = () => {
     // associations can be defined here
   };
 

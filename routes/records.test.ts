@@ -60,7 +60,9 @@ describe("routes/records", () => {
     expect(dbMock.Record.count).toHaveBeenCalledTimes(1);
     const where = dbMock.Record.count.mock.calls[0]?.[0]?.where as Record<PropertyKey, unknown>;
     expect(where.status).toBeNull();
-    expect((where[dbMock.Sequelize.Op.or] as unknown[]).length).toBe(4);
+    const symbolKeys = Object.getOwnPropertySymbols(where);
+    expect(symbolKeys.length).toBe(1);
+    expect((where[symbolKeys[0] as symbol] as unknown[]).length).toBe(4);
 
     expect(dbMock.Record.findAll).toHaveBeenCalledWith(
       expect.objectContaining({ offset: 5, limit: 10, include: ["Publication", "MappingOptions"] }),

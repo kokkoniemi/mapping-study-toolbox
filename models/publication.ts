@@ -1,7 +1,9 @@
 import type { Sequelize } from "sequelize";
 
-const definePublication = (sequelize: Sequelize, DataTypes: any) => {
-  const Publication: any = sequelize.define(
+import type { DbModels, ModelFactory, PublicationModelStatic } from "./types";
+
+const definePublication: ModelFactory<PublicationModelStatic> = (sequelize: Sequelize, DataTypes) => {
+  const Publication = sequelize.define(
     "Publication",
     {
       name: DataTypes.STRING,
@@ -12,9 +14,9 @@ const definePublication = (sequelize: Sequelize, DataTypes: any) => {
     {
       paranoid: true,
     },
-  );
+  ) as PublicationModelStatic;
 
-  Publication.associate = (models: any) => {
+  Publication.associate = (models: DbModels) => {
     Publication.hasMany(models.Record);
   };
 

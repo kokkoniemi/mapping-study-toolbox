@@ -1,4 +1,5 @@
 import type { Request, Response } from "express";
+import { Op } from "sequelize";
 
 import db from "../models";
 
@@ -39,12 +40,11 @@ export const listing = async (req: Request, res: Response) => {
   }
 
   if (search !== undefined) {
-    const op = (db.Sequelize as any).Op;
-    where[op.or] = [
-      { comment: { [op.substring]: search } },
-      { title: { [op.substring]: search } },
-      { author: { [op.substring]: search } },
-      { databases: { [op.substring]: search } },
+    where[Op.or] = [
+      { comment: { [Op.substring]: search } },
+      { title: { [Op.substring]: search } },
+      { author: { [Op.substring]: search } },
+      { databases: { [Op.substring]: search } },
     ];
   }
 
@@ -87,6 +87,7 @@ export const update = async (req: Request, res: Response) => {
   if (status !== undefined && !VALID_STATUSES.includes(status as ValidStatus)) {
     return res.status(400).send(new Error("Illegal value for 'status'"));
   }
+  const safeStatus = status as ValidStatus | undefined;
 
   try {
     const record = await db.Record.findByPk(id, { include: ["Publication", "MappingOptions"] });
@@ -96,7 +97,7 @@ export const update = async (req: Request, res: Response) => {
 
     try {
       await record.update({
-        ...(status !== undefined ? { status } : {}),
+        ...(safeStatus !== undefined ? { status: safeStatus } : {}),
         ...(comment !== undefined ? { comment } : {}),
         ...(MappingOptions !== undefined ? { MappingOptions } : {}),
         editedBy,

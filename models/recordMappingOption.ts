@@ -1,7 +1,12 @@
 import type { Sequelize } from "sequelize";
 
-const defineRecordMappingOption = (sequelize: Sequelize, DataTypes: any) => {
-  const RecordMappingOption: any = sequelize.define(
+import type { DbModels, ModelFactory, RecordMappingOptionModelStatic } from "./types";
+
+const defineRecordMappingOption: ModelFactory<RecordMappingOptionModelStatic> = (
+  sequelize: Sequelize,
+  DataTypes,
+) => {
+  const RecordMappingOption = sequelize.define(
     "RecordMappingOption",
     {
       recordId: DataTypes.INTEGER,
@@ -11,9 +16,9 @@ const defineRecordMappingOption = (sequelize: Sequelize, DataTypes: any) => {
     {
       paranoid: false,
     },
-  );
+  ) as RecordMappingOptionModelStatic;
 
-  RecordMappingOption.associate = (models: any) => {
+  RecordMappingOption.associate = (models: DbModels) => {
     RecordMappingOption.belongsTo(models.Record);
     RecordMappingOption.belongsTo(models.MappingQuestion);
     RecordMappingOption.belongsTo(models.MappingOption);

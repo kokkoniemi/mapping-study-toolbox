@@ -1,7 +1,12 @@
 import type { Sequelize } from "sequelize";
 
-const defineMappingQuestion = (sequelize: Sequelize, DataTypes: any) => {
-  const MappingQuestion: any = sequelize.define(
+import type { DbModels, MappingQuestionModelStatic, ModelFactory } from "./types";
+
+const defineMappingQuestion: ModelFactory<MappingQuestionModelStatic> = (
+  sequelize: Sequelize,
+  DataTypes,
+) => {
+  const MappingQuestion = sequelize.define(
     "MappingQuestion",
     {
       title: DataTypes.STRING,
@@ -11,9 +16,9 @@ const defineMappingQuestion = (sequelize: Sequelize, DataTypes: any) => {
     {
       paranoid: true,
     },
-  );
+  ) as MappingQuestionModelStatic;
 
-  MappingQuestion.associate = (models: any) => {
+  MappingQuestion.associate = (models: DbModels) => {
     MappingQuestion.hasMany(models.MappingOption);
   };
 

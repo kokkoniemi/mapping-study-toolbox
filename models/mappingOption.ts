@@ -1,7 +1,12 @@
 import type { Sequelize } from "sequelize";
 
-const defineMappingOption = (sequelize: Sequelize, DataTypes: any) => {
-  const MappingOption: any = sequelize.define(
+import type { DbModels, MappingOptionModelStatic, ModelFactory } from "./types";
+
+const defineMappingOption: ModelFactory<MappingOptionModelStatic> = (
+  sequelize: Sequelize,
+  DataTypes,
+) => {
+  const MappingOption = sequelize.define(
     "MappingOption",
     {
       title: DataTypes.STRING,
@@ -12,9 +17,9 @@ const defineMappingOption = (sequelize: Sequelize, DataTypes: any) => {
     {
       paranoid: true,
     },
-  );
+  ) as MappingOptionModelStatic;
 
-  MappingOption.associate = (models: any) => {
+  MappingOption.associate = (models: DbModels) => {
     MappingOption.belongsTo(models.MappingQuestion);
     MappingOption.belongsToMany(models.Record, { through: models.RecordMappingOption });
   };
