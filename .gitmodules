@@ -1,3 +1,0 @@
-[submodule "scrapers"]
-	path = scrapers
-	url = https://github.com/kokkoniemi/mapping-study-scrapers.git
