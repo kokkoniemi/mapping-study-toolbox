@@ -1,0 +1,4 @@
+interface:
+  display_name: "Mapping Data Operations"
+  short_description: "Run sqlite setup, migrations, and import workflow safely."
+  default_prompt: "Run data setup and import operations for mapping-study-toolbox with safe sqlite practices."

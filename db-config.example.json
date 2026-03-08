@@ -1,5 +1,5 @@
 {
     "dialect": "sqlite",
-    "storage": "<path to sqlite3 file>",
+    "storage": "./your-sqlite-db.sqlite3",
     "logging": false
 }

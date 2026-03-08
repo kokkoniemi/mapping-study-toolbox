@@ -1,0 +1,4 @@
+interface:
+  display_name: "Mapping UI Sync"
+  short_description: "Build and sync local GUI into packaged public assets."
+  default_prompt: "Build and sync GUI changes from ui/ into this repository packaged public build."

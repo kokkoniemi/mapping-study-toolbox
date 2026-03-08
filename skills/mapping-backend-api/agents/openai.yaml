@@ -1,0 +1,4 @@
+interface:
+  display_name: "Mapping Backend API"
+  short_description: "Maintain backend API and Sequelize contracts safely."
+  default_prompt: "Maintain or extend the backend API and data models while preserving existing UI contracts."

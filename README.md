@@ -1,8 +1,9 @@
 # mapping-study-toolbox
 
-This repository includes a GUI frontend for classifying literature in inclusion/exclusion phase of mapping studies or literature reviews. Additionally, the toolbox has a backend server for the GUI and several scrapers and importer scripts for fetching the search results into the database.
-
-The GUI can be accessed from https://localhost:3000 when the backend is running. It is actually a packaged build version of the GUI, which is developed in a separate repository ([classify-literature-gui](https://github.com/kokkoniemi/classify-literature-gui)).
+This repository is now a monorepo with:
+- `server` side API (Express + Sequelize + sqlite)
+- `ui/` frontend source (Vue 3 + Vite)
+- `public/` packaged frontend build served by the backend
 
 ![Screenshot of the GUI](screenshot.png)
 
@@ -17,13 +18,18 @@ The GUI can be accessed from https://localhost:3000 when the backend is running.
 ```
 git clone https://github.com/kokkoniemi/mapping-study-toolbox.git --recurse-submodules
 ```
-### 2. Install node modules
+### 2. Install backend dependencies
 ```
 npm install
 ```
 
-### 3. Change the config file to point to your database
-- Change db-config.json to point to the database
+### 3. Install UI dependencies
+```
+npm run ui:install
+```
+
+### 4. Change runtime DB config to point to your database
+- Copy `db-config.example.json` to `db-config.json` (if needed) and set `storage`
 - Change the `storage` key, i.e.
     ```
     {
@@ -32,6 +38,10 @@ npm install
       "logging": false
     }
     ```
+
+### 5. Create sequelize-cli config for migrations
+- Copy `config/config.example.json` to `config/config.json`
+- Set the same sqlite `storage` path as in `db-config.json`
 
 ## Scraping search results
 
@@ -67,11 +77,22 @@ node scrapers/[scraper-name].js
 
 ## Api and GUI
 
-There is a simple rest api (server.js) to serve records from the sqlite database. I use it to classify the records.
+There is a simple rest api (`server.js`) to serve records from sqlite and host the built UI from `public/`.
 
-To use the api run:
+### Build UI into `public/`
+```shell
+npm run ui:build
+```
+
+### Start backend + packaged UI
 ```shell
 npm start
 ```
 
-Now the api runs at https://localhost:3000/api/, and the GUI frontend is served at https://localhost:3000.
+Now the api runs at http://localhost:3000/api/, and the GUI is served at http://localhost:3000.
+
+### Optional: run UI dev server
+```shell
+npm run ui:dev
+```
+UI dev server runs on http://localhost:8080 and calls backend API at http://localhost:3000/api/.

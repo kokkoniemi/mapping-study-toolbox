@@ -1,0 +1,49 @@
+# Mapping Study Toolbox Context
+
+## High-level architecture
+- Runtime stack: Node.js + Express + Sequelize + sqlite3.
+- API entrypoint: `server.js` (serves static `public/` and mounts `/api` routes).
+- UI source code lives in `ui/` (Vue 3 + Vite).
+- API routers: `routes/api.js` with handlers in:
+  - `routes/records.js`
+  - `routes/mappingQuestions.js`
+- Data layer: Sequelize models in `models/`, schema history in `migrations/`.
+- Packaged UI: static files in `public/` (built from `ui/`).
+
+## UI integration
+- Backend contract used by UI is defined in `ui/src/helpers/api.js`.
+- API base in UI is hardcoded to `http://localhost:3000/api/`.
+- UI dev server is configured to run on `http://localhost:8080`.
+- UI production build output goes directly to `public/`.
+
+## Data model snapshot
+- `Record`: title/url/author/description/abstract/status/comment, JSON fields (`databases`, `alternateUrls`), `editedBy`, soft delete.
+- `Publication`: venue metadata (`name`, `alternateNames`, `jufoLevel`, `database`), soft delete.
+- `MappingQuestion`: mapping metadata (`title`, `type`, `position`), soft delete.
+- `MappingOption`: option value (`title`, `position`, `color`, `mappingQuestionId`), soft delete.
+- `RecordMappingOption`: join table (`recordId`, `mappingQuestionId`, `mappingOptionId`), no paranoid delete.
+- `Import`: scraper run metadata (`database`, `total`, `dublicates`, `namesakes`, `query`), soft delete.
+
+## API contracts used by UI
+- `GET /api/records` supports `offset`, `limit`, `status`, `search`, and returns `{ count, records }`.
+- `PUT /api/records/:id` updates status/comment/editedBy and optionally mapping options.
+- `POST /api/records/:recordId/mapping-options` links an option to a record.
+- `DELETE /api/records/:recordId/mapping-options/:mappingOptionId` unlinks option.
+- `GET /api/mapping-questions` returns `{ count, questions }` ordered by question and option position.
+- CRUD routes exist for mapping questions and mapping options.
+
+## Important invariants
+- Record status domain: `null | uncertain | excluded | included`.
+- Include aliases expected by UI in record payloads: `Publication` and `MappingOptions`.
+- Question and option ordering is position-driven.
+- Existing migrations represent production history; add new migrations instead of modifying old ones.
+
+## Operational notes
+- `db-config.json` is used by runtime model loader (`models/index.js`).
+- `config/config.json` is used by sequelize-cli migrations.
+- `config/config.example.json` exists, but runtime still needs `db-config.json`.
+- `scrapers/` is a git submodule and may be uninitialized in fresh clones.
+
+## Current known constraints
+- No automated test suite is defined in this repo.
+- `public/` is a packaged build artifact; `ui/` is the primary UI source.
