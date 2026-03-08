@@ -11,13 +11,17 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs --fix"
+    "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs --fix",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest",
+    "test:run": "vitest run"
   },
   "dependencies": {
     "pinia": "^3.0.4",
     "vue": "^3.5.29"
   },
   "devDependencies": {
+    "@types/node": "^25.3.5",
     "@vitejs/plugin-vue": "^6.0.4",
     "date-fns": "^4.1.0",
     "eslint": "^10.0.3",
@@ -25,7 +29,9 @@
     "globals": "^17.4.0",
     "pinia-plugin-persistedstate": "^4.7.1",
     "sass": "^1.97.3",
+    "typescript": "^5.9.3",
     "vite": "^7.3.1",
+    "vitest": "^4.0.18",
     "vue-eslint-parser": "^10.4.0"
   }
 }

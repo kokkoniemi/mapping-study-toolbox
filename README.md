@@ -68,6 +68,14 @@ npm start
 npm run ui:dev
 ```
 
+### Quality checks (recommended before commit)
+```shell
+npm run ui:typecheck
+npm run ui:test
+npm run ui:lint
+npm run ui:build
+```
+
 ## Scraping search results
 
 ### Change search query in scraper[scraper-name].js
@@ -116,3 +124,9 @@ UI dev server runs on http://localhost:8080 and calls backend API at http://loca
 npm run ui:build
 ```
 This outputs static files to `ui/dist`.
+
+### UI tests and type safety
+```shell
+npm run ui:typecheck
+npm run ui:test
+```

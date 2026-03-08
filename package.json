@@ -14,7 +14,9 @@
     "ui:dev": "npm --prefix ui run dev",
     "ui:build": "npm --prefix ui run build",
     "ui:preview": "npm --prefix ui run preview",
-    "ui:lint": "npm --prefix ui run lint"
+    "ui:lint": "npm --prefix ui run lint",
+    "ui:typecheck": "npm --prefix ui run typecheck",
+    "ui:test": "npm --prefix ui run test:run"
   },
   "bin": "server.js",
   "pkg": {

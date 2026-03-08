@@ -1,7 +1,7 @@
 # ui (classify-literature-gui)
 
 This directory contains the Vue 3 UI source for `mapping-study-toolbox`.
-The backend API is in the monorepo root and serves packaged UI assets from `../public`.
+The backend API is in the monorepo root.
 
 ## Recommended IDE Setup
 
@@ -33,4 +33,16 @@ npm run build
 
 ```sh
 npm run lint
+```
+
+### Typecheck with TypeScript
+
+```sh
+npm run typecheck
+```
+
+### Run unit tests with Vitest
+
+```sh
+npm run test:run
 ```
