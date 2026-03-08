@@ -11,9 +11,11 @@
     "types": ["node", "vitest/globals"]
   },
   "include": [
+    "lib/**/*.ts",
     "server.ts",
     "routes/**/*.ts",
     "models/**/*.ts",
+    "tests/**/*.ts",
     "vitest.config.ts"
   ],
   "exclude": ["node_modules", "ui", "public", "migrations"]

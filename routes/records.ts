@@ -1,45 +1,74 @@
 import type { Request, Response } from "express";
 import { Op } from "sequelize";
 
+import { badRequest, notFound } from "../lib/http";
+import {
+  assertAllowedKeys,
+  parseInteger,
+  parseObject,
+  parseOptionalNullableString,
+  parseString,
+} from "../lib/validation";
 import db from "../models";
+import type { RecordStatus } from "../models/types";
 
-const parseNumber = (value: unknown, fallback: number) => {
+const VALID_STATUSES: readonly RecordStatus[] = [null, "uncertain", "excluded", "included"];
+const VALID_STATUSES_TEXT = ["null", "uncertain", "excluded", "included"] as const;
+
+const parseStatusQuery = (value: unknown): RecordStatus | undefined => {
+  const status = parseString(value, "status", { optional: true, trim: true });
+  if (status === undefined || status.length === 0) {
+    return undefined;
+  }
+
+  if (status === "null") {
+    return null;
+  }
+
+  if (VALID_STATUSES.includes(status as RecordStatus)) {
+    return status as RecordStatus;
+  }
+
+  throw badRequest(`status must be one of: ${VALID_STATUSES_TEXT.join(", ")}`);
+};
+
+const parseStatusBody = (value: unknown): RecordStatus | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value === null) {
+    return null;
+  }
+
   if (typeof value !== "string") {
-    return fallback;
+    throw badRequest("status must be a string or null");
   }
 
-  const parsed = Number.parseInt(value, 10);
-  return Number.isNaN(parsed) ? fallback : parsed;
+  if (VALID_STATUSES.includes(value as RecordStatus)) {
+    return value as RecordStatus;
+  }
+
+  throw badRequest(`status must be one of: ${VALID_STATUSES_TEXT.join(", ")}`);
 };
-
-const toStringParam = (value: unknown): string | undefined => {
-  if (typeof value === "string") {
-    return value;
-  }
-  if (Array.isArray(value) && typeof value[0] === "string") {
-    return value[0];
-  }
-  return undefined;
-};
-
-const toRecordId = (value: unknown): number => Number.parseInt(String(value), 10);
-const VALID_STATUSES = [null, "uncertain", "excluded", "included"] as const;
-
-type ValidStatus = (typeof VALID_STATUSES)[number];
 
 export const listing = async (req: Request, res: Response) => {
-  const offset = parseNumber(toStringParam(req.query.offset), 0);
-  const limit = parseNumber(toStringParam(req.query.limit), 25);
-  const status = toStringParam(req.query.status);
-  const search = toStringParam(req.query.search);
+  const offset = parseInteger(req.query.offset, "offset", { defaultValue: 0, min: 0 });
+  const limit = parseInteger(req.query.limit, "limit", { defaultValue: 25, min: 1, max: 250 });
+  const status = parseStatusQuery(req.query.status);
+  const search = parseString(req.query.search, "search", {
+    optional: true,
+    trim: true,
+    maxLength: 500,
+  });
 
   const where: Record<PropertyKey, unknown> = {};
 
   if (status !== undefined) {
-    where.status = status === "null" ? null : status;
+    where.status = status;
   }
 
-  if (search !== undefined) {
+  if (search !== undefined && search.length > 0) {
     where[Op.or] = [
       { comment: { [Op.substring]: search } },
       { title: { [Op.substring]: search } },
@@ -48,100 +77,93 @@ export const listing = async (req: Request, res: Response) => {
     ];
   }
 
-  try {
-    const count = await db.Record.count({ where });
-    const records = await db.Record.findAll({
+  const [count, records] = await Promise.all([
+    db.Record.count({ where }),
+    db.Record.findAll({
       offset,
       limit,
       where,
       include: ["Publication", "MappingOptions"],
-    });
+    }),
+  ]);
 
-    return res.send({ count, records });
-  } catch (error) {
-    return res.send(error);
-  }
+  return res.send({ count, records });
 };
 
 export const get = async (req: Request, res: Response) => {
-  const id = toRecordId(req.params.id);
+  const id = parseInteger(req.params.id, "id", { min: 1 });
 
-  try {
-    const record = await db.Record.findByPk(id, { include: ["Publication", "MappingOptions"] });
-    return res.send(record);
-  } catch (error) {
-    return res.send(error);
+  const record = await db.Record.findByPk(id, { include: ["Publication", "MappingOptions"] });
+  if (!record) {
+    throw notFound(`Record ${id} not found`);
   }
+
+  return res.send(record);
 };
 
 // only enable updating the status or comment of the record
 export const update = async (req: Request, res: Response) => {
-  const id = toRecordId(req.params.id);
-  const { status, editedBy, comment, MappingOptions } = req.body as {
-    status?: ValidStatus | string;
-    editedBy?: string;
-    comment?: string | null;
-    MappingOptions?: unknown;
-  };
+  const id = parseInteger(req.params.id, "id", { min: 1 });
+  const body = parseObject(req.body, "body");
 
-  if (status !== undefined && !VALID_STATUSES.includes(status as ValidStatus)) {
-    return res.status(400).send(new Error("Illegal value for 'status'"));
+  assertAllowedKeys(body, ["status", "editedBy", "comment", "MappingOptions"], "record update body");
+
+  const status = parseStatusBody(body.status);
+  const editedBy = parseString(body.editedBy, "editedBy", {
+    optional: true,
+    trim: true,
+    maxLength: 120,
+  });
+  const comment = parseOptionalNullableString(body.comment, "comment", {
+    trim: false,
+    maxLength: 10000,
+  });
+
+  const record = await db.Record.findByPk(id, { include: ["Publication", "MappingOptions"] });
+  if (!record) {
+    throw notFound(`Record ${id} not found`);
   }
-  const safeStatus = status as ValidStatus | undefined;
 
-  try {
-    const record = await db.Record.findByPk(id, { include: ["Publication", "MappingOptions"] });
-    if (!record) {
-      return res.status(404).send(new Error(`Record ${id} not found`));
-    }
+  await record.update({
+    ...(status !== undefined ? { status } : {}),
+    ...(comment !== undefined ? { comment } : {}),
+    ...(body.MappingOptions !== undefined ? { MappingOptions: body.MappingOptions } : {}),
+    ...(editedBy !== undefined ? { editedBy } : {}),
+  });
 
-    try {
-      await record.update({
-        ...(safeStatus !== undefined ? { status: safeStatus } : {}),
-        ...(comment !== undefined ? { comment } : {}),
-        ...(MappingOptions !== undefined ? { MappingOptions } : {}),
-        editedBy,
-      });
-      return res.send(record);
-    } catch (error) {
-      return res.status(400).send(error);
-    }
-  } catch (error) {
-    return res.status(400).send(error);
-  }
+  return res.send(record);
 };
 
 export const createOption = async (req: Request, res: Response) => {
-  const recordId = toRecordId(req.params.recordId);
-  const { mappingOptionId, mappingQuestionId } = req.body as {
-    mappingOptionId: number | string;
-    mappingQuestionId: number | string;
-  };
+  const recordId = parseInteger(req.params.recordId, "recordId", { min: 1 });
+  const body = parseObject(req.body, "body");
 
-  try {
-    await db.RecordMappingOption.create({
-      recordId,
-      mappingQuestionId: Number(mappingQuestionId),
-      mappingOptionId: Number(mappingOptionId),
-    });
+  assertAllowedKeys(body, ["mappingOptionId", "mappingQuestionId"], "record mapping option body");
 
-    const option = await db.MappingOption.findByPk(Number(mappingOptionId));
-    return res.send(option);
-  } catch (error) {
-    return res.status(400).send(error);
+  const mappingOptionId = parseInteger(body.mappingOptionId, "mappingOptionId", { min: 1 });
+  const mappingQuestionId = parseInteger(body.mappingQuestionId, "mappingQuestionId", { min: 1 });
+
+  await db.RecordMappingOption.create({
+    recordId,
+    mappingQuestionId,
+    mappingOptionId,
+  });
+
+  const option = await db.MappingOption.findByPk(mappingOptionId);
+  if (!option) {
+    throw notFound(`MappingOption ${mappingOptionId} not found`);
   }
+
+  return res.send(option);
 };
 
 export const removeOption = async (req: Request, res: Response) => {
-  const mappingOptionId = toRecordId(req.params.mappingOptionId);
-  const recordId = toRecordId(req.params.recordId);
+  const mappingOptionId = parseInteger(req.params.mappingOptionId, "mappingOptionId", { min: 1 });
+  const recordId = parseInteger(req.params.recordId, "recordId", { min: 1 });
 
-  try {
-    await db.RecordMappingOption.destroy({
-      where: { mappingOptionId, recordId },
-    });
-    return res.send(`${mappingOptionId} deleted successfully`);
-  } catch (error) {
-    return res.status(400).send(error);
-  }
+  await db.RecordMappingOption.destroy({
+    where: { mappingOptionId, recordId },
+  });
+
+  return res.send(`${mappingOptionId} deleted successfully`);
 };

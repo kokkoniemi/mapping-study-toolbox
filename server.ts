@@ -1,5 +1,6 @@
 import express, { type NextFunction, type Request, type Response } from "express";
 
+import { errorMiddleware, notFound } from "./lib/http";
 import apiRouter from "./routes/api";
 
 const PORT = Number(process.env.PORT ?? 3000);
@@ -25,6 +26,11 @@ export const createApp = () => {
   });
 
   app.use("/api", apiRouter);
+  app.use((_req, _res, next) => {
+    next(notFound("Route not found"));
+  });
+  app.use(errorMiddleware);
+
   return app;
 };
 

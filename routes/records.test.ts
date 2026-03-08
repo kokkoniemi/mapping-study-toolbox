@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ApiError } from "../lib/http";
 
 const dbMock = vi.hoisted(() => ({
   Sequelize: {
@@ -77,9 +78,7 @@ describe("routes/records", () => {
     } as unknown as Request;
     const res = mockResponse();
 
-    await update(req, res);
-
-    expect(res.status).toHaveBeenCalledWith(400);
+    await expect(update(req, res)).rejects.toBeInstanceOf(ApiError);
     expect(dbMock.Record.findByPk).not.toHaveBeenCalled();
   });
 

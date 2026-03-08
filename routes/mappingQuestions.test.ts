@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ApiError } from "../lib/http";
 
 const dbMock = vi.hoisted(() => ({
   MappingOption: {
@@ -112,9 +113,7 @@ describe("routes/mappingQuestions", () => {
     } as unknown as Request;
     const res = mockResponse();
 
-    await updateOption(req, res);
-
-    expect(res.status).toHaveBeenCalledWith(404);
+    await expect(updateOption(req, res)).rejects.toBeInstanceOf(ApiError);
   });
 
   it("removeOption destroys and returns option", async () => {
