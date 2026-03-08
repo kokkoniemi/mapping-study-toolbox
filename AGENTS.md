@@ -1,20 +1,19 @@
 # AGENTS.md
 
 ## Purpose
-This repository is the backend and packaged UI host for a mapping-study literature classification tool.
+This repository contains a mapping-study backend API and a separate frontend app in the same monorepo.
 
 ## Repositories in scope
-- `mapping-study-toolbox` (this repo): Express API, Sequelize models/migrations, UI source in `ui/`, and packaged static UI in `public/`.
+- `mapping-study-toolbox` (this repo): Express API, Sequelize models/migrations, and UI source in `ui/`.
 - `scrapers/`: git submodule (`mapping-study-scrapers`) used for importing search results.
 
 ## Local setup checklist
-1. Install dependencies in this repo: `npm install`.
-2. Install UI dependencies: `npm run ui:install`.
-3. Create `db-config.json` (runtime DB config) with sqlite `storage` path.
-4. Create `config/config.json` (sequelize-cli config), usually by copying `config/config.example.json` and setting the same sqlite `storage`.
+1. Preferred dev mode: `docker compose up` (backend + ui hot reload).
+2. For local non-docker mode: install dependencies (`npm install`, `npm run ui:install`).
+3. Create `config/config.json`, usually by copying `config/config.example.json` and setting sqlite `storage`.
 5. Run migrations: `npm run migrate`.
-6. Build UI into `public/`: `npm run ui:build`.
-7. Start backend + packaged UI host: `npm start` (serves `/api` and `public/` on `http://localhost:3000`).
+6. Start backend API: `npm start` (serves `/api` on `http://localhost:3000`).
+7. Start UI dev server: `npm run ui:dev` (serves app on `http://localhost:8080`).
 
 ## Contract-critical behavior
 - UI calls are defined in `ui/src/helpers/api.js`.
@@ -32,8 +31,8 @@ This repository is the backend and packaged UI host for a mapping-study literatu
 
 ## UI sync policy
 - Treat `ui/` as the UI source of truth.
-- After UI changes, run `npm run ui:build` to refresh `public/`.
-- Ensure `public/index.html` references existing hashed assets in `public/assets/`.
+- Backend and frontend are intentionally separate services/ports.
+- `npm run ui:build` outputs static files to `ui/dist` for external/static hosting.
 
 ## Scraper and data operations
 - Initialize scrapers submodule when needed: `git submodule update --init --recursive`.

@@ -2,19 +2,19 @@
 
 ## High-level architecture
 - Runtime stack: Node.js + Express + Sequelize + sqlite3.
-- API entrypoint: `server.js` (serves static `public/` and mounts `/api` routes).
+- API entrypoint: `server.js` (API-only service mounted under `/api`).
 - UI source code lives in `ui/` (Vue 3 + Vite).
+- Default dev runtime is docker-compose (`docker-compose.yml`) with backend + frontend watch mode.
 - API routers: `routes/api.js` with handlers in:
   - `routes/records.js`
   - `routes/mappingQuestions.js`
 - Data layer: Sequelize models in `models/`, schema history in `migrations/`.
-- Packaged UI: static files in `public/` (built from `ui/`).
 
 ## UI integration
 - Backend contract used by UI is defined in `ui/src/helpers/api.js`.
 - API base in UI is hardcoded to `http://localhost:3000/api/`.
-- UI dev server is configured to run on `http://localhost:8080`.
-- UI production build output goes directly to `public/`.
+- UI dev server runs on `http://localhost:8080`.
+- UI production build output is `ui/dist`.
 
 ## Data model snapshot
 - `Record`: title/url/author/description/abstract/status/comment, JSON fields (`databases`, `alternateUrls`), `editedBy`, soft delete.
@@ -39,11 +39,11 @@
 - Existing migrations represent production history; add new migrations instead of modifying old ones.
 
 ## Operational notes
-- `db-config.json` is used by runtime model loader (`models/index.js`).
-- `config/config.json` is used by sequelize-cli migrations.
-- `config/config.example.json` exists, but runtime still needs `db-config.json`.
+- `config/config.json` is used by sequelize-cli migrations and runtime model loading.
+- `db-config.json` remains a legacy fallback path for runtime compatibility.
+- `config/config.example.json` is the default template for new environments.
 - `scrapers/` is a git submodule and may be uninitialized in fresh clones.
 
 ## Current known constraints
 - No automated test suite is defined in this repo.
-- `public/` is a packaged build artifact; `ui/` is the primary UI source.
+- Backend does not serve the frontend app.

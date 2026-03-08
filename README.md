@@ -3,13 +3,41 @@
 This repository is now a monorepo with:
 - `server` side API (Express + Sequelize + sqlite)
 - `ui/` frontend source (Vue 3 + Vite)
-- `public/` packaged frontend build served by the backend
+- separated runtime: backend API on `3000`, frontend on `8080`
 
 ![Screenshot of the GUI](screenshot.png)
 
-## System requirements
+## Quick start (Docker, recommended)
+### 1. Clone the project
+```
+git clone https://github.com/kokkoniemi/mapping-study-toolbox.git --recurse-submodules
+```
+### 2. Start development stack
+```shell
+docker compose up
+```
 
-- node.js v24 LTS or above (You can use [nvm](https://github.com/nvm-sh/nvm) to change node version on command line)
+This starts:
+- backend (auto-migrates sqlite and hot-reloads on backend file changes)
+- frontend Vite dev server (hot-reloads on UI changes)
+- if missing, `config/config.json` is created automatically from `config/config.example.json`
+
+Open:
+- UI (dev/HMR): http://localhost:8080
+- API: http://localhost:3000/api
+- sqlite DB file (default): `./db.sqlite3`
+
+Useful commands:
+```shell
+docker compose down
+docker compose logs -f
+docker compose down -v   # also removes node_modules volumes
+```
+
+## Local (without Docker)
+
+### System requirements
+- node.js v24 LTS or above (you can use [nvm](https://github.com/nvm-sh/nvm))
 - npm
 - sqlite3
 
@@ -19,35 +47,26 @@ nvm install 24
 nvm use 24
 ```
 
-## Project setup
-### 1. Clone the project with submodules
-```
-git clone https://github.com/kokkoniemi/mapping-study-toolbox.git --recurse-submodules
-```
-### 2. Install backend dependencies
-```
+### Setup
+1. Install backend dependencies:
+```shell
 npm install
 ```
-
-### 3. Install UI dependencies
-```
+2. Install UI dependencies:
+```shell
 npm run ui:install
 ```
-
-### 4. Change runtime DB config to point to your database
-- Copy `db-config.example.json` to `db-config.json` (if needed) and set `storage`
-- Change the `storage` key, i.e.
-    ```
-    {
-      "dialect": "sqlite",
-      "storage": "/Users/mikko/Documents/mapping-db.sqlite3",
-      "logging": false
-    }
-    ```
-
-### 5. Create sequelize-cli config for migrations
-- Copy `config/config.example.json` to `config/config.json`
-- Set the same sqlite `storage` path as in `db-config.json`
+3. Ensure DB config exists for runtime + migrations:
+   - copy `config/config.example.json` to `config/config.json` and set sqlite path (`storage`)
+4. Run local migrations:
+```shell
+npm run migrate
+```
+5. Start services:
+```shell
+npm start
+npm run ui:dev
+```
 
 ## Scraping search results
 
@@ -83,22 +102,17 @@ node scrapers/[scraper-name].js
 
 ## Api and GUI
 
-There is a simple rest api (`server.js`) to serve records from sqlite and host the built UI from `public/`.
+The backend (`server.js`) exposes only the API at `http://localhost:3000/api`.
+The frontend runs separately with Vite dev server.
 
-### Build UI into `public/`
-```shell
-npm run ui:build
-```
-
-### Start backend + packaged UI
-```shell
-npm start
-```
-
-Now the api runs at http://localhost:3000/api/, and the GUI is served at http://localhost:3000.
-
-### Optional: run UI dev server
+### Run UI dev server
 ```shell
 npm run ui:dev
 ```
 UI dev server runs on http://localhost:8080 and calls backend API at http://localhost:3000/api/.
+
+### Build UI for deployment/static hosting
+```shell
+npm run ui:build
+```
+This outputs static files to `ui/dist`.

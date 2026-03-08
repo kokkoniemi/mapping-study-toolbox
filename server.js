@@ -1,5 +1,4 @@
 const express = require("express");
-const path = require("path");
 const app = express();
 const port = 3000;
 
@@ -20,9 +19,9 @@ const corsConfig = function (req, res, next) {
 
 app.use(corsConfig);
 
-app.use(express.static(path.join(__dirname, 'public')));
-
 const routes = require("./routes/api");
 app.use("/api", routes);
 
-app.listen(port, () => console.log(`The application is running on: http://localhost:${port}`));
+app.listen(port, () => {
+    console.log(`The API is running on: http://localhost:${port}/api`);
+});

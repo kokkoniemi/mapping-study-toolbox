@@ -2,8 +2,8 @@
 
 ## Runtime configuration
 - Sequelize runtime config source:
-  - `db-config.json` in repo root
-  - fallback: `db-config.json` next to packaged executable
+  - `config/config.json` in repo root (environment section selected by `NODE_ENV`)
+  - fallback: `db-config.json` (legacy compatibility only)
 
 ## Core models
 ### `Record`

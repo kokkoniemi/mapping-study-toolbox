@@ -1,5 +1,0 @@
-{
-    "dialect": "sqlite",
-    "storage": "./your-sqlite-db.sqlite3",
-    "logging": false
-}

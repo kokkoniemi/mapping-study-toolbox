@@ -26,7 +26,7 @@ description: Maintain and extend the mapping-study-toolbox backend API and persi
 - Add migrations instead of rewriting migration history.
 - Prefer additive schema updates for sqlite compatibility.
 - Keep migration `down` functions available where practical.
-- Verify runtime config still resolves `db-config.json` from repo root or packaged binary path.
+- Verify runtime config resolves `config/config.json` for the active `NODE_ENV`.
 
 ## Useful files
 - `references/api-contract.md`: endpoint-level contract summary with payload expectations.

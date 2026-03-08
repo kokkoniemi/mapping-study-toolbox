@@ -7,8 +7,7 @@ description: Configure sqlite runtime and migration settings and run data operat
 
 ## Workflow
 1. Configure database files:
-   - Runtime config: `db-config.json`
-   - sequelize-cli config: `config/config.json`
+   - Shared runtime + migration config: `config/config.json`
 2. Run migrations with `npm run migrate`.
 3. Initialize scraper submodule if needed:
    - `git submodule update --init --recursive`
@@ -19,10 +18,10 @@ description: Configure sqlite runtime and migration settings and run data operat
 - Keep sqlite paths explicit and environment-local.
 - Avoid destructive data operations unless explicitly requested.
 - Run migrations before imports on new DB files.
-- Keep both config files pointed to the same sqlite file path.
+- Keep `development.storage` in `config/config.json` set to the intended sqlite file.
 
 ## Script usage
-- Generate/update both DB config files, optionally run migrations:
+- Generate/update DB config, optionally run migrations:
   - `./skills/mapping-data-operations/scripts/bootstrap_sqlite.sh --db /absolute/path/mapping.sqlite3`
 - Configure files only:
   - `./skills/mapping-data-operations/scripts/bootstrap_sqlite.sh --db /absolute/path/mapping.sqlite3 --no-migrate`

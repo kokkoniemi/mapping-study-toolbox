@@ -4,11 +4,25 @@ const fs = require('fs');
 const path = require('path');
 const Sequelize = require('sequelize');
 const basename = path.basename(__filename);
-let configPath = path.join(__dirname, '..', 'db-config.json');
-if (!fs.existsSync(configPath)) {
-    configPath = path.join(path.dirname(process.execPath), 'db-config.json');
+
+const env = process.env.NODE_ENV || 'development';
+const configCandidates = [
+    path.join(__dirname, '..', 'config', 'config.json'),
+    path.join(path.dirname(process.execPath), 'config', 'config.json'),
+    // Backward compatibility with older setups
+    path.join(__dirname, '..', 'db-config.json'),
+    path.join(path.dirname(process.execPath), 'db-config.json'),
+];
+
+const configPath = configCandidates.find(p => fs.existsSync(p));
+if (!configPath) {
+    throw new Error(
+        "No database config found. Expected config/config.json (preferred) or db-config.json (legacy)."
+    );
 }
-const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+
+const rawConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+const config = rawConfig[env] || rawConfig.development || rawConfig;
 const db = {};
 
 let sequelize;

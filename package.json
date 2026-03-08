@@ -8,6 +8,7 @@
   },
   "scripts": {
     "start": "node server.js",
+    "start:dev": "node --watch server.js",
     "migrate": "node_modules/.bin/sequelize db:migrate",
     "ui:install": "npm --prefix ui install",
     "ui:dev": "npm --prefix ui run dev",

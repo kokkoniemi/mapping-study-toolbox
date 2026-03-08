@@ -1,0 +1,40 @@
+services:
+  backend:
+    image: node:24-bookworm
+    working_dir: /workspace
+    command: >
+      sh -c "if [ ! -f config/config.json ]; then cp config/config.example.json config/config.json; fi &&
+      if [ ! -d node_modules ] || [ -z \"$(ls -A node_modules 2>/dev/null)\" ];
+      then npm install; fi &&
+      npm run migrate &&
+      npm run start:dev"
+    volumes:
+      - ./:/workspace
+      - backend_node_modules:/workspace/node_modules
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: development
+
+  frontend:
+    image: node:24-bookworm
+    working_dir: /workspace/ui
+    command: >
+      sh -c "if [ ! -d node_modules ] || [ -z \"$(ls -A node_modules 2>/dev/null)\" ];
+      then npm install; fi &&
+      npm run dev -- --host 0.0.0.0 --port 8080"
+    volumes:
+      - ./:/workspace
+      - ui_node_modules:/workspace/ui/node_modules
+    ports:
+      - "8080:8080"
+    environment:
+      NODE_ENV: development
+      CHOKIDAR_USEPOLLING: "true"
+      WATCHPACK_POLLING: "true"
+    depends_on:
+      - backend
+
+volumes:
+  backend_node_modules:
+  ui_node_modules:

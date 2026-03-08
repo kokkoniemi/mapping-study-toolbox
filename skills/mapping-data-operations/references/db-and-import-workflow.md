@@ -1,11 +1,9 @@
 # Database And Import Workflow
 
 ## 1. Configure sqlite paths
-- Runtime config file:
-  - `db-config.json`
-- Migration config file:
+- Shared config file:
   - `config/config.json`
-- Keep both pointing to the same sqlite file.
+- Set `development.storage` (and production if needed) to the intended sqlite file.
 
 ## 2. Run migrations
 - Command:
@@ -31,5 +29,5 @@
 
 ## Common pitfalls
 - Migrations fail because `config/config.json` is missing.
-- Runtime fails because `db-config.json` still has placeholder storage path.
+- Runtime/migrations use an unexpected DB because `config/config.json` storage points to the wrong file.
 - Scraper scripts unavailable because submodule was not initialized.

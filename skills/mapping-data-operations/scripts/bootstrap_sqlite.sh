@@ -5,8 +5,7 @@ usage() {
   cat <<'USAGE'
 Usage: bootstrap_sqlite.sh --db <sqlite_path> [options]
 
-Create/update mapping-study-toolbox sqlite config files:
-  - db-config.json
+Create/update mapping-study-toolbox sqlite config file:
   - config/config.json
 
 Options:
@@ -63,14 +62,6 @@ fi
 REPO_ROOT="$(cd "${REPO_ROOT}" && pwd)"
 mkdir -p "${REPO_ROOT}/config"
 
-cat > "${REPO_ROOT}/db-config.json" <<EOF
-{
-  "dialect": "sqlite",
-  "storage": "${DB_PATH}",
-  "logging": false
-}
-EOF
-
 cat > "${REPO_ROOT}/config/config.json" <<EOF
 {
   "development": {
@@ -90,8 +81,7 @@ cat > "${REPO_ROOT}/config/config.json" <<EOF
 }
 EOF
 
-echo "Wrote sqlite config files:"
-echo "- ${REPO_ROOT}/db-config.json"
+echo "Wrote sqlite config file:"
 echo "- ${REPO_ROOT}/config/config.json"
 
 if [[ "${RUN_MIGRATE}" -eq 1 ]]; then
