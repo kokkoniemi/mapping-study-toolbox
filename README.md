@@ -9,9 +9,15 @@ This repository is now a monorepo with:
 
 ## System requirements
 
-- node.js v20 or above (You can use [nvm](https://github.com/nvm-sh/nvm) to change node version on command line)
+- node.js v24 LTS or above (You can use [nvm](https://github.com/nvm-sh/nvm) to change node version on command line)
 - npm
 - sqlite3
+
+If you use nvm:
+```shell
+nvm install 24
+nvm use 24
+```
 
 ## Project setup
 ### 1. Clone the project with submodules
