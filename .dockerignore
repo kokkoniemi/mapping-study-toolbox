@@ -1,0 +1,11 @@
+.git
+.gitmodules
+node_modules
+ui/node_modules
+npm-debug.log*
+ui/npm-debug.log*
+coverage
+ui/coverage
+dist
+ui/dist
+db.sqlite3

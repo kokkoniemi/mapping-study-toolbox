@@ -10,9 +10,14 @@ This repository is now a monorepo with:
 ## Quick start (Docker, recommended)
 ### 1. Clone the project
 ```
-git clone https://github.com/kokkoniemi/mapping-study-toolbox.git --recurse-submodules
+git clone https://github.com/kokkoniemi/mapping-study-toolbox.git
 ```
 ### 2. Start development stack
+```shell
+docker compose up --build
+```
+
+After the first build, normal startup is faster:
 ```shell
 docker compose up
 ```
@@ -32,6 +37,7 @@ Useful commands:
 docker compose down
 docker compose logs -f
 docker compose down -v   # also removes node_modules volumes
+docker compose build     # rebuild images after dependency changes
 ```
 
 ## Local (without Docker)

@@ -1,14 +1,15 @@
 services:
   backend:
-    image: node:24-bookworm
+    build:
+      context: .
+      dockerfile: Dockerfile.backend.dev
+    image: mapping-study-toolbox-backend-dev
     working_dir: /workspace
     init: true
     stop_signal: SIGTERM
     stop_grace_period: 10s
     command: >
       sh -c "if [ ! -f config/config.json ]; then cp config/config.example.json config/config.json; fi &&
-      if [ ! -d node_modules ] || [ -z \"$(ls -A node_modules 2>/dev/null)\" ];
-      then npm install; fi &&
       node_modules/.bin/sequelize db:migrate &&
       exec node --watch --import tsx server.ts"
     volumes:
@@ -32,15 +33,15 @@ services:
       start_period: 10s
 
   frontend:
-    image: node:24-bookworm
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend.dev
+    image: mapping-study-toolbox-frontend-dev
     working_dir: /workspace/ui
     init: true
     stop_signal: SIGTERM
     stop_grace_period: 10s
-    command: >
-      sh -c "if [ ! -d node_modules ] || [ -z \"$(ls -A node_modules 2>/dev/null)\" ];
-      then npm install; fi &&
-      exec node ./node_modules/vite/bin/vite.js --host 0.0.0.0 --port 8080"
+    command: node ./node_modules/vite/bin/vite.js --host 0.0.0.0 --port 8080
     volumes:
       - ./:/workspace
       - ui_node_modules:/workspace/ui/node_modules
@@ -52,7 +53,7 @@ services:
       WATCHPACK_POLLING: "true"
     depends_on:
       backend:
-        condition: service_healthy
+        condition: service_started
 
 volumes:
   backend_node_modules:
