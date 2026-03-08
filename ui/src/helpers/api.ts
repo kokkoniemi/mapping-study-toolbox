@@ -130,6 +130,8 @@ export interface MappingOption {
   [key: string]: unknown;
 }
 
+export type RecordStatus = "uncertain" | "excluded" | "included" | null;
+
 export interface MappingQuestion {
   id: number;
   title: string;
@@ -139,10 +141,26 @@ export interface MappingQuestion {
   [key: string]: unknown;
 }
 
+export interface Publication {
+  id: number;
+  name: string;
+  jufoLevel: number | null;
+  [key: string]: unknown;
+}
+
 export interface RecordItem {
   id: number;
-  status: string | null;
+  title: string;
+  author: string;
+  url: string;
+  databases: string[];
+  abstract: string | null;
+  description: string | null;
+  createdAt: string;
+  updatedAt: string;
+  status: RecordStatus;
   comment: string | null;
+  Publication?: Publication | null;
   MappingOptions: MappingOption[];
   [key: string]: unknown;
 }

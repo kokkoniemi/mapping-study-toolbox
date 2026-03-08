@@ -1,29 +1,25 @@
-<script>
-import { mapActions, mapState } from "pinia";
-import { defaultStore } from './stores/default';
+<script setup lang="ts">
+import { computed } from "vue";
+import { storeToRefs } from "pinia";
+
+import { defaultStore } from "./stores/default";
 import Sidebar from "./components/Sidebar.vue";
 import Classifier from "./components/Classifier.vue";
 
-export default {
-  name: "App",
-  components: {
-    Sidebar,
-    Classifier,
+const store = defaultStore();
+const { nick, tab } = storeToRefs(store);
+
+const nickname = computed({
+  get() {
+    return nick.value ?? "";
   },
-  computed: {
-    ...mapState(defaultStore, ["nick", "tab"]),
-    nickname: {
-      get() {
-        return this.nick;
-      },
-      set(value) {
-        this.updateNick(value);
-      },
-    },
+  set(value: string) {
+    store.updateNick(value || null);
   },
-  methods: {
-    ...mapActions(defaultStore, ["updateNick", "updateTab"]),
-  },
+});
+
+const updateTab = (value: "inc-exc" | "map") => {
+  store.updateTab(value);
 };
 </script>
 
@@ -34,19 +30,19 @@ export default {
         <li
           :class="{'app-tab--active': tab === 'inc-exc'}"
           class="app-tab"
-          @click="() => updateTab('inc-exc')"
+          @click="updateTab('inc-exc')"
         >Include/exclude literature</li>
         <li
           :class="{'app-tab--active': tab === 'map'}"
           class="app-tab"
-          @click="() => updateTab('map')"
+          @click="updateTab('map')"
         >Map literature</li>
       </ul>
-      <input type="text" :class="[!this.nick && 'empty']" placeholder="Nickname" v-model="nickname" />
+      <input type="text" :class="[!nick && 'empty']" placeholder="Nickname" v-model="nickname" />
     </div>
-    <div class="main-container" v-if="this.nick">
-      <sidebar></sidebar>
-      <classifier></classifier>
+    <div class="main-container" v-if="nick">
+      <Sidebar />
+      <Classifier />
     </div>
     <div v-else class="message">Start by typing your nickname or initials in the blinking box above</div>
   </div>
@@ -179,4 +175,3 @@ button {
   }
 }
 </style>
-

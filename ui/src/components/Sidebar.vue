@@ -2,13 +2,13 @@
     <section id="sidebar">
         <h4>Show by status:</h4>
 
-        <select @change="(e) => setStatusFilter(e.target.value)" class="status-filter">
+        <select @change="onStatusChange" class="status-filter">
             <option v-for="(status) in statusOptions" :value="status.value">{{ status.label }}</option>
         </select>
 
         <h4>Search</h4>
         <input
-            @input="(e) => setSearchFilter(e.target.value)"
+            @input="onSearchInput"
             type="text"
             :value="searchFilter"
             placeholder="(e.g., by title or comment)"
@@ -16,7 +16,7 @@
 
         <h4>Records {{ recordRange }} of {{ itemCount }}:</h4>
         <ul class="item-list">
-            <li v-for="item in pageItems" :key="item.id" @click="setCurrentItem(item)" class="item" :class="[
+            <li v-for="item in pageItems" :key="item.id" @click="onSelectItem(item)" class="item" :class="[
                 item.status !== null && `item--${item.status}`,
                 !!currentItem && item.id === currentItem.id && 'item--current'
             ]">
@@ -30,77 +30,74 @@
         <ul class="pagination">
             <li @click="movePage(1)" class="pagination-item" :class="[page <= 1 && 'pagination-item--disabled']">‹‹ First
             </li>
-            <li @click="movePage(+page - 1)" class="pagination-item" :class="[page <= 1 && 'pagination-item--disabled']">‹
+            <li @click="movePage(page - 1)" class="pagination-item" :class="[page <= 1 && 'pagination-item--disabled']">‹
                 Prev</li>
-            <li @click="movePage(+page + 1)" class="pagination-item"
+            <li @click="movePage(page + 1)" class="pagination-item"
                 :class="[page >= itemCount / pageLength && 'pagination-item--disabled']">Next ›</li>
             <li @click="movePage(Math.ceil(itemCount / pageLength))" class="pagination-item"
                 :class="[page >= itemCount / pageLength && 'pagination-item--disabled']">Last ››</li>
         </ul>
         <div class="jump">
             <label>Move to page:</label>
-            <input @input="(e) => movePage(e.target.value || 1)" type="number" min="1" :max="maxPages" :value="page"/>
+            <input @input="onPageInput" type="number" min="1" :max="maxPages" :value="page"/>
         </div>
     </section>
 </template>
-<script>
-import { mapActions, mapState } from "pinia";
-import { defaultStore } from '../stores/default';
+<script setup lang="ts">
+import { computed, onMounted } from "vue";
+import { storeToRefs } from "pinia";
 
-export default {
-    name: "Sidebar",
-    computed: {
-        ...mapState(defaultStore, [
-            "page",
-            "pageLength",
-            "pageItems",
-            "itemCount",
-            "statusFilter",
-            "searchFilter",
-            "currentItem"
-        ]),
-        recordRange() {
-            return `${this.itemCount <= 0 ? 0 : (this.page - 1) * this.pageLength + 1
-                } – ${this.itemCount < this.pageLength
-                    ? this.itemCount
-                    : this.page * this.pageLength
-                }`;
-        },
-        maxPages() {
-            return Math.ceil(this.itemCount / this.pageLength);
-        }
-    },
-    data() {
-        return {
-            statusOptions: [
-                { label: "All", value: "" },
-                { label: "Unset", value: "null" },
-                { label: "Uncertain", value: "uncertain" },
-                { label: "Excluded", value: "excluded" },
-                { label: "Included", value: "included" }
-            ]
-        };
-    },
-    mounted() {
-        this.fetchPageItems();
-    },
-    methods: {
-        ...mapActions(defaultStore, [
-            "fetchPageItems",
-            "setPage",
-            "setCurrentItem",
-            "setStatusFilter",
-            "setSearchFilter"
-        ]),
-        truncate(str) {
-            return str.length > 20 ? `${str.substring(0, 20)}...` : str;
-        },
-        movePage(to) {
-            if (to > 0) {
-                this.setPage(to);
-            }
-        }
-    }
+import { type RecordItem } from "../helpers/api";
+import { defaultStore, type StatusFilter } from "../stores/default";
+
+const store = defaultStore();
+const { page, pageLength, pageItems, itemCount, searchFilter, currentItem } = storeToRefs(store);
+
+const statusOptions: Array<{ label: string; value: StatusFilter }> = [
+  { label: "All", value: "" },
+  { label: "Unset", value: "null" },
+  { label: "Uncertain", value: "uncertain" },
+  { label: "Excluded", value: "excluded" },
+  { label: "Included", value: "included" },
+];
+
+const recordRange = computed(() => {
+  const first = itemCount.value <= 0 ? 0 : (page.value - 1) * pageLength.value + 1;
+  const last = itemCount.value < pageLength.value ? itemCount.value : page.value * pageLength.value;
+  return `${first} – ${last}`;
+});
+
+const maxPages = computed(() => Math.ceil(itemCount.value / pageLength.value));
+
+onMounted(() => {
+  void store.fetchPageItems();
+});
+
+const onStatusChange = (event: Event) => {
+  const value = (event.target as HTMLSelectElement).value as StatusFilter;
+  void store.setStatusFilter(value);
+};
+
+const onSearchInput = (event: Event) => {
+  const value = (event.target as HTMLInputElement).value;
+  void store.setSearchFilter(value);
+};
+
+const truncate = (value: string) => (value.length > 20 ? `${value.substring(0, 20)}...` : value);
+
+const movePage = (to: number) => {
+  if (to > 0) {
+    void store.setPage(to);
+  }
+};
+
+const onPageInput = (event: Event) => {
+  const input = Number((event.target as HTMLInputElement).value || 1);
+  movePage(input);
+};
+
+const onSelectItem = (item: RecordItem) => {
+  store.setCurrentItem(item);
 };
 </script>
 <style scoped lang="scss">

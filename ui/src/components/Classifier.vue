@@ -56,147 +56,141 @@
 </template>
 
 
-<script>
-import { mapState, mapActions } from "pinia";
-import { defaultStore } from '../stores/default';
-import MappingActions from "./MappingActions.vue";
+<script setup lang="ts">
+import { computed, onMounted, onUnmounted } from "vue";
+import { storeToRefs } from "pinia";
 import { format as formatDate } from "date-fns";
-import { debounce, keyCodes } from "../helpers/utils";
 
-export default {
-    name: "Classifier",
-    components: {
-        MappingActions,
-    },
-    data() {
-        return {
-            commentFocus: false,
-        };
-    },
-    computed: {
-        ...mapState(defaultStore, [
-            "pageItems",
-            "pageLength",
-            "page",
-            "statusFilter",
-            "tab",
-            "moveLock",
-            "mappingQuestions",
-            "currentItem"
-        ]),
-        abstractPaddingBottom() {
-            return this.tab === "map" ? `${this.mappingQuestions.length * 35}px` : 0;
-        },
-        createdFormatted() {
-            if (!this.currentItem) {
-                return null;
-            }
-            return formatDate(
-                new Date(this.currentItem.createdAt),
-                "dd.MM.yyyy HH:mm:ss "
-            );
-        },
-        modifiedFormatted() {
-            if (!this.currentItem) {
-                return null;
-            }
-            return formatDate(
-                new Date(this.currentItem.updatedAt),
-                "dd.MM.yyyy HH:mm:ss "
-            );
-        },
-        nextFlag() {
-            if (!this.currentItem) {
-                return false;
-            }
-            const { status } = this.currentItem;
-            return (
-                (status === null && this.statusFilter === "null") ||
-                status === this.statusFilter
-            );
-        },
-    },
-    created() {
-        window.addEventListener("keydown", this.moveTo);
-    },
-    unmounted() {
-        window.removeEventListener("keydown", this.moveTo);
-    },
-    methods: {
-        ...mapActions(defaultStore, [
-            "setItemStatus",
-            "setItemComment",
-            "setCurrentItem",
-            "setPage",
-            "setMoveLock",
-            "unsetMoveLock",
-        ]),
-        async setExcluded() {
-            await this.setItemStatus("excluded");
-            this.setNextItem(this.nextFlag);
-        },
-        async setUncertain() {
-            await this.setItemStatus("uncertain");
-            this.setNextItem(this.nextFlag);
-        },
-        async setIncluded() {
-            await this.setItemStatus("included");
-            this.setNextItem(this.nextFlag);
-        },
-        setComment(e) {
-            const id = this.currentItem.id;
-            const val = e.target.value;
-            this.debouncedSetComment(id, val)
-        },
-        debouncedSetComment: debounce(async function (id, val) {
-                await this.setItemComment(id, val);
-            }, 1000),
-        setNextItem(skip) {
-            if (skip) {
-                return;
-            }
-            const index = this.pageItems.findIndex(
-                (item) => item.id === this.currentItem.id
-            );
-            if (index >= this.pageLength - 1) {
-                this.setPage(this.page + 1);
-            } else {
-                this.setCurrentItem(this.pageItems[index + 1]);
-            }
-        },
-        async setPrevItem() {
-            const index = this.pageItems.findIndex(
-                (item) => item.id === this.currentItem.id
-            );
-            if (index <= 0 && this.page > 1) {
-                await this.setPage(this.page - 1);
-                this.setCurrentItem(this.pageItems[this.pageItems.length - 1]);
-            } else if (index > 0) {
-                this.setCurrentItem(this.pageItems[index - 1]);
-            }
-        },
-        nltobr(str) {
-            return str.replace(/(?:\r\n|\r|\n)/g, "<br>");
-        },
-        sanitizeAbstract(str) {
-            let res = str.replace("Abstract:\n", "").replace("Abstract\n", "");
-            return res.split("\n•\n").join("");
-        },
-        moveTo(e) {
-            if (!this.moveLock) {
-                switch (e.keyCode) {
-                    case keyCodes.ARROW_LEFT:
-                        this.setPrevItem();
-                        break;
-                    case keyCodes.ARROW_RIGHT:
-                        this.setNextItem();
-                        break;
-                    default:
-                }
-            }
-        },
-    },
+import MappingActions from "./MappingActions.vue";
+import { debounce, keyCodes } from "../helpers/utils";
+import { defaultStore } from "../stores/default";
+
+const store = defaultStore();
+const { pageItems, pageLength, page, statusFilter, tab, moveLock, mappingQuestions, currentItem } =
+  storeToRefs(store);
+
+const abstractPaddingBottom = computed(() =>
+  tab.value === "map" ? `${mappingQuestions.value.length * 35}px` : 0,
+);
+
+const createdFormatted = computed(() => {
+  const createdAt = currentItem.value?.createdAt;
+  if (!createdAt) {
+    return null;
+  }
+  return formatDate(new Date(createdAt), "dd.MM.yyyy HH:mm:ss ");
+});
+
+const modifiedFormatted = computed(() => {
+  const updatedAt = currentItem.value?.updatedAt;
+  if (!updatedAt) {
+    return null;
+  }
+  return formatDate(new Date(updatedAt), "dd.MM.yyyy HH:mm:ss ");
+});
+
+const nextFlag = computed(() => {
+  const status = currentItem.value?.status;
+  if (status === undefined) {
+    return false;
+  }
+  return (status === null && statusFilter.value === "null") || status === statusFilter.value;
+});
+
+const setNextItem = (skip = false) => {
+  if (skip || !currentItem.value) {
+    return;
+  }
+
+  const index = pageItems.value.findIndex((item) => item.id === currentItem.value?.id);
+  if (index < 0) {
+    return;
+  }
+
+  if (index >= pageLength.value - 1) {
+    void store.setPage(page.value + 1);
+  } else {
+    store.setCurrentItem(pageItems.value[index + 1] ?? null);
+  }
 };
+
+const setPrevItem = async () => {
+  if (!currentItem.value) {
+    return;
+  }
+
+  const index = pageItems.value.findIndex((item) => item.id === currentItem.value?.id);
+  if (index <= 0 && page.value > 1) {
+    await store.setPage(page.value - 1);
+    store.setCurrentItem(pageItems.value[pageItems.value.length - 1] ?? null);
+  } else if (index > 0) {
+    store.setCurrentItem(pageItems.value[index - 1] ?? null);
+  }
+};
+
+const debouncedSetComment = debounce(async (id: number, value: string) => {
+  await store.setItemComment(id, value);
+}, 1000);
+
+const setComment = (event: Event) => {
+  const id = currentItem.value?.id;
+  if (id === undefined) {
+    return;
+  }
+
+  const value = (event.target as HTMLTextAreaElement).value;
+  debouncedSetComment(id, value);
+};
+
+const setExcluded = async () => {
+  await store.setItemStatus("excluded");
+  setNextItem(nextFlag.value);
+};
+
+const setUncertain = async () => {
+  await store.setItemStatus("uncertain");
+  setNextItem(nextFlag.value);
+};
+
+const setIncluded = async () => {
+  await store.setItemStatus("included");
+  setNextItem(nextFlag.value);
+};
+
+const nltobr = (value: string) => value.replace(/(?:\r\n|\r|\n)/g, "<br>");
+
+const sanitizeAbstract = (value: string) =>
+  value.replace("Abstract:\n", "").replace("Abstract\n", "").split("\n•\n").join("");
+
+const moveTo = (event: KeyboardEvent) => {
+  if (!moveLock.value) {
+    switch (event.keyCode) {
+      case keyCodes.ARROW_LEFT:
+        void setPrevItem();
+        break;
+      case keyCodes.ARROW_RIGHT:
+        setNextItem();
+        break;
+      default:
+    }
+  }
+};
+
+const setMoveLock = () => {
+  store.setMoveLock();
+};
+
+const unsetMoveLock = () => {
+  store.unsetMoveLock();
+};
+
+onMounted(() => {
+  window.addEventListener("keydown", moveTo);
+});
+
+onUnmounted(() => {
+  window.removeEventListener("keydown", moveTo);
+});
 </script>
 <style scoped lang="scss">
 #classifier {

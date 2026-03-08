@@ -15,7 +15,7 @@
 
                         <label>Type</label>
                         <select @change="() => null">
-                            <option v-for="(o) in typeOptions" :value="o.value">{{ o.label }}</option>
+                            <option v-for="(o) in typeOptions" :key="o.value" :value="o.value">{{ o.label }}</option>
                         </select>
                         <!-- <v-select @input="() => null" :options="typeOptions" :value="typeOptions[0].label"
                             :clearable="false" :searchable="false" disabled></v-select> -->
@@ -45,13 +45,13 @@
                             <li @click="() => createOption(question, nextOptionColor)"
                                 class="mapping-question__tags--list-item" v-if="optionInput.length">
                                 <div class="mapping-question__tags--create">Create:</div>
-                                <span class="mapping-question__tags--tag" :style="{ backgroundColor: nextOptionColor }">{{
+                                <span class="mapping-question__tags--tag" :style="tagStyle(nextOptionColor)">{{
                                     optionInput }}</span>
                             </li>
-                            <li v-for="option in question.MappingOptions.filter(filterOptionList)" :key="option.id"
+                            <li v-for="option in (question.MappingOptions || []).filter(filterOptionList)" :key="option.id"
                                 class="mapping-question__tags--list-item"
                                 @click="() => addRecordMappingOption({ mappingQuestionId: question.id, mappingOptionId: option.id })">
-                                <span class="mapping-question__tags--tag" :style="{ backgroundColor: option.color }">{{
+                                <span class="mapping-question__tags--tag" :style="tagStyle(option.color)">{{
                                     option.title }}</span>
                             </li>
                         </ul>
@@ -60,14 +60,14 @@
                 </div>
                 <!-- per record options -->
                 <div class="mapping-question__tags">
-                    <span v-for="option in currentItem.MappingOptions.filter(o => o.mappingQuestionId === question.id)"
-                        :key="option.id" class="mapping-question__tags--tag" :style="{ backgroundColor: option.color }"
+                    <span v-for="option in currentMappingOptions.filter(o => o.mappingQuestionId === question.id)"
+                        :key="option.id" class="mapping-question__tags--tag" :style="tagStyle(option.color)"
                         @click="() => removeRecordMappingOption(option.id)">
                         {{ option.title }}
                         <span class="icon" v-if="activeOptionPopup === question.id">⊗</span>
                     </span>
                 </div>
-                <input v-if="activeOptionPopup === question.id" type="text" ref="newOption" v-model="optionInput" />
+                <input v-if="activeOptionPopup === question.id" type="text" :ref="setNewOptionRef" v-model="optionInput" />
             </div>
         </div>
         <div class="mapping-question mapping-question--new">
@@ -78,166 +78,210 @@
     </div>
 </template>
 
-<script>
-import { mapActions, mapState } from "pinia";
-import { defaultStore } from '../stores/default';
-import { debounce } from "../helpers/utils";
+<script setup lang="ts">
+import { computed, nextTick, onMounted, ref } from "vue";
+import type { ComponentPublicInstance } from "vue";
+import { storeToRefs } from "pinia";
 
-export default {
-    name: "MappingActions",
-    data() {
-        return {
-            typeOptions: [{ label: "Multi-select", value: "multiSelect" }],
-            activeOptionPopup: null,
-            activeQuestionPopup: null,
-            activeQuestionConfirm: false,
-            optionInput: "",
-            nextOptionColor: "",
-        };
-    },
-    computed: {
-        ...mapState(defaultStore, ["mappingQuestions", "currentItem"]),
-    },
-    mounted() {
-        this.fetchMappingQuestions();
-        this.nextOptionColor = this.getOptionColor();
-    },
-    methods: {
-        ...mapActions(defaultStore, [
-            "fetchMappingQuestions",
-            "createMappingQuestion",
-            "deleteMappingQuestion",
-            "updateMappingQuestion",
-            "createMappingOption",
-            "addRecordMappingOption",
-            "removeRecordMappingOption",
-            "setMoveLock",
-            "unsetMoveLock",
-        ]),
-        getIcon(type) {
-            return type === "multiSelect" ? "☰" : "";
-        },
-        setOptionPopupActive(event, id) {
-            if (event.target.className !== "mapping-question__popup--backdrop") {
-                this.activeOptionPopup = id;
-                this.setMoveLock();
-                this.$nextTick(() => {
-                    this.$refs.newOption[0].focus();
-                });
-            }
-        },
-        setOptionPopupInactive() {
-            this.activeOptionPopup = null;
-            this.unsetMoveLock();
-        },
-        setQuestionPopupActive(event, id) {
-            if (event.target.className !== "mapping-question__popup--backdrop") {
-                this.activeQuestionPopup = id;
-                this.setMoveLock();
-            }
-        },
-        setQuestionPopupInactive() {
-            this.activeQuestionPopup = null;
-            this.activeQuestionConfirm = false;
-            this.unsetMoveLock();
-        },
-        async newMappingQuestion() {
-            await this.createMappingQuestion();
-            this.activeQuestionPopup = this.mappingQuestions[
-                this.mappingQuestions.length - 1
-            ].id;
-        },
-        async deleteQuestion(id) {
-            await this.deleteMappingQuestion(id);
-            this.activeQuestionConfirm = false;
-            this.activeQuestionPopup = null;
-        },
-        setQuestionTitle: debounce(async function (e, question) {
-            const { id, type, position } = question;
-            await this.updateMappingQuestion({
-                id,
-                title: e.target.value,
-                type,
-                position,
-            });
-        }, 1000),
-        async increaseQuestionPosition(question, index) {
-            if (
-                this.mappingQuestions[this.mappingQuestions.length - 1].id ===
-                question.id
-            ) {
-                return;
-            }
-            const { id, type, title, position } = question;
-            await this.updateMappingQuestion({
-                id,
-                type,
-                title,
-                position: position + 1,
-            });
-            const next = this.mappingQuestions[index + 1];
-            await this.updateMappingQuestion({
-                id: next.id,
-                type: next.type,
-                title: next.title,
-                position: next.position - 1,
-            });
-            await this.fetchMappingQuestions();
-        },
-        async decreaseQuestionPosition(question, index) {
-            if (this.mappingQuestions[0].id === question.id) {
-                return;
-            }
-            const { id, type, title, position } = question;
-            await this.updateMappingQuestion({
-                id,
-                type,
-                title,
-                position: position - 1,
-            });
-            const prev = this.mappingQuestions[index - 1];
-            await this.updateMappingQuestion({
-                id: prev.id,
-                type: prev.type,
-                title: prev.title,
-                position: prev.position + 1,
-            });
-            await this.fetchMappingQuestions();
-        },
-        async createOption(question, color) {
-            await this.createMappingOption({
-                id: question.id,
-                title: this.optionInput,
-                position: question.MappingOptions.length,
-                color,
-            });
-            this.nextOptionColor = this.getOptionColor();
-            this.optionInput = "";
-        },
-        getOptionColor() {
-            const colors = [
-                "#e6b0b0",
-                "#e6cab0",
-                "#e1e6b0",
-                "#b0e6bf",
-                "#9cdacd",
-                "#96c9e1",
-                "#a7adc6",
-                "#b4a9ed",
-                "#e2a9ed",
-                "#e89dba",
-                "#c69696",
-            ];
-            return colors[Math.floor(Math.random() * colors.length)];
-        },
-        filterOptionList(opt) {
-            return (
-                this.currentItem.MappingOptions.findIndex((o) => o.id === opt.id) ===
-                -1 && opt.title.toLowerCase().includes(this.optionInput.toLowerCase())
-            );
-        },
-    },
+import { debounce } from "../helpers/utils";
+import { defaultStore } from "../stores/default";
+import type { MappingOption, MappingQuestion } from "../helpers/api";
+
+type TypeOption = {
+  label: string;
+  value: string;
 };
+
+const typeOptions: TypeOption[] = [{ label: "Multi-select", value: "multiSelect" }];
+
+const activeOptionPopup = ref<number | null>(null);
+const activeQuestionPopup = ref<number | null>(null);
+const activeQuestionConfirm = ref(false);
+const optionInput = ref("");
+const nextOptionColor = ref("");
+const newOption = ref<HTMLInputElement | null>(null);
+
+const store = defaultStore();
+const { mappingQuestions, currentItem } = storeToRefs(store);
+const currentMappingOptions = computed(() => currentItem.value?.MappingOptions ?? []);
+
+const getIcon = (type: string) => (type === "multiSelect" ? "☰" : "");
+
+const setNewOptionRef = (element: Element | ComponentPublicInstance | null) => {
+  newOption.value = element as HTMLInputElement | null;
+};
+
+const isBackdropTarget = (target: EventTarget | null) => {
+  return (target as HTMLElement | null)?.className === "mapping-question__popup--backdrop";
+};
+
+const setOptionPopupActive = async (event: MouseEvent, id: number) => {
+  if (isBackdropTarget(event.target)) {
+    return;
+  }
+
+  activeOptionPopup.value = id;
+  store.setMoveLock();
+  await nextTick();
+  newOption.value?.focus();
+};
+
+const setOptionPopupInactive = () => {
+  activeOptionPopup.value = null;
+  store.unsetMoveLock();
+};
+
+const setQuestionPopupActive = (event: MouseEvent, id: number) => {
+  if (isBackdropTarget(event.target)) {
+    return;
+  }
+
+  activeQuestionPopup.value = id;
+  store.setMoveLock();
+};
+
+const setQuestionPopupInactive = () => {
+  activeQuestionPopup.value = null;
+  activeQuestionConfirm.value = false;
+  store.unsetMoveLock();
+};
+
+const newMappingQuestion = async () => {
+  await store.createMappingQuestion();
+  activeQuestionPopup.value = mappingQuestions.value[mappingQuestions.value.length - 1]?.id ?? null;
+};
+
+const deleteQuestion = async (id: number) => {
+  await store.deleteMappingQuestion(id);
+  activeQuestionConfirm.value = false;
+  activeQuestionPopup.value = null;
+};
+
+const setQuestionTitle = debounce(async (event: Event, question: MappingQuestion) => {
+  const title = (event.target as HTMLInputElement).value;
+  const { id, type, position } = question;
+  await store.updateMappingQuestion({
+    id,
+    title,
+    type,
+    position,
+  });
+}, 1000);
+
+const increaseQuestionPosition = async (question: MappingQuestion, index: number) => {
+  const lastQuestion = mappingQuestions.value[mappingQuestions.value.length - 1];
+  if (!lastQuestion || lastQuestion.id === question.id) {
+    return;
+  }
+
+  const { id, type, title, position } = question;
+  await store.updateMappingQuestion({
+    id,
+    type,
+    title,
+    position: position + 1,
+  });
+
+  const next = mappingQuestions.value[index + 1];
+  if (!next) {
+    return;
+  }
+
+  await store.updateMappingQuestion({
+    id: next.id,
+    type: next.type,
+    title: next.title,
+    position: next.position - 1,
+  });
+
+  await store.fetchMappingQuestions();
+};
+
+const decreaseQuestionPosition = async (question: MappingQuestion, index: number) => {
+  const firstQuestion = mappingQuestions.value[0];
+  if (!firstQuestion || firstQuestion.id === question.id) {
+    return;
+  }
+
+  const { id, type, title, position } = question;
+  await store.updateMappingQuestion({
+    id,
+    type,
+    title,
+    position: position - 1,
+  });
+
+  const previous = mappingQuestions.value[index - 1];
+  if (!previous) {
+    return;
+  }
+
+  await store.updateMappingQuestion({
+    id: previous.id,
+    type: previous.type,
+    title: previous.title,
+    position: previous.position + 1,
+  });
+
+  await store.fetchMappingQuestions();
+};
+
+const createOption = async (question: MappingQuestion, color: string) => {
+  await store.createMappingOption({
+    id: question.id,
+    title: optionInput.value,
+    position: question.MappingOptions?.length ?? 0,
+    color,
+  });
+
+  nextOptionColor.value = getOptionColor();
+  optionInput.value = "";
+};
+
+const getOptionColor = () => {
+  const colors = [
+    "#e6b0b0",
+    "#e6cab0",
+    "#e1e6b0",
+    "#b0e6bf",
+    "#9cdacd",
+    "#96c9e1",
+    "#a7adc6",
+    "#b4a9ed",
+    "#e2a9ed",
+    "#e89dba",
+    "#c69696",
+  ];
+  return colors[Math.floor(Math.random() * colors.length)] ?? colors[0] ?? "#e6b0b0";
+};
+
+const tagStyle = (color: string | null | undefined) => ({
+  backgroundColor: color ?? "#d8d8d8",
+});
+
+const filterOptionList = (option: MappingOption) => {
+  const selected = currentMappingOptions.value;
+  return (
+    selected.findIndex((item) => item.id === option.id) === -1 &&
+    option.title.toLowerCase().includes(optionInput.value.toLowerCase())
+  );
+};
+
+const addRecordMappingOption = async (payload: {
+  mappingQuestionId: number;
+  mappingOptionId: number;
+}) => {
+  await store.addRecordMappingOption(payload);
+};
+
+const removeRecordMappingOption = async (optionId: number) => {
+  await store.removeRecordMappingOption(optionId);
+};
+
+onMounted(async () => {
+  await store.fetchMappingQuestions();
+  nextOptionColor.value = getOptionColor();
+});
 </script>
 <style lang="scss" scoped>
 .mapping-actions {
