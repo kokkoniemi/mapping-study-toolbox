@@ -83,6 +83,27 @@ describe("http", () => {
     expect(init.body).toBe(JSON.stringify({ title: "Question" }));
   });
 
+  it("retries transient GET network failures", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockRejectedValueOnce(new TypeError("socket reset"))
+      .mockResolvedValue(
+        new Response(JSON.stringify({ count: 1, records: [] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+
+    const responsePromise = http.get<{ count: number; records: unknown[] }>("records");
+    await vi.runAllTimersAsync();
+    const response = await responsePromise;
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(response.data.count).toBe(1);
+    vi.useRealTimers();
+  });
+
   it("throws HttpError for non-2xx responses", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
       new Response(JSON.stringify({ error: "invalid" }), {

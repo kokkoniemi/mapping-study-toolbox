@@ -7,8 +7,8 @@
     "npm": ">=10.0.0"
   },
   "scripts": {
-    "start": "node server.js",
-    "start:dev": "node --watch server.js",
+    "start": "node --import tsx server.ts",
+    "start:dev": "node --watch --import tsx server.ts",
     "migrate": "node_modules/.bin/sequelize db:migrate",
     "ui:install": "npm --prefix ui install",
     "ui:dev": "npm --prefix ui run dev",
@@ -16,9 +16,12 @@
     "ui:preview": "npm --prefix ui run preview",
     "ui:lint": "npm --prefix ui run lint",
     "ui:typecheck": "npm --prefix ui run typecheck",
-    "ui:test": "npm --prefix ui run test:run"
+    "ui:test": "npm --prefix ui run test:run",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
-  "bin": "server.js",
+  "bin": "server.ts",
   "pkg": {
     "assets": [
       "./public/**/*",
@@ -45,8 +48,13 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@types/express": "^5.0.6",
+    "@types/node": "^25.3.5",
     "eslint": "^10.0.3",
     "globals": "^17.4.0",
-    "sequelize-cli": "^6.6.5"
+    "sequelize-cli": "^6.6.5",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
   }
 }

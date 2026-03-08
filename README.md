@@ -1,7 +1,7 @@
 # mapping-study-toolbox
 
 This repository is now a monorepo with:
-- `server` side API (Express + Sequelize + sqlite)
+- `server` side API (Express + Sequelize + sqlite + TypeScript)
 - `ui/` frontend source (Vue 3 + Vite)
 - separated runtime: backend API on `3000`, frontend on `8080`
 
@@ -70,6 +70,8 @@ npm run ui:dev
 
 ### Quality checks (recommended before commit)
 ```shell
+npm run typecheck
+npm test
 npm run ui:typecheck
 npm run ui:test
 npm run ui:lint
@@ -110,7 +112,7 @@ node scrapers/[scraper-name].js
 
 ## Api and GUI
 
-The backend (`server.js`) exposes only the API at `http://localhost:3000/api`.
+The backend (`server.ts`) exposes only the API at `http://localhost:3000/api`.
 The frontend runs separately with Vite dev server.
 
 ### Run UI dev server

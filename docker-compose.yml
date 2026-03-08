@@ -10,7 +10,7 @@ services:
       if [ ! -d node_modules ] || [ -z \"$(ls -A node_modules 2>/dev/null)\" ];
       then npm install; fi &&
       node_modules/.bin/sequelize db:migrate &&
-      exec node --watch server.js"
+      exec node --watch --import tsx server.ts"
     volumes:
       - ./:/workspace
       - backend_node_modules:/workspace/node_modules
@@ -18,6 +18,18 @@ services:
       - "3000:3000"
     environment:
       NODE_ENV: development
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:3000/api/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
 
   frontend:
     image: node:24-bookworm
@@ -39,7 +51,8 @@ services:
       CHOKIDAR_USEPOLLING: "true"
       WATCHPACK_POLLING: "true"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
 
 volumes:
   backend_node_modules:

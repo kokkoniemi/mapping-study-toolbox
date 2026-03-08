@@ -16,7 +16,7 @@ This repository contains a mapping-study backend API and a separate frontend app
 7. Start UI dev server: `npm run ui:dev` (serves app on `http://localhost:8080`).
 
 ## Contract-critical behavior
-- UI calls are defined in `ui/src/helpers/api.js`.
+- UI calls are defined in `ui/src/helpers/api.ts`.
 - Keep these response shapes stable unless UI and backend are updated together:
   - `GET /api/records` -> `{ count, records }`
   - `GET /api/mapping-questions` -> `{ count, questions }`

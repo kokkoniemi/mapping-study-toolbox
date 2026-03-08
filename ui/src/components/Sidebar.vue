@@ -2,7 +2,7 @@
     <section id="sidebar">
         <h4>Show by status:</h4>
 
-        <select @change="onStatusChange" class="status-filter">
+        <select :value="statusFilter" @change="onStatusChange" class="status-filter">
             <option v-for="(status) in statusOptions" :value="status.value">{{ status.label }}</option>
         </select>
 
@@ -51,7 +51,8 @@ import { type RecordItem } from "../helpers/api";
 import { defaultStore, type StatusFilter } from "../stores/default";
 
 const store = defaultStore();
-const { page, pageLength, pageItems, itemCount, searchFilter, currentItem } = storeToRefs(store);
+const { page, pageLength, pageItems, itemCount, statusFilter, searchFilter, currentItem } =
+  storeToRefs(store);
 
 const statusOptions: Array<{ label: string; value: StatusFilter }> = [
   { label: "All", value: "" },

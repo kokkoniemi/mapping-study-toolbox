@@ -1,5 +1,7 @@
 const API_ROOT = "http://localhost:3000/api/";
 const REQUEST_TIMEOUT_MS = 10000;
+const REQUEST_RETRY_COUNT = 3;
+const REQUEST_RETRY_DELAY_MS = 300;
 
 type HttpMethod = "GET" | "POST" | "PUT" | "DELETE";
 type Primitive = string | number | boolean;
@@ -75,33 +77,53 @@ const request = async <TResponse = unknown, TBody = unknown>(
   path: string,
   { params, data }: RequestOptions<TBody> = {},
 ): Promise<HttpResponse<TResponse>> => {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const maxAttempts = method === "GET" ? REQUEST_RETRY_COUNT : 1;
+  let lastError: unknown;
 
-  try {
-    const response = await fetch(buildUrl(path, params), {
-      method,
-      headers: {
-        Accept: "application/json",
-        ...(data !== undefined ? { "Content-Type": "application/json" } : {}),
-      },
-      ...(data !== undefined ? { body: JSON.stringify(data) } : {}),
-      signal: controller.signal,
-    });
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
-    const payload = await parseResponse<TResponse>(response);
+    try {
+      const response = await fetch(buildUrl(path, params), {
+        method,
+        headers: {
+          Accept: "application/json",
+          ...(data !== undefined ? { "Content-Type": "application/json" } : {}),
+        },
+        ...(data !== undefined ? { body: JSON.stringify(data) } : {}),
+        signal: controller.signal,
+      });
 
-    if (!response.ok) {
-      throw new HttpError(`HTTP ${response.status} for ${method} ${path}`, response.status, payload);
+      const payload = await parseResponse<TResponse>(response);
+
+      if (!response.ok) {
+        throw new HttpError(`HTTP ${response.status} for ${method} ${path}`, response.status, payload);
+      }
+
+      return { data: payload, status: response.status };
+    } catch (error) {
+      lastError = error;
+
+      const isRetryable =
+        method === "GET"
+        && attempt < maxAttempts
+        && !(error instanceof HttpError);
+
+      if (!isRetryable) {
+        console.error(error);
+        throw error;
+      }
+
+      await new Promise((resolve) => {
+        setTimeout(resolve, REQUEST_RETRY_DELAY_MS * attempt);
+      });
+    } finally {
+      clearTimeout(timeoutId);
     }
-
-    return { data: payload, status: response.status };
-  } catch (error) {
-    console.error(error);
-    throw error;
-  } finally {
-    clearTimeout(timeoutId);
   }
+
+  throw lastError;
 };
 
 export const http = {
