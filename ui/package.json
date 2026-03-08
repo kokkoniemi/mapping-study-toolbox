@@ -19,12 +19,10 @@
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^6.0.4",
-    "axios": "^1.13.6",
     "date-fns": "^4.1.0",
     "eslint": "^10.0.3",
     "eslint-plugin-vue": "^10.8.0",
     "globals": "^17.4.0",
-    "material-icons": "^1.13.14",
     "pinia-plugin-persistedstate": "^4.7.1",
     "sass": "^1.97.3",
     "vite": "^7.3.1",

@@ -2,12 +2,15 @@ services:
   backend:
     image: node:24-bookworm
     working_dir: /workspace
+    init: true
+    stop_signal: SIGTERM
+    stop_grace_period: 10s
     command: >
       sh -c "if [ ! -f config/config.json ]; then cp config/config.example.json config/config.json; fi &&
       if [ ! -d node_modules ] || [ -z \"$(ls -A node_modules 2>/dev/null)\" ];
       then npm install; fi &&
-      npm run migrate &&
-      npm run start:dev"
+      node_modules/.bin/sequelize db:migrate &&
+      exec node --watch server.js"
     volumes:
       - ./:/workspace
       - backend_node_modules:/workspace/node_modules
@@ -19,10 +22,13 @@ services:
   frontend:
     image: node:24-bookworm
     working_dir: /workspace/ui
+    init: true
+    stop_signal: SIGTERM
+    stop_grace_period: 10s
     command: >
       sh -c "if [ ! -d node_modules ] || [ -z \"$(ls -A node_modules 2>/dev/null)\" ];
       then npm install; fi &&
-      npm run dev -- --host 0.0.0.0 --port 8080"
+      exec node ./node_modules/vite/bin/vite.js --host 0.0.0.0 --port 8080"
     volumes:
       - ./:/workspace
       - ui_node_modules:/workspace/ui/node_modules

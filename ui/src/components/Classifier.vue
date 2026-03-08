@@ -61,8 +61,7 @@ import { mapState, mapActions } from "pinia";
 import { defaultStore } from '../stores/default';
 import MappingActions from "./MappingActions.vue";
 import { format as formatDate } from "date-fns";
-import { debounce } from "lodash";
-import { keyCodes } from "../helpers/utils";
+import { debounce, keyCodes } from "../helpers/utils";
 
 export default {
     name: "Classifier",

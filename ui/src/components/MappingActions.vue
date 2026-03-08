@@ -79,9 +79,9 @@
 </template>
 
 <script>
-import { debounce } from "lodash";
 import { mapActions, mapState } from "pinia";
 import { defaultStore } from '../stores/default';
+import { debounce } from "../helpers/utils";
 
 export default {
     name: "MappingActions",
