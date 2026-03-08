@@ -38,14 +38,14 @@
   "dependencies": {
     "chalk": "^5.6.2",
     "core-js": "^3.48.0",
-    "express": "^4.22.1",
+    "express": "^5.2.1",
     "sequelize": "^6.37.8",
     "sqlite3": "^5.1.7"
   },
   "devDependencies": {
-    "@eslint/js": "^9.39.4",
-    "eslint": "^9.39.4",
-    "globals": "^15.15.0",
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.0.3",
+    "globals": "^17.4.0",
     "sequelize-cli": "^6.6.5"
   }
 }

@@ -11,21 +11,23 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs --fix --ignore-path .gitignore"
+    "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs --fix"
   },
   "dependencies": {
-    "pinia": "^2.3.1",
+    "pinia": "^3.0.4",
     "vue": "^3.5.29"
   },
   "devDependencies": {
-    "@vitejs/plugin-vue": "^5.2.4",
+    "@vitejs/plugin-vue": "^6.0.4",
     "axios": "^1.13.6",
-    "date-fns": "^3.6.0",
-    "eslint": "^8.57.1",
-    "eslint-plugin-vue": "^9.33.0",
+    "date-fns": "^4.1.0",
+    "eslint": "^10.0.3",
+    "eslint-plugin-vue": "^10.8.0",
+    "globals": "^17.4.0",
     "material-icons": "^1.13.14",
-    "pinia-plugin-persistedstate": "^3.2.3",
+    "pinia-plugin-persistedstate": "^4.7.1",
     "sass": "^1.97.3",
-    "vite": "^5.4.21"
+    "vite": "^7.3.1",
+    "vue-eslint-parser": "^10.4.0"
   }
 }

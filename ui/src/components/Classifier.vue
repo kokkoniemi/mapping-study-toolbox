@@ -120,7 +120,7 @@ export default {
     created() {
         window.addEventListener("keydown", this.moveTo);
     },
-    destroyed() {
+    unmounted() {
         window.removeEventListener("keydown", this.moveTo);
     },
     methods: {
