@@ -1,4 +1,10 @@
-import { parseAuthorFamilyFromText, parseRetryAfterMs, scoreTitleSimilarity, sleep } from "./enrichmentCommon";
+import {
+  normalizeDoiValue,
+  parseAuthorFamilyFromText,
+  parseRetryAfterMs,
+  scoreTitleSimilarity,
+  sleep,
+} from "./enrichmentCommon";
 
 const CROSSREF_BASE_URL = (process.env.CROSSREF_BASE_URL ?? "https://api.crossref.org").replace(/\/+$/, "");
 const CROSSREF_MAILTO = process.env.CROSSREF_MAILTO?.trim() ?? "";
@@ -74,11 +80,7 @@ const scoreAuthorSimilarity = (queryAuthor: string | null | undefined, work: Cro
   return families.some((family) => family.includes(queryFamily) || queryFamily.includes(family)) ? 0.5 : 0;
 };
 
-const sanitizeDoi = (value: string) =>
-  value
-    .trim()
-    .replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, "")
-    .replace(/[)\].,;]+$/, "");
+const sanitizeDoi = (value: string) => normalizeDoiValue(value) ?? "";
 
 const normalizeIssnCandidate = (value: string) => value.toUpperCase().replace(/[^0-9X]/g, "");
 

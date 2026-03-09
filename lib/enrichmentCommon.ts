@@ -73,3 +73,42 @@ export const parseAuthorFamilyFromText = (authorText: string | null | undefined)
   }
   return parts[0] ?? null;
 };
+
+export const normalizeDoiValue = (value: string | null | undefined) => {
+  if (!value) {
+    return null;
+  }
+
+  const normalized = value
+    .trim()
+    .replace(/^doi:\s*/i, "")
+    .replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, "")
+    .replace(/[)\].,;]+$/, "")
+    .trim();
+
+  return normalized.length > 0 ? normalized : null;
+};
+
+export const toDateOrNull = (value: unknown): Date | null => {
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+
+  if (typeof value === "string") {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  return null;
+};
+
+export const toPlainObject = (record: unknown): Record<string, unknown> => {
+  const asRecord = record as { toJSON?: () => unknown; get?: (opts?: unknown) => unknown };
+  if (typeof asRecord.toJSON === "function") {
+    return asRecord.toJSON() as Record<string, unknown>;
+  }
+  if (typeof asRecord.get === "function") {
+    return asRecord.get({ plain: true }) as Record<string, unknown>;
+  }
+  return record as Record<string, unknown>;
+};

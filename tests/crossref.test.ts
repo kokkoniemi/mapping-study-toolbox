@@ -35,13 +35,13 @@ describe("crossref DOI extraction", () => {
 describe("crossref fallback search ranking", () => {
   it("rejects mismatched title even when author matches", () => {
     const queryTitle = "Toward an Improvement of Engineering Teaming Skills through an In-House Professionalism Course";
-    const queryAuthor = "Al-Abbas, Mohammad";
+    const queryAuthor = "Doe, Alex";
 
     const selected = pickBestSearchWork(queryTitle, queryAuthor, [
       {
         DOI: "10.1000/wrong",
         title: ["A completely different article about climate policy outcomes"],
-        author: [{ family: "Al-Abbas", given: "Mohammad" }],
+        author: [{ family: "Doe", given: "Alex" }],
       },
     ]);
 
@@ -50,18 +50,18 @@ describe("crossref fallback search ranking", () => {
 
   it("accepts strong title match", () => {
     const queryTitle = "Predicting teamwork group assessment using log data-based learning analytics";
-    const queryAuthor = "Hernández-García, Ángel";
+    const queryAuthor = "Smith, Jordan";
 
     const selected = pickBestSearchWork(queryTitle, queryAuthor, [
       {
         DOI: "10.1016/j.jss.2023.111795",
         title: ["Predicting teamwork group assessment using log data-based learning analytics"],
-        author: [{ family: "Hernández-García", given: "Ángel" }],
+        author: [{ family: "Smith", given: "Jordan" }],
       },
       {
         DOI: "10.1000/noise",
         title: ["Teaching methods and teamwork perceptions in virtual settings"],
-        author: [{ family: "Hernández-García", given: "Ángel" }],
+        author: [{ family: "Smith", given: "Jordan" }],
       },
     ]);
 

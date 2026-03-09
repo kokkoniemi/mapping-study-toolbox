@@ -129,6 +129,7 @@ UI dev server runs on http://localhost:8080 and calls backend API at http://loca
 - In the `Data` tab, select rows (leftmost checkbox column), choose service (`Crossref`, `OpenAlex`, or `Crossref + OpenAlex`), then click `Enrich selected`.
 - Default service is `Crossref + OpenAlex`.
 - You can stop a running job with the `Stop` button (cancels after the current record finishes).
+- `Force refresh` bypasses freshness windows for both Crossref and OpenAlex and re-fetches metadata.
 - Enrichment updates record DOI/author details/references and forum metadata (`publisher`, `issn`, `jufoLevel` when found).
 - OpenAlex enrichment updates:
   - citation count
@@ -153,6 +154,7 @@ UI dev server runs on http://localhost:8080 and calls backend API at http://loca
   - `CROSSREF_BASE_URL` (default `https://api.crossref.org`)
   - `CROSSREF_MAILTO` (recommended contact email for Crossref requests)
   - `CROSSREF_REFERENCE_TITLE_LOOKUP_MAX` (default `12`)
+  - `CROSSREF_REFRESH_MS` (default `30 days`)
   - `OPENALEX_BASE_URL` (default `https://api.openalex.org`)
   - `OPENALEX_API_KEY` (required for OpenAlex access)
   - `OPENALEX_MIN_DELAY_MS` (default `250`)

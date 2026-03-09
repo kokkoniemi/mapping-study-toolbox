@@ -1,5 +1,11 @@
 import { extractDoiFromText } from "./crossref";
-import { parseAuthorFamilyFromText, parseRetryAfterMs, scoreTitleSimilarity, sleep } from "./enrichmentCommon";
+import {
+  normalizeDoiValue,
+  parseAuthorFamilyFromText,
+  parseRetryAfterMs,
+  scoreTitleSimilarity,
+  sleep,
+} from "./enrichmentCommon";
 
 const OPENALEX_BASE_URL = (process.env.OPENALEX_BASE_URL ?? "https://api.openalex.org").replace(/\/+$/, "");
 const OPENALEX_API_KEY = process.env.OPENALEX_API_KEY?.trim() ?? "";
@@ -144,8 +150,7 @@ const sanitizeDoi = (value: string | null | undefined) => {
     return extracted;
   }
 
-  const fallback = value.trim().replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, "");
-  return fallback.length > 0 ? fallback : null;
+  return normalizeDoiValue(value);
 };
 
 const scoreAuthorSimilarity = (queryAuthor: string | null | undefined, work: OpenAlexWorkRaw) => {
