@@ -21,19 +21,13 @@
                     <div class="text-content" :class="[
                         isLongContent && !showFullContent && 'text-content--collapsed',
                     ]">
-                        <p v-if="currentItem.abstract" class="abstract">
+                        <p class="abstract">
                             <small>
                                 <b>Abstract:</b>
                             </small>
                             <br />
-                            <span v-html="nltobr(sanitizeAbstract(currentItem.abstract))"></span>
-                        </p>
-                        <p v-else class="abstract abstract--description">
-                            <small>
-                                <b>Short description:</b>
-                            </small>
-                            <br />
-                            <span class="description-text">{{ currentItem.description }}</span>
+                            <span v-if="currentItem.abstract" v-html="nltobr(sanitizeAbstract(currentItem.abstract))"></span>
+                            <span v-else>No abstract available.</span>
                         </p>
                         <div v-if="isLongContent" :class="[
                             'content-toggle-row',
@@ -103,7 +97,7 @@ const COLLAPSED_CONTENT_MAX_LINES = 18;
 const showFullContent = ref(false);
 
 const normalizedCenterText = computed(() => {
-  const raw = currentItem.value?.abstract ?? currentItem.value?.description ?? "";
+  const raw = currentItem.value?.abstract ?? "";
   return raw.replace("Abstract:\n", "").replace("Abstract\n", "");
 });
 
@@ -354,14 +348,6 @@ h1 {
     font-family: Georgia;
     font-size: 18px;
     margin: 0;
-}
-
-.abstract--description {
-    line-height: 1.5;
-}
-
-.description-text {
-    white-space: pre-line;
 }
 
 .abstract-wrapper {

@@ -150,7 +150,6 @@ const tableRows = computed<GridRow[]>(() =>
       url: record.url,
       databases: stringListToCell(record.databases),
       alternateUrls: stringListToCell(record.alternateUrls),
-      description: record.description ?? "",
       createdAt: formatTimestamp(record.createdAt),
       updatedAt: formatTimestamp(record.updatedAt),
     };
@@ -187,7 +186,6 @@ const trailingColumns: Array<{ header: string; settings: ColumnSettings }> = [
   { header: "url", settings: { data: "url", type: "text", width: 260 } },
   { header: "databases", settings: { data: "databases", type: "text", width: 220 } },
   { header: "alternateUrls", settings: { data: "alternateUrls", type: "text", width: 240 } },
-  { header: "description", settings: { data: "description", type: "text", width: 260 } },
   { header: "created", settings: { data: "createdAt", readOnly: true, width: 170 } },
   { header: "updated", settings: { data: "updatedAt", readOnly: true, width: 170 } },
 ];
@@ -308,7 +306,7 @@ const handleCellChange = async (recordId: number, prop: string, nextValue: strin
     return;
   }
 
-  if (prop === "abstract" || prop === "description" || prop === "comment") {
+  if (prop === "abstract" || prop === "comment") {
     await store.patchRecord(recordId, { [prop]: nextValue === "" ? null : nextValue });
     return;
   }

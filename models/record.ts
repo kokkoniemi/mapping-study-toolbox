@@ -9,7 +9,6 @@ const defineRecord: ModelFactory<RecordModelStatic> = (sequelize: Sequelize, Dat
       title: DataTypes.TEXT,
       url: DataTypes.STRING,
       author: DataTypes.STRING,
-      description: DataTypes.TEXT,
       status: DataTypes.STRING, // null,"excluded","included","uncertain"
       abstract: DataTypes.TEXT,
       databases: DataTypes.JSON, // JSON array

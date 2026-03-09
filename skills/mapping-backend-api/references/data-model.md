@@ -11,7 +11,6 @@
   - `title` (TEXT)
   - `url` (STRING)
   - `author` (STRING)
-  - `description` (TEXT)
   - `status` (STRING)
   - `abstract` (TEXT)
   - `databases` (JSON array expected)

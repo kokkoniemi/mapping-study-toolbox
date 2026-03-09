@@ -17,7 +17,7 @@
 - UI production build output is `ui/dist`.
 
 ## Data model snapshot
-- `Record`: title/url/author/description/abstract/status/comment, JSON fields (`databases`, `alternateUrls`), `editedBy`, soft delete.
+- `Record`: title/url/author/abstract/status/comment, JSON fields (`databases`, `alternateUrls`), `editedBy`, soft delete.
 - `Publication`: venue metadata (`name`, `alternateNames`, `jufoLevel`, `database`), soft delete.
 - `MappingQuestion`: mapping metadata (`title`, `type`, `position`), soft delete.
 - `MappingOption`: option value (`title`, `position`, `color`, `mappingQuestionId`), soft delete.

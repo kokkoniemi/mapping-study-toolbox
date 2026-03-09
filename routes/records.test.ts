@@ -177,6 +177,17 @@ describe("routes/records", () => {
     expect(dbMock.Record.findByPk).not.toHaveBeenCalled();
   });
 
+  it("patch rejects removed description field", async () => {
+    const req = {
+      params: { id: "1" },
+      body: { description: "legacy value" },
+    } as unknown as Request;
+    const res = mockResponse();
+
+    await expect(patch(req, res)).rejects.toBeInstanceOf(ApiError);
+    expect(dbMock.Record.findByPk).not.toHaveBeenCalled();
+  });
+
   it("patch returns not found when record does not exist", async () => {
     dbMock.Record.findByPk.mockResolvedValue(null);
 

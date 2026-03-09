@@ -80,7 +80,6 @@ export interface RecordAttributes {
   title: string | null;
   url: string | null;
   author: string | null;
-  description: string | null;
   status: RecordStatus;
   abstract: string | null;
   databases: string[] | null;

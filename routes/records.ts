@@ -76,7 +76,6 @@ type RecordPatchPayload = Partial<{
   status: RecordStatus;
   comment: string | null;
   abstract: string | null;
-  description: string | null;
   databases: string[];
   alternateUrls: string[];
   editedBy: string;
@@ -177,7 +176,6 @@ export const patch = async (req: Request, res: Response) => {
       "status",
       "comment",
       "abstract",
-      "description",
       "databases",
       "alternateUrls",
       "editedBy",
@@ -227,17 +225,6 @@ export const patch = async (req: Request, res: Response) => {
       throw badRequest("abstract is required");
     }
     updates.abstract = value;
-  }
-
-  if ("description" in body) {
-    const value = parseOptionalNullableString(body.description, "description", {
-      trim: false,
-      maxLength: 20000,
-    });
-    if (value === undefined) {
-      throw badRequest("description is required");
-    }
-    updates.description = value;
   }
 
   if ("databases" in body) {

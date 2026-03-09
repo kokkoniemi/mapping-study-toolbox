@@ -183,7 +183,6 @@ export interface RecordItem {
   databases: string[];
   alternateUrls: string[];
   abstract: string | null;
-  description: string | null;
   createdAt: string;
   updatedAt: string;
   status: RecordStatus;
@@ -216,7 +215,6 @@ export type PatchRecordPayload = Partial<{
   status: RecordStatus;
   comment: string | null;
   abstract: string | null;
-  description: string | null;
   databases: string[];
   alternateUrls: string[];
   editedBy: string;
