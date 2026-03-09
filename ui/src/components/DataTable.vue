@@ -236,8 +236,8 @@ const tableRows = computed<GridRow[]>(() =>
       status: record.status ?? "null",
       comment: record.comment ?? "",
       author: record.author,
-      publication: record.Publication
-        ? `${record.Publication.name ?? "-"} | jufo: ${record.Publication.jufoLevel ?? "-"}`
+      forum: record.Forum
+        ? `${record.Forum.name ?? "-"} | jufo: ${record.Forum.jufoLevel ?? "-"}`
         : "-",
       url: record.url,
       databases: stringListToCell(record.databases),
@@ -275,8 +275,8 @@ const priorityColumns: Array<{ header: string; settings: ColumnSettings }> = [
 const trailingColumns: Array<{ header: string; settings: ColumnSettings }> = [
   { header: "author", settings: { data: "author", type: "text", renderer: truncatedTextRenderer, width: 220 } },
   {
-    header: "publication",
-    settings: { data: "publication", readOnly: true, renderer: truncatedTextRenderer, width: 240 },
+    header: "forum",
+    settings: { data: "forum", readOnly: true, renderer: truncatedTextRenderer, width: 240 },
   },
   { header: "url", settings: { data: "url", type: "text", renderer: truncatedTextRenderer, width: 260 } },
   { header: "databases", settings: { data: "databases", type: "text", renderer: truncatedTextRenderer, width: 220 } },
@@ -1239,7 +1239,6 @@ onUnmounted(() => {
 :deep(.data-text-cell__text--truncated) {
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
   overflow: hidden;
   max-height: calc(3 * 1.35em);
 }

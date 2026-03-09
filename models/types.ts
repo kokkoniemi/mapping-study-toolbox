@@ -10,7 +10,7 @@ export type AssociableModel<TModel extends Model = Model> = ModelStatic<TModel> 
   associate?: (models: DbModels) => void;
 };
 
-export interface PublicationAttributes {
+export interface ForumAttributes {
   id: number;
   name: string | null;
   alternateNames: string[] | null;
@@ -21,9 +21,9 @@ export interface PublicationAttributes {
   deletedAt: Date | null;
 }
 
-export type PublicationCreationAttributes = Partial<PublicationAttributes>;
-export type PublicationModel = BaseModel<PublicationAttributes, PublicationCreationAttributes>;
-export type PublicationModelStatic = AssociableModel<PublicationModel>;
+export type ForumCreationAttributes = Partial<ForumAttributes>;
+export type ForumModel = BaseModel<ForumAttributes, ForumCreationAttributes>;
+export type ForumModelStatic = AssociableModel<ForumModel>;
 
 export interface MappingQuestionAttributes {
   id: number;
@@ -115,7 +115,7 @@ export type ImportModelStatic = AssociableModel<ImportModel>;
 
 export interface DbModels {
   Record: RecordModelStatic;
-  Publication: PublicationModelStatic;
+  Forum: ForumModelStatic;
   MappingQuestion: MappingQuestionModelStatic;
   MappingOption: MappingOptionModelStatic;
   RecordMappingOption: RecordMappingOptionModelStatic;

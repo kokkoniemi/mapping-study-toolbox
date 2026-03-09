@@ -13,11 +13,11 @@
 - Response shape:
   - `{ count: number, records: Record[] }`
 - Each record is fetched with includes:
-  - `Publication`
+  - `Forum`
   - `MappingOptions`
 
 ### `GET /records/:id`
-- Response: single `Record` object (includes `Publication`, `MappingOptions`).
+- Response: single `Record` object (includes `Forum`, `MappingOptions`).
 
 ### `PUT /records/:id`
 - Allowed update fields from UI:

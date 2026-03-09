@@ -12,10 +12,10 @@
                 <p class="author">
                     <small>{{ currentItem.author }}</small>
                 </p>
-                <p class="publication">
+                <p class="forum">
                     <a :href="currentItem.url">In publisher database</a> |&nbsp;
-                    <span v-if="currentItem.Publication">{{ currentItem.Publication.name }}, jufo-level: {{
-                        currentItem.Publication.jufoLevel }}</span>
+                    <span v-if="currentItem.Forum">{{ currentItem.Forum.name }}, jufo-level: {{
+                        currentItem.Forum.jufoLevel }}</span>
                 </p>
                 <div class="abstract-wrapper" :settings="{}" :style="{ paddingBottom: abstractPaddingBottom }">
                     <div class="text-content" :class="[
@@ -339,7 +339,6 @@ onUnmounted(() => {
 
 h1 {
     margin: 10px 0 6px;
-    font-size: clamp(28px, 2.2vw, 44px);
     line-height: 1.15;
 }
 
@@ -515,7 +514,7 @@ h1 {
     padding: 5px;
 }
 
-.publication {
+.forum {
     margin: 0 0 8px;
     padding-bottom: 6px;
     border-bottom: 2px solid #eaeaea;

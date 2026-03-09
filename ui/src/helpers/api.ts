@@ -168,7 +168,7 @@ export interface MappingQuestion {
   [key: string]: unknown;
 }
 
-export interface Publication {
+export interface Forum {
   id: number;
   name: string;
   jufoLevel: number | null;
@@ -187,7 +187,7 @@ export interface RecordItem {
   updatedAt: string;
   status: RecordStatus;
   comment: string | null;
-  Publication?: Publication | null;
+  Forum?: Forum | null;
   MappingOptions: MappingOption[];
   [key: string]: unknown;
 }

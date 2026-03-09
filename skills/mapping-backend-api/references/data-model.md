@@ -20,12 +20,12 @@
 - Options:
   - `paranoid: true`
 - Associations:
-  - `belongsTo(Publication)`
+  - `belongsTo(Forum)`
   - `belongsToMany(MappingOption, through RecordMappingOption)`
 - Custom static:
   - `Record.getAllByUrls(search_urls)` uses sqlite `json_each` against `alternateUrls`
 
-### `Publication`
+### `Forum`
 - Fields:
   - `name`, `alternateNames`, `jufoLevel`, `database`
 - Options:

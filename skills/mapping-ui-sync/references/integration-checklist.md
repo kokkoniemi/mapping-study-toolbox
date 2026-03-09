@@ -17,7 +17,7 @@
 - Verify backend still provides:
   - `GET /api/records` with `{ count, records }`
   - `GET /api/mapping-questions` with `{ count, questions }`
-- Ensure record payload still includes `Publication` and `MappingOptions`.
+- Ensure record payload still includes `Forum` and `MappingOptions`.
 
 ## Runtime checks
 1. Run backend:

@@ -88,7 +88,7 @@ fs.readdirSync(__dirname)
 
 const requiredModelNames = [
   "Record",
-  "Publication",
+  "Forum",
   "MappingQuestion",
   "MappingOption",
   "RecordMappingOption",

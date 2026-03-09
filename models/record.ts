@@ -22,7 +22,7 @@ const defineRecord: ModelFactory<RecordModelStatic> = (sequelize: Sequelize, Dat
   ) as RecordModelStatic;
 
   Record.associate = (models: DbModels) => {
-    Record.belongsTo(models.Publication);
+    Record.belongsTo(models.Forum);
     Record.belongsToMany(models.MappingOption, { through: models.RecordMappingOption });
   };
 

@@ -20,7 +20,7 @@ This repository contains a mapping-study backend API and a separate frontend app
 - Keep these response shapes stable unless UI and backend are updated together:
   - `GET /api/records` -> `{ count, records }`
   - `GET /api/mapping-questions` -> `{ count, questions }`
-- Keep include aliases stable in record payloads: `Publication`, `MappingOptions`.
+- Keep include aliases stable in record payloads: `Forum`, `MappingOptions`.
 - Valid inclusion/exclusion status values are `null`, `uncertain`, `excluded`, `included`.
 - Mapping question and option ordering is based on `position`.
 

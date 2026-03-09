@@ -18,7 +18,7 @@ description: Maintain and extend the mapping-study-toolbox backend API and persi
 ## Contract guardrails
 - Keep `GET /api/records` response as `{ count, records }`.
 - Keep `GET /api/mapping-questions` response as `{ count, questions }`.
-- Preserve `Record` include aliases expected by UI: `Publication`, `MappingOptions`.
+- Preserve `Record` include aliases expected by UI: `Forum`, `MappingOptions`.
 - Keep record status domain aligned with UI actions: `null`, `uncertain`, `excluded`, `included`.
 - Keep position ordering behavior for mapping questions/options.
 

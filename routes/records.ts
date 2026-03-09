@@ -112,7 +112,7 @@ export const listing = async (req: Request, res: Response) => {
       offset,
       limit,
       where,
-      include: ["Publication", "MappingOptions"],
+      include: ["Forum", "MappingOptions"],
     }),
   ]);
 
@@ -122,7 +122,7 @@ export const listing = async (req: Request, res: Response) => {
 export const get = async (req: Request, res: Response) => {
   const id = parseInteger(req.params.id, "id", { min: 1 });
 
-  const record = await db.Record.findByPk(id, { include: ["Publication", "MappingOptions"] });
+  const record = await db.Record.findByPk(id, { include: ["Forum", "MappingOptions"] });
   if (!record) {
     throw notFound(`Record ${id} not found`);
   }
@@ -148,7 +148,7 @@ export const update = async (req: Request, res: Response) => {
     maxLength: 10000,
   });
 
-  const record = await db.Record.findByPk(id, { include: ["Publication", "MappingOptions"] });
+  const record = await db.Record.findByPk(id, { include: ["Forum", "MappingOptions"] });
   if (!record) {
     throw notFound(`Record ${id} not found`);
   }
@@ -257,7 +257,7 @@ export const patch = async (req: Request, res: Response) => {
     throw badRequest("record patch body must contain at least one supported field");
   }
 
-  const record = await db.Record.findByPk(id, { include: ["Publication", "MappingOptions"] });
+  const record = await db.Record.findByPk(id, { include: ["Forum", "MappingOptions"] });
   if (!record) {
     throw notFound(`Record ${id} not found`);
   }

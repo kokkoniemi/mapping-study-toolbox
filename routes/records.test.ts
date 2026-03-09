@@ -67,7 +67,7 @@ describe("routes/records", () => {
     expect((where[symbolKeys[0] as symbol] as unknown[]).length).toBe(4);
 
     expect(dbMock.Record.findAll).toHaveBeenCalledWith(
-      expect.objectContaining({ offset: 5, limit: 10, include: ["Publication", "MappingOptions"] }),
+      expect.objectContaining({ offset: 5, limit: 10, include: ["Forum", "MappingOptions"] }),
     );
     expect(res.send).toHaveBeenCalledWith({ count: 2, records: [{ id: 1 }, { id: 2 }] });
   });
@@ -95,7 +95,7 @@ describe("routes/records", () => {
 
     await update(req, res);
 
-    expect(dbMock.Record.findByPk).toHaveBeenCalledWith(1, { include: ["Publication", "MappingOptions"] });
+    expect(dbMock.Record.findByPk).toHaveBeenCalledWith(1, { include: ["Forum", "MappingOptions"] });
     expect(record.update).toHaveBeenCalledWith(
       expect.objectContaining({ status: "included", comment: "ok", editedBy: "mk" }),
     );
@@ -156,7 +156,7 @@ describe("routes/records", () => {
 
     await patch(req, res);
 
-    expect(dbMock.Record.findByPk).toHaveBeenCalledWith(1, { include: ["Publication", "MappingOptions"] });
+    expect(dbMock.Record.findByPk).toHaveBeenCalledWith(1, { include: ["Forum", "MappingOptions"] });
     expect(record.update).toHaveBeenCalledWith({
       title: "Updated title",
       status: "uncertain",
