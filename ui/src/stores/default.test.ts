@@ -154,6 +154,14 @@ describe("defaultStore", () => {
     expect(apiMocks.recordsIndex).toHaveBeenCalledWith({ offset: 0, limit: 30 });
   });
 
+  it("setDataCellsTruncated updates persisted UI preference", () => {
+    const store = defaultStore();
+
+    expect(store.dataCellsTruncated).toBe(true);
+    store.setDataCellsTruncated(false);
+    expect(store.dataCellsTruncated).toBe(false);
+  });
+
   it("loadInitialData and loadMoreData append all rows for infinite feed", async () => {
     const store = defaultStore();
 

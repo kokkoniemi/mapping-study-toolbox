@@ -45,6 +45,7 @@ type CellStates = Record<string, CellState>;
 
 interface DefaultState {
   tab: TabMode;
+  dataCellsTruncated: boolean;
   page: number;
   pageLength: PageLength;
   pageItems: RecordItem[];
@@ -100,6 +101,7 @@ export const defaultStore = defineStore("default", {
   persist: true,
   state: (): DefaultState => ({
     tab: "inc-exc",
+    dataCellsTruncated: true,
     page: 1,
     pageLength: 25,
     pageItems: [],
@@ -526,6 +528,10 @@ export const defaultStore = defineStore("default", {
 
     updateTab(payload: TabMode) {
       this.tab = payload;
+    },
+
+    setDataCellsTruncated(payload: boolean) {
+      this.dataCellsTruncated = payload;
     },
 
     async fetchMappingQuestions() {

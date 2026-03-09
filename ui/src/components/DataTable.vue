@@ -20,13 +20,19 @@
         />
       </div>
 
-      <div class="data-toolbar__meta">
-        Loaded {{ loadedCount }} / {{ totalCountLabel }}
+      <div class="data-toolbar__group data-toolbar__group--toggle">
+        <label>Cell options</label>
+        <label class="data-toolbar__toggle">
+          <input type="checkbox" :checked="!dataCellsTruncated" @change="onShowFullTextChange" />
+          <span>Show full text</span>
+        </label>
       </div>
+
     </header>
 
     <div class="data-grid-shell" ref="dataGridShellRef">
       <hot-table
+        :key="dataCellsTruncated ? 'data-grid-truncated' : 'data-grid-full'"
         ref="hotTableRef"
         :data="tableRows"
         :columns="columns"
@@ -38,8 +44,8 @@
         :fillHandle="true"
         :manual-column-resize="true"
         :manual-row-resize="true"
-        :auto-row-size="false"
-        :row-heights="defaultRowHeight"
+        :auto-row-size="tableAutoRowSize"
+        :row-heights="tableRowHeights"
         :stretchH="'none'"
         :width="'100%'"
         :height="gridHeight"
@@ -104,6 +110,7 @@
     </div>
 
     <footer class="data-footer">
+      <span class="data-footer__loaded">Loaded {{ loadedCount }} / {{ totalCountLabel }}</span>
       <span v-if="dataLoading">Loading more records...</span>
       <span v-else-if="!dataHasMore">All records loaded</span>
       <span v-else>Scroll to load more</span>
@@ -173,6 +180,7 @@ const {
   dataTotal,
   dataHasMore,
   dataLoading,
+  dataCellsTruncated,
   statusFilter,
   searchFilter,
   mappingQuestions,
@@ -184,6 +192,10 @@ const dataGridShellRef = ref<HTMLElement | null>(null);
 const searchInput = ref(searchFilter.value);
 const gridHeight = ref(520);
 const defaultRowHeight = 62;
+const tableAutoRowSize = computed(() => !dataCellsTruncated.value);
+const tableRowHeights = computed<GridSettings["rowHeights"] | undefined>(() =>
+  dataCellsTruncated.value ? defaultRowHeight : undefined,
+);
 const mappingEditorInputRef = ref<HTMLInputElement | null>(null);
 const mappingEditor = ref<MappingEditorState | null>(null);
 const mappingEditorAnchor = ref<AnchorRect | null>(null);
@@ -323,6 +335,7 @@ function truncatedTextRenderer(
 ) {
   td.classList.remove("mapping-cell");
   td.classList.add("data-text-cell");
+  const shouldTruncate = dataCellsTruncated.value;
 
   const rawText = value === null || value === undefined ? "" : String(value);
   const normalizedText = rawText.replace(/\s+/g, " ").trim();
@@ -333,14 +346,15 @@ function truncatedTextRenderer(
     return td;
   }
 
-  const isLikelyTruncated = rawText.includes("\n") || normalizedText.length > textIndicatorThreshold;
+  const isLikelyTruncated = shouldTruncate
+    && (rawText.includes("\n") || normalizedText.length > textIndicatorThreshold);
   td.title = normalizedText;
 
   const content = document.createElement("div");
   content.className = "data-text-cell__content";
 
   const text = document.createElement("span");
-  text.className = "data-text-cell__text";
+  text.className = shouldTruncate ? "data-text-cell__text data-text-cell__text--truncated" : "data-text-cell__text";
   text.textContent = normalizedText;
   content.appendChild(text);
 
@@ -367,6 +381,7 @@ function mappingChipRenderer(
 ) {
   td.classList.remove("data-text-cell");
   td.classList.add("mapping-cell");
+  const shouldTruncate = dataCellsTruncated.value;
 
   const questionId = parseMappingQuestionId(prop);
   const question = mappingQuestions.value.find((item) => item.id === questionId);
@@ -380,7 +395,8 @@ function mappingChipRenderer(
     return td;
   }
 
-  td.innerHTML = `<div class="mapping-cell-chips">${titles
+  const chipsClass = shouldTruncate ? "mapping-cell-chips mapping-cell-chips--truncated" : "mapping-cell-chips";
+  td.innerHTML = `<div class="${chipsClass}">${titles
     .map((title) => {
       const color = colorByTitle.get(title.toLocaleLowerCase()) ?? "#d8d8d8";
       return `<span class="mapping-cell-chip" style="background-color:${color}">${escapeHtml(title)}</span>`;
@@ -815,6 +831,12 @@ const onStatusFilterChange = (event: Event) => {
   void store.setStatusFilter(value);
 };
 
+const onShowFullTextChange = (event: Event) => {
+  const showFullText = (event.target as HTMLInputElement).checked;
+  closeMappingEditor();
+  store.setDataCellsTruncated(!showFullText);
+};
+
 const updateGridHeight = () => {
   const shell = dataGridShellRef.value;
   if (!shell) {
@@ -926,19 +948,45 @@ onUnmounted(() => {
       min-width: min(320px, 100%);
       flex: 1;
     }
+
+    &--toggle {
+      min-width: 150px;
+      border-left: 1px solid #dddddd;
+      padding-left: 10px;
+      margin-left: 2px;
+    }
   }
 
-  &__meta {
-    margin-left: auto;
+  &__toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 30px;
+    box-sizing: border-box;
     font-size: 12px;
     color: #5b5858;
-    white-space: nowrap;
+    text-transform: none;
+    cursor: pointer;
+    margin: 0;
+    padding: 0;
+
+    input {
+      margin: 0;
+    }
   }
 
-  label {
+  &__group > label {
     font-size: 12px;
     color: #5b5858;
     text-transform: uppercase;
+    margin: 0;
+    line-height: 1.2;
+  }
+
+  select,
+  input[type="text"] {
+    height: 30px;
+    box-sizing: border-box;
   }
 }
 
@@ -956,6 +1004,13 @@ onUnmounted(() => {
   margin-top: 6px;
   font-size: 12px;
   color: #5b5858;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+
+  &__loaded {
+    white-space: nowrap;
+  }
 }
 
 .mapping-editor {
@@ -1175,15 +1230,18 @@ onUnmounted(() => {
 }
 
 :deep(.data-text-cell__text) {
+  line-height: 1.35;
+  white-space: normal;
+  word-break: break-word;
+  padding-right: 14px;
+}
+
+:deep(.data-text-cell__text--truncated) {
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
   overflow: hidden;
   max-height: calc(3 * 1.35em);
-  line-height: 1.35;
-  white-space: normal;
-  word-break: break-word;
-  padding-right: 14px;
 }
 
 :deep(.data-text-cell__marker) {
@@ -1209,6 +1267,9 @@ onUnmounted(() => {
   gap: 4px;
   align-items: flex-start;
   margin: 0;
+}
+
+:deep(.mapping-cell-chips--truncated) {
   max-height: calc(3 * 1.35em);
   overflow: hidden;
 }
@@ -1230,11 +1291,6 @@ onUnmounted(() => {
 @media (max-width: 1024px) {
   .data-toolbar__group--search {
     min-width: 100%;
-  }
-
-  .data-toolbar__meta {
-    margin-left: 0;
-    width: 100%;
   }
 }
 </style>
