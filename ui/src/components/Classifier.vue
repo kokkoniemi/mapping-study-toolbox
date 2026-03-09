@@ -772,30 +772,33 @@ h1 {
 @media (min-width: 1280px) {
     .classifier-layout {
         grid-template-columns: minmax(0, 1fr) clamp(320px, 25vw, 460px);
-        align-items: start;
+        align-items: stretch;
     }
 
     .notebook-panel {
         display: flex;
         flex-direction: column;
-        position: sticky;
-        top: var(--layout-gutter, 12px);
-        align-self: start;
+        position: relative;
+        top: 0;
+        align-self: stretch;
         box-sizing: border-box;
         border: 1px solid #eaeaea;
         background: #fff;
         margin-top: 0;
         padding: 5px;
+        min-height: var(--sidebar-height, auto);
         height: var(--sidebar-height, auto);
-        max-height: var(--sidebar-height, none);
+        max-height: var(--sidebar-height, auto);
         overflow: hidden;
     }
 
     .comment--notebook {
         min-height: 0;
-        max-height: none;
+        max-height: 100%;
         height: 100%;
         flex: 1;
+        resize: none;
+        overflow: auto;
     }
 
     .comment--bottom {

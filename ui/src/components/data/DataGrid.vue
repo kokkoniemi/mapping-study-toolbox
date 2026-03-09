@@ -86,6 +86,7 @@ defineExpose({
 
 <style scoped lang="scss">
 .data-grid-shell {
+  --ht-wrapper-border-radius: 0;
   flex: 1;
   min-height: 0;
   width: 100%;
@@ -113,6 +114,20 @@ defineExpose({
 
 :deep(.ht_master .wtHolder) {
   overscroll-behavior: contain;
+}
+
+:deep(.handsontable.ht-wrapper),
+:deep(.handsontable.ht-wrapper::before),
+:deep(.handsontable .htCore),
+:deep(.handsontable .ht_clone_top .htCore),
+:deep(.handsontable .ht_clone_top_inline_start_corner .htCore) {
+  border-radius: 0 !important;
+}
+
+:deep(.handsontable .ht_clone_top_inline_start_corner thead tr:first-child th:first-child),
+:deep(.handsontable .ht_clone_top thead tr:first-child th:first-child),
+:deep(.handsontable .ht_master thead tr:first-child th:first-child) {
+  border-start-start-radius: 0 !important;
 }
 
 :deep(td.data-text-cell) {
