@@ -19,6 +19,14 @@ const defineRecord: ModelFactory<RecordModelStatic> = (sequelize: Sequelize, Dat
       referenceItems: DataTypes.JSON, // normalized Crossref references
       crossrefEnrichedAt: DataTypes.DATE,
       crossrefLastError: DataTypes.TEXT,
+      openAlexId: DataTypes.STRING,
+      citationCount: DataTypes.INTEGER,
+      openAlexReferenceItems: DataTypes.JSON, // normalized OpenAlex references
+      openAlexCitationItems: DataTypes.JSON, // normalized OpenAlex citations
+      openAlexTopicItems: DataTypes.JSON, // normalized OpenAlex topics
+      openAlexAuthorAffiliations: DataTypes.JSON, // flattened affiliation names
+      openAlexEnrichedAt: DataTypes.DATE,
+      openAlexLastError: DataTypes.TEXT,
       editedBy: DataTypes.STRING,
       comment: DataTypes.TEXT,
     },

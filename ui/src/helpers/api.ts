@@ -201,6 +201,25 @@ export interface CrossrefReferenceItem {
   firstPage: string | null;
 }
 
+export interface OpenAlexReferenceItem {
+  openAlexId: string | null;
+  doi: string | null;
+  title: string | null;
+  year: number | null;
+  url: string | null;
+  forum: string | null;
+  citedByCount: number | null;
+}
+
+export interface OpenAlexTopicItem {
+  id: string | null;
+  displayName: string | null;
+  score: number | null;
+  subfield: string | null;
+  field: string | null;
+  domain: string | null;
+}
+
 export interface RecordItem {
   id: number;
   title: string;
@@ -213,6 +232,14 @@ export interface RecordItem {
   referenceItems?: CrossrefReferenceItem[] | null;
   crossrefEnrichedAt?: string | null;
   crossrefLastError?: string | null;
+  openAlexId?: string | null;
+  citationCount?: number | null;
+  openAlexReferenceItems?: OpenAlexReferenceItem[] | null;
+  openAlexCitationItems?: OpenAlexReferenceItem[] | null;
+  openAlexTopicItems?: OpenAlexTopicItem[] | null;
+  openAlexAuthorAffiliations?: string[] | null;
+  openAlexEnrichedAt?: string | null;
+  openAlexLastError?: string | null;
   abstract: string | null;
   createdAt: string;
   updatedAt: string;
@@ -237,7 +264,7 @@ export interface EnrichmentJobResult {
 
 export interface EnrichmentJob {
   jobId: string;
-  status: "queued" | "running" | "completed" | "failed";
+  status: "queued" | "running" | "completed" | "failed" | "cancelled";
   total: number;
   processed: number;
   createdAt: string;
@@ -245,10 +272,18 @@ export interface EnrichmentJob {
   finishedAt: string | null;
   results: EnrichmentJobResult[];
   updatedRecords: RecordItem[];
+  metrics: {
+    crossref: { records: number; requests: number };
+    openalex: { records: number; requests: number };
+    jufo: { records: number; requests: number };
+  };
 }
 
 type CreateEnrichmentJobPayload = {
   recordIds: number[];
+  provider?: "crossref" | "openalex" | "all";
+  maxCitations?: number | null;
+  forceRefresh?: boolean;
 };
 
 interface MappingQuestionsIndexResponse {
@@ -313,6 +348,8 @@ export const records = {
       http.post<EnrichmentJob, CreateEnrichmentJobPayload>("records/enrichment-jobs", data, { params }),
     getJob: (jobId: string, params?: QueryParams) =>
       http.get<EnrichmentJob>(`records/enrichment-jobs/${jobId}`, { params }),
+    cancelJob: (jobId: string, params?: QueryParams) =>
+      http.post<EnrichmentJob, Record<string, never>>(`records/enrichment-jobs/${jobId}/cancel`, {}, { params }),
   },
 };
 

@@ -40,6 +40,56 @@
                     </div>
                 </div>
 
+                <section class="literature-lists">
+                    <div class="literature-list">
+                        <div class="literature-list__header">
+                            <h4>References ({{ referenceDisplayItems.length }})</h4>
+                            <button class="literature-list__toggle" @click="toggleReferencesVisibility">
+                                {{ showReferences ? "See less" : "See more" }}
+                            </button>
+                        </div>
+                        <ul v-if="showReferences" class="literature-list__items">
+                            <li v-for="(item, index) in referenceDisplayItems" :key="`ref-${item.key}-${index}`">
+                                <span v-if="item.title">{{ item.title }}</span>
+                                <span v-else class="literature-list__muted">Untitled reference</span>
+                                <template v-if="item.year"> ({{ item.year }})</template>
+                                <template v-if="item.forum"> - {{ item.forum }}</template>
+                                <template v-if="item.doi">
+                                    - <a :href="`https://doi.org/${item.doi}`" target="_blank" rel="noopener noreferrer">doi:{{ item.doi }}</a>
+                                </template>
+                                <template v-if="item.url && !item.doi">
+                                    - <a :href="item.url" target="_blank" rel="noopener noreferrer">link</a>
+                                </template>
+                            </li>
+                            <li v-if="referenceDisplayItems.length === 0" class="literature-list__muted">No references available.</li>
+                        </ul>
+                    </div>
+
+                    <div class="literature-list">
+                        <div class="literature-list__header">
+                            <h4>Citations ({{ citationDisplayItems.length }})</h4>
+                            <button class="literature-list__toggle" @click="toggleCitationsVisibility">
+                                {{ showCitations ? "See less" : "See more" }}
+                            </button>
+                        </div>
+                        <ul v-if="showCitations" class="literature-list__items">
+                            <li v-for="(item, index) in citationDisplayItems" :key="`cit-${item.key}-${index}`">
+                                <span v-if="item.title">{{ item.title }}</span>
+                                <span v-else class="literature-list__muted">Untitled citation</span>
+                                <template v-if="item.year"> ({{ item.year }})</template>
+                                <template v-if="item.forum"> - {{ item.forum }}</template>
+                                <template v-if="item.doi">
+                                    - <a :href="`https://doi.org/${item.doi}`" target="_blank" rel="noopener noreferrer">doi:{{ item.doi }}</a>
+                                </template>
+                                <template v-if="item.url && !item.doi">
+                                    - <a :href="item.url" target="_blank" rel="noopener noreferrer">link</a>
+                                </template>
+                            </li>
+                            <li v-if="citationDisplayItems.length === 0" class="literature-list__muted">No citations available.</li>
+                        </ul>
+                    </div>
+                </section>
+
                 <section class="bottom-bar">
                     <div class="bottom-bar__center">
                         <div class="bottom-bar__actions">
@@ -82,6 +132,15 @@ import MappingActions from "./MappingActions.vue";
 import { debounce, keyCodes } from "../helpers/utils";
 import { defaultStore } from "../stores/default";
 
+type LiteratureDisplayItem = {
+  key: string;
+  title: string | null;
+  year: string | number | null;
+  forum: string | null;
+  doi: string | null;
+  url: string | null;
+};
+
 const store = defaultStore();
 const { pageItems, pageLength, page, statusFilter, tab, moveLock, mappingQuestions, currentItem } =
   storeToRefs(store);
@@ -95,6 +154,39 @@ const COLLAPSED_CONTENT_MAX_CHARS = 1400;
 const COLLAPSED_CONTENT_MAX_LINES = 18;
 
 const showFullContent = ref(false);
+const showReferences = ref(false);
+const showCitations = ref(false);
+const DOI_URL_PATTERN = /^https?:\/\/(?:dx\.)?doi\.org\/(.+)$/i;
+
+const normalizeDoi = (value: string | null | undefined): string | null => {
+  if (!value) {
+    return null;
+  }
+
+  const normalized = value
+    .trim()
+    .replace(/^doi:\s*/i, "")
+    .replace(DOI_URL_PATTERN, "$1")
+    .trim();
+
+  return normalized.length ? normalized : null;
+};
+
+const extractDoiFromUrl = (value: string | null | undefined): string | null => {
+  if (!value) {
+    return null;
+  }
+
+  const match = value.trim().match(DOI_URL_PATTERN);
+  if (!match || !match[1]) {
+    return null;
+  }
+  try {
+    return normalizeDoi(decodeURIComponent(match[1]));
+  } catch {
+    return normalizeDoi(match[1]);
+  }
+};
 
 const normalizedCenterText = computed(() => {
   const raw = currentItem.value?.abstract ?? "";
@@ -118,6 +210,47 @@ const toggleContentVisibility = () => {
   if (activeElement?.classList.contains("content-toggle")) {
     activeElement.blur();
   }
+};
+
+const referenceDisplayItems = computed<LiteratureDisplayItem[]>(() => {
+  const crossrefReferences = currentItem.value?.referenceItems ?? [];
+  return crossrefReferences.map((item) => ({
+    key: item.key ?? `${item.doi ?? item.articleTitle ?? item.unstructured ?? "ref"}`,
+    title: item.articleTitle ?? item.unstructured ?? null,
+    year: item.year ?? null,
+    forum: item.journalTitle ?? null,
+    doi: normalizeDoi(item.doi),
+    url: null,
+  }));
+});
+
+const citationDisplayItems = computed<LiteratureDisplayItem[]>(() => {
+  const citations = currentItem.value?.openAlexCitationItems ?? [];
+  return citations.map((item) => ({
+    key: item.openAlexId ?? `${item.doi ?? item.title ?? "citation"}`,
+    title: item.title ?? null,
+    year: item.year ?? null,
+    forum: item.forum ?? null,
+    doi: normalizeDoi(item.doi) ?? extractDoiFromUrl(item.url),
+    url: item.url ?? null,
+  }));
+});
+
+const blurToggleIfNeeded = () => {
+  const activeElement = document.activeElement as HTMLElement | null;
+  if (activeElement?.classList.contains("literature-list__toggle")) {
+    activeElement.blur();
+  }
+};
+
+const toggleReferencesVisibility = () => {
+  showReferences.value = !showReferences.value;
+  blurToggleIfNeeded();
+};
+
+const toggleCitationsVisibility = () => {
+  showCitations.value = !showCitations.value;
+  blurToggleIfNeeded();
 };
 
 const createdFormatted = computed(() => {
@@ -228,6 +361,8 @@ watch(
   () => currentItem.value?.id,
   () => {
     showFullContent.value = false;
+    showReferences.value = false;
+    showCitations.value = false;
   },
 );
 
@@ -408,6 +543,63 @@ h1 {
     &:hover {
         color: #233496;
         background: #f7f7f7;
+    }
+}
+
+.literature-lists {
+    border-top: 1px solid #eaeaea;
+    margin-top: 8px;
+    padding-top: 8px;
+}
+
+.literature-list {
+    +.literature-list {
+        margin-top: 8px;
+    }
+
+    &__header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+
+        h4 {
+            margin: 0;
+            font-size: 14px;
+            color: #3b4c5d;
+        }
+    }
+
+    &__toggle {
+        padding: 2px 6px;
+        border: 0;
+        background: #fff;
+        border-radius: 3px;
+        color: #3750dc;
+        font-size: 12px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.02em;
+
+        &:hover {
+            color: #233496;
+            background: #f7f7f7;
+        }
+    }
+
+    &__items {
+        margin: 6px 0 0;
+        padding-left: 18px;
+        line-height: 1.35;
+        font-size: 12px;
+        color: #3a3a3a;
+        max-height: 220px;
+        overflow: auto;
+    }
+
+    &__muted {
+        color: #8a8a8a;
+        font-style: italic;
     }
 }
 

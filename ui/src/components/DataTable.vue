@@ -29,25 +29,46 @@
       </div>
 
       <div class="data-toolbar__group data-toolbar__group--enrichment">
-        <label>Crossref</label>
-        <div class="data-toolbar__actions">
-          <button type="button" @click="selectAllLoadedRecords" :disabled="dataItems.length === 0 || enrichmentRunning">
-            Select loaded
-          </button>
-          <button type="button" @click="clearSelectedRecords" :disabled="selectedRecordCount === 0 || enrichmentRunning">
-            Clear
-          </button>
-          <button
-            type="button"
-            class="data-toolbar__primary"
-            @click="enrichSelectedRecords"
-            :disabled="selectedRecordCount === 0 || enrichmentRunning"
-          >
-            Enrich selected
-          </button>
-        </div>
+        <label>Service</label>
+        <select v-model="enrichmentProvider" :disabled="enrichmentRunning">
+          <option value="crossref">Crossref</option>
+          <option value="openalex">OpenAlex</option>
+          <option value="all">Crossref + OpenAlex</option>
+        </select>
       </div>
 
+      <div class="data-toolbar__group data-toolbar__group--refresh">
+        <label>Refresh</label>
+        <label class="data-toolbar__toggle">
+          <input v-model="enrichmentForceRefresh" type="checkbox" :disabled="enrichmentRunning" />
+          <span>Force refresh</span>
+        </label>
+      </div>
+
+      <div class="data-toolbar__actions">
+        <button type="button" @click="selectAllLoadedRecords" :disabled="dataItems.length === 0 || enrichmentRunning">
+          Select loaded
+        </button>
+        <button type="button" @click="clearSelectedRecords" :disabled="selectedRecordCount === 0 || enrichmentRunning">
+          Clear
+        </button>
+        <button
+          type="button"
+          class="data-toolbar__primary"
+          @click="enrichSelectedRecords"
+          :disabled="selectedRecordCount === 0 || enrichmentRunning"
+        >
+          Enrich selected
+        </button>
+        <button
+          type="button"
+          class="data-toolbar__danger"
+          @click="stopEnrichment"
+          :disabled="!enrichmentRunning || enrichmentStopping"
+        >
+          {{ enrichmentStopping ? "Stopping..." : "Stop" }}
+        </button>
+      </div>
     </header>
 
     <div
@@ -64,6 +85,15 @@
       <span v-if="enrichmentMessage" class="data-enrichment-status__text">{{ enrichmentMessage }}</span>
       <span v-if="enrichmentError" class="data-enrichment-status__text data-enrichment-status__text--error">
         {{ enrichmentError }}
+      </span>
+      <span class="data-enrichment-status__api">
+        Crossref: {{ enrichmentMetrics.crossref.records }} rec / {{ enrichmentMetrics.crossref.requests }} req
+      </span>
+      <span class="data-enrichment-status__api">
+        OpenAlex: {{ enrichmentMetrics.openalex.records }} rec / {{ enrichmentMetrics.openalex.requests }} req
+      </span>
+      <span class="data-enrichment-status__api">
+        JUFO: {{ enrichmentMetrics.jufo.records }} rec / {{ enrichmentMetrics.jufo.requests }} req
       </span>
     </div>
 
@@ -202,6 +232,14 @@ type HotInstance = {
   getCell?: (row: number, col: number, topmost?: boolean) => HTMLTableCellElement | null;
 };
 
+type EnrichmentMetrics = EnrichmentJob["metrics"];
+
+const createEmptyMetrics = (): EnrichmentMetrics => ({
+  crossref: { records: 0, requests: 0 },
+  openalex: { records: 0, requests: 0 },
+  jufo: { records: 0, requests: 0 },
+});
+
 const statusOptions: Array<{ label: string; value: StatusFilter }> = [
   { label: "All", value: "" },
   { label: "Unset", value: "null" },
@@ -236,10 +274,15 @@ const dataGridShellRef = ref<HTMLElement | null>(null);
 const searchInput = ref(searchFilter.value);
 const selectedRecordIds = ref<number[]>([]);
 const enrichmentRunning = ref(false);
+const enrichmentStopping = ref(false);
+const activeEnrichmentJobId = ref<string | null>(null);
 const enrichmentMessage = ref("");
 const enrichmentError = ref("");
 const enrichmentProcessed = ref(0);
 const enrichmentTotal = ref(0);
+const enrichmentMetrics = ref<EnrichmentMetrics>(createEmptyMetrics());
+const enrichmentProvider = ref<"crossref" | "openalex" | "all">("all");
+const enrichmentForceRefresh = ref(false);
 const gridHeight = ref(520);
 const defaultRowHeight = 62;
 const tableAutoRowSize = computed(() => !dataCellsTruncated.value);
@@ -317,6 +360,8 @@ const tableRows = computed<GridRow[]>(() =>
       alternateUrls: stringListToCell(record.alternateUrls),
       doi: record.doi ?? "",
       references: String(record.referenceItems?.length ?? 0),
+      citations: String(record.openAlexCitationItems?.length ?? record.citationCount ?? 0),
+      topics: stringListToCell(record.openAlexTopicItems?.map((topic) => topic.displayName ?? "") ?? []),
       createdAt: formatTimestamp(record.createdAt),
       updatedAt: formatTimestamp(record.updatedAt),
     };
@@ -356,6 +401,8 @@ const trailingColumns: Array<{ header: string; settings: ColumnSettings }> = [
     settings: { data: "forum", readOnly: true, renderer: truncatedTextRenderer, width: 240 },
   },
   { header: "references", settings: { data: "references", readOnly: true, width: 100 } },
+  { header: "citations", settings: { data: "citations", readOnly: true, width: 100 } },
+  { header: "topics", settings: { data: "topics", readOnly: true, renderer: truncatedTextRenderer, width: 220 } },
   { header: "url", settings: { data: "url", type: "text", renderer: truncatedTextRenderer, width: 260 } },
   { header: "databases", settings: { data: "databases", type: "text", renderer: truncatedTextRenderer, width: 220 } },
   {
@@ -791,7 +838,11 @@ const summarizeJob = (job: EnrichmentJob) => {
   const enrichedCount = job.results.filter((result) => result.status === "enriched").length;
   const failedCount = job.results.filter((result) => result.status === "failed").length;
   const skippedCount = job.results.filter((result) => result.status === "skipped").length;
-  return `Enriched ${enrichedCount}, failed ${failedCount}, skipped ${skippedCount}`;
+  const base = `Enriched ${enrichedCount}, failed ${failedCount}, skipped ${skippedCount}`;
+  if (job.status === "cancelled") {
+    return `Cancelled at ${job.processed} / ${job.total}. ${base}`;
+  }
+  return base;
 };
 
 const waitForJobCompletion = async (jobId: string) => {
@@ -806,9 +857,10 @@ const waitForJobCompletion = async (jobId: string) => {
     const job = response.data;
     enrichmentProcessed.value = job.processed;
     enrichmentTotal.value = job.total;
-    enrichmentMessage.value = `Crossref enrichment ${job.processed} / ${job.total}`;
+    enrichmentMetrics.value = job.metrics ?? createEmptyMetrics();
+    enrichmentMessage.value = `Enrichment ${job.processed} / ${job.total}`;
 
-    if (job.status === "completed" || job.status === "failed") {
+    if (job.status === "completed" || job.status === "failed" || job.status === "cancelled") {
       updateStoreFromEnrichmentJob(job);
       enrichmentMessage.value = summarizeJob(job);
       return;
@@ -823,21 +875,51 @@ const enrichSelectedRecords = async () => {
     return;
   }
 
+  const providerLabel =
+    enrichmentProvider.value === "all"
+      ? "Crossref + OpenAlex"
+      : enrichmentProvider.value === "openalex"
+        ? "OpenAlex"
+        : "Crossref";
+
   enrichmentRunning.value = true;
+  enrichmentStopping.value = false;
+  activeEnrichmentJobId.value = null;
   enrichmentError.value = "";
-  enrichmentMessage.value = "Starting Crossref enrichment...";
+  enrichmentMessage.value = `Starting ${providerLabel} enrichment...`;
   enrichmentProcessed.value = 0;
   enrichmentTotal.value = selectedRecordIds.value.length;
+  enrichmentMetrics.value = createEmptyMetrics();
 
   try {
     const response = await records.enrichment.createJob({
       recordIds: selectedRecordIds.value,
+      provider: enrichmentProvider.value,
+      forceRefresh: enrichmentForceRefresh.value,
     });
+    activeEnrichmentJobId.value = response.data.jobId;
     await waitForJobCompletion(response.data.jobId);
   } catch (error) {
     enrichmentError.value = getErrorMessage(error);
   } finally {
     enrichmentRunning.value = false;
+    enrichmentStopping.value = false;
+    activeEnrichmentJobId.value = null;
+  }
+};
+
+const stopEnrichment = async () => {
+  if (!enrichmentRunning.value || enrichmentStopping.value || !activeEnrichmentJobId.value) {
+    return;
+  }
+
+  enrichmentStopping.value = true;
+  try {
+    await records.enrichment.cancelJob(activeEnrichmentJobId.value);
+    enrichmentMessage.value = "Stopping enrichment...";
+  } catch (error) {
+    enrichmentError.value = getErrorMessage(error);
+    enrichmentStopping.value = false;
   }
 };
 
@@ -1154,12 +1236,12 @@ onUnmounted(() => {
       margin-left: 2px;
     }
 
-    &--enrichment {
-      min-width: 320px;
+    &--enrichment,
+    &--refresh {
+      min-width: 140px;
       border-left: 1px solid #dddddd;
       padding-left: 10px;
       margin-left: 2px;
-      align-self: flex-end;
     }
   }
 
@@ -1196,33 +1278,40 @@ onUnmounted(() => {
   }
 
   &__actions {
+    margin-left: auto;
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
     align-items: center;
+  }
 
-    button {
-      height: 30px;
-      padding: 0 10px;
-      border: 1px solid #dedede;
-      background: #ffffff;
-      color: #5b5858;
-      font-size: 12px;
+  button {
+    height: 30px;
+    padding: 0 10px;
+    border: 1px solid #dedede;
+    background: #ffffff;
+    color: #5b5858;
+    font-size: 12px;
 
-      &:hover:not(:disabled) {
-        background: #f6f6f6;
-      }
+    &:hover:not(:disabled) {
+      background: #f6f6f6;
+    }
 
-      &:disabled {
-        opacity: 0.6;
-        cursor: default;
-      }
+    &:disabled {
+      opacity: 0.6;
+      cursor: default;
     }
   }
 
   &__primary {
     border-color: #3c67d8 !important;
     color: #2d4fc9 !important;
+    font-weight: 600;
+  }
+
+  &__danger {
+    border-color: #b85757 !important;
+    color: #8c2e2e !important;
     font-weight: 600;
   }
 }
@@ -1278,6 +1367,11 @@ onUnmounted(() => {
     &--error {
       color: #8e2b2b;
     }
+  }
+
+  &__api {
+    color: #636363;
+    white-space: nowrap;
   }
 }
 
@@ -1599,11 +1693,18 @@ onUnmounted(() => {
 @media (max-width: 1024px) {
   .data-toolbar__group--search,
   .data-toolbar__group--toggle,
-  .data-toolbar__group--enrichment {
+  .data-toolbar__group--enrichment,
+  .data-toolbar__group--refresh {
     min-width: 100%;
     margin-left: 0;
     padding-left: 0;
     border-left: 0;
+  }
+
+  .data-toolbar__actions {
+    min-width: 100%;
+    margin-left: 0;
+    justify-content: flex-start;
   }
 }
 </style>

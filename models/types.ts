@@ -101,6 +101,25 @@ export interface CrossrefReferenceItem {
   firstPage: string | null;
 }
 
+export interface OpenAlexReferenceItem {
+  openAlexId: string | null;
+  doi: string | null;
+  title: string | null;
+  year: number | null;
+  url: string | null;
+  forum: string | null;
+  citedByCount: number | null;
+}
+
+export interface OpenAlexTopicItem {
+  id: string | null;
+  displayName: string | null;
+  score: number | null;
+  subfield: string | null;
+  field: string | null;
+  domain: string | null;
+}
+
 export interface RecordAttributes {
   id: number;
   title: string | null;
@@ -115,6 +134,14 @@ export interface RecordAttributes {
   referenceItems: CrossrefReferenceItem[] | null;
   crossrefEnrichedAt: Date | null;
   crossrefLastError: string | null;
+  openAlexId: string | null;
+  citationCount: number | null;
+  openAlexReferenceItems: OpenAlexReferenceItem[] | null;
+  openAlexCitationItems: OpenAlexReferenceItem[] | null;
+  openAlexTopicItems: OpenAlexTopicItem[] | null;
+  openAlexAuthorAffiliations: string[] | null;
+  openAlexEnrichedAt: Date | null;
+  openAlexLastError: string | null;
   forumId: number | null;
   editedBy: string | null;
   comment: string | null;

@@ -123,10 +123,23 @@ UI dev server runs on http://localhost:8080 and calls backend API at http://loca
 - `PATCH /api/records/:id` for partial record updates used by the Data tab.
 - `POST /api/records/enrichment-jobs` to start bulk Crossref enrichment for selected record IDs.
 - `GET /api/records/enrichment-jobs/:jobId` to poll job progress/results.
+- `POST /api/records/enrichment-jobs/:jobId/cancel` to stop queued/running enrichment jobs.
 
-### Crossref enrichment
-- In the `Data` tab, select rows (leftmost checkbox column) and click `Enrich selected`.
+### Crossref + OpenAlex enrichment
+- In the `Data` tab, select rows (leftmost checkbox column), choose service (`Crossref`, `OpenAlex`, or `Crossref + OpenAlex`), then click `Enrich selected`.
+- Default service is `Crossref + OpenAlex`.
+- You can stop a running job with the `Stop` button (cancels after the current record finishes).
 - Enrichment updates record DOI/author details/references and forum metadata (`publisher`, `issn`, `jufoLevel` when found).
+- OpenAlex enrichment updates:
+  - citation count
+  - citation list (title/doi/link/year/forum)
+  - topic list
+  - author affiliations
+- Reference list comes from Crossref only.
+- Reference titles are backfilled from Crossref by DOI when missing (bounded by `CROSSREF_REFERENCE_TITLE_LOOKUP_MAX`, default `12` lookups per record).
+- During processing, the status panel shows per-API counters:
+  - records processed via Crossref/OpenAlex/JUFO
+  - request counts sent to Crossref/OpenAlex/JUFO
 - DOI detection order:
   1. try extracting DOI from `url` / `alternateUrls`
   2. fallback to Crossref title + author search
@@ -139,9 +152,25 @@ UI dev server runs on http://localhost:8080 and calls backend API at http://loca
 - Optional env vars:
   - `CROSSREF_BASE_URL` (default `https://api.crossref.org`)
   - `CROSSREF_MAILTO` (recommended contact email for Crossref requests)
+  - `CROSSREF_REFERENCE_TITLE_LOOKUP_MAX` (default `12`)
+  - `OPENALEX_BASE_URL` (default `https://api.openalex.org`)
+  - `OPENALEX_API_KEY` (required for OpenAlex access)
+  - `OPENALEX_MIN_DELAY_MS` (default `250`)
+  - `OPENALEX_MAX_DELAY_MS` (default `800`)
+  - `OPENALEX_REFRESH_MS` (default `30 days`)
+  - `OPENALEX_MAX_CITATIONS` (optional hard cap; default `5000`)
   - `JUFO_BASE_URL` (default `https://jufo-rest.csc.fi/v1.1`)
   - `JUFO_MIN_DELAY_MS` (default `500`)
   - `JUFO_MAX_DELAY_MS` (default `1000`)
+
+### Where to put `OPENALEX_API_KEY`
+- Docker: add `OPENALEX_API_KEY` under `services.backend.environment` in `docker-compose.yml` (or use `${OPENALEX_API_KEY}` with a local `.env` file).
+- Local non-docker: export env var before starting backend, for example:
+```shell
+export OPENALEX_API_KEY='your-key-here'
+npm start
+```
+- Do not commit secrets into git-tracked files.
 
 ### Build UI for deployment/static hosting
 ```shell

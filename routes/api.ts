@@ -16,6 +16,7 @@ router.patch("/records/:id", records.patch);
 router.put("/records/:id", records.update);
 router.post("/records/enrichment-jobs", records.createEnrichment);
 router.get("/records/enrichment-jobs/:jobId", records.getEnrichment);
+router.post("/records/enrichment-jobs/:jobId/cancel", records.cancelEnrichment);
 router.post("/records/:recordId/mapping-options", records.createOption);
 router.delete("/records/:recordId/mapping-options/:mappingOptionId", records.removeOption);
 

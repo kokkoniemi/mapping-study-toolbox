@@ -16,6 +16,7 @@ services:
       - "3000:3000"
     environment:
       NODE_ENV: development
+      OPENALEX_API_KEY: ${OPENALEX_API_KEY:-}
     healthcheck:
       test:
         [

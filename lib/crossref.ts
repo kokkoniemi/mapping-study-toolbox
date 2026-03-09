@@ -270,6 +270,8 @@ export const pickBestSearchWork = (
 };
 
 export class CrossrefClient {
+  public requestCount = 0;
+
   private lastRequestAt = 0;
 
   private async waitForRequestSlot() {
@@ -305,6 +307,7 @@ export class CrossrefClient {
       const timeoutId = setTimeout(() => controller.abort(), CROSSREF_TIMEOUT_MS);
 
       try {
+        this.requestCount += 1;
         const response = await fetch(url, {
           method: "GET",
           headers: {

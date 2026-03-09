@@ -29,6 +29,7 @@ const dbMock = vi.hoisted(() => ({
 const enrichmentMock = vi.hoisted(() => ({
   createEnrichmentJob: vi.fn(),
   getEnrichmentJob: vi.fn(),
+  cancelEnrichmentJob: vi.fn(),
 }));
 
 vi.mock("../models", () => ({
@@ -68,6 +69,7 @@ describeWhenSocketAllowed("API integration", () => {
     dbMock.RecordMappingOption.destroy.mockReset();
     enrichmentMock.createEnrichmentJob.mockReset();
     enrichmentMock.getEnrichmentJob.mockReset();
+    enrichmentMock.cancelEnrichmentJob.mockReset();
   });
 
   it("GET /api/health returns ok", async () => {
@@ -220,6 +222,29 @@ describeWhenSocketAllowed("API integration", () => {
       jobId: "job-2",
       status: "completed",
       processed: 1,
+    });
+  });
+
+  it("POST /api/records/enrichment-jobs/:id/cancel cancels job", async () => {
+    enrichmentMock.cancelEnrichmentJob.mockReturnValue({
+      jobId: "job-3",
+      status: "cancelled",
+      total: 5,
+      processed: 2,
+      createdAt: "2026-03-09T00:00:00.000Z",
+      startedAt: "2026-03-09T00:00:01.000Z",
+      finishedAt: "2026-03-09T00:00:02.000Z",
+      results: [],
+      updatedRecords: [],
+    });
+
+    const app = createApp();
+    const response = await request(app).post("/api/records/enrichment-jobs/job-3/cancel").send({});
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      jobId: "job-3",
+      status: "cancelled",
     });
   });
 

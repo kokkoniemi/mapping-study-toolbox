@@ -28,11 +28,13 @@ vi.mock("../models", () => ({ default: dbMock }));
 const enrichmentMock = vi.hoisted(() => ({
   createEnrichmentJob: vi.fn(),
   getEnrichmentJob: vi.fn(),
+  cancelEnrichmentJob: vi.fn(),
 }));
 
 vi.mock("../lib/recordEnrichment", () => enrichmentMock);
 
 import {
+  cancelEnrichment,
   createEnrichment,
   createOption,
   getEnrichment,
@@ -62,6 +64,7 @@ describe("routes/records", () => {
     dbMock.RecordMappingOption.destroy.mockReset();
     enrichmentMock.createEnrichmentJob.mockReset();
     enrichmentMock.getEnrichmentJob.mockReset();
+    enrichmentMock.cancelEnrichmentJob.mockReset();
   });
 
   it("listing returns count + records with applied filters", async () => {
@@ -230,13 +233,17 @@ describe("routes/records", () => {
     });
 
     const req = {
-      body: { recordIds: [1, 2] },
+      body: { recordIds: [1, 2], provider: "openalex", maxCitations: 20, forceRefresh: true },
     } as unknown as Request;
     const res = mockResponse();
 
     await createEnrichment(req, res);
 
-    expect(enrichmentMock.createEnrichmentJob).toHaveBeenCalledWith([1, 2]);
+    expect(enrichmentMock.createEnrichmentJob).toHaveBeenCalledWith([1, 2], {
+      provider: "openalex",
+      maxCitations: 20,
+      forceRefresh: true,
+    });
     expect(res.status).toHaveBeenCalledWith(202);
     expect(res.send).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -249,6 +256,16 @@ describe("routes/records", () => {
   it("createEnrichment rejects empty record id list", async () => {
     const req = {
       body: { recordIds: [] },
+    } as unknown as Request;
+    const res = mockResponse();
+
+    await expect(createEnrichment(req, res)).rejects.toBeInstanceOf(ApiError);
+    expect(enrichmentMock.createEnrichmentJob).not.toHaveBeenCalled();
+  });
+
+  it("createEnrichment rejects unsupported provider", async () => {
+    const req = {
+      body: { recordIds: [1], provider: "bad-provider" },
     } as unknown as Request;
     const res = mockResponse();
 
@@ -292,5 +309,33 @@ describe("routes/records", () => {
     const res = mockResponse();
 
     await expect(getEnrichment(req, res)).rejects.toBeInstanceOf(ApiError);
+  });
+
+  it("cancelEnrichment cancels running job", async () => {
+    enrichmentMock.cancelEnrichmentJob.mockReturnValue({
+      jobId: "job-3",
+      status: "cancelled",
+      total: 10,
+      processed: 4,
+      createdAt: "2026-03-09T00:00:00.000Z",
+      startedAt: "2026-03-09T00:00:01.000Z",
+      finishedAt: "2026-03-09T00:00:02.000Z",
+      results: [],
+      updatedRecords: [],
+    });
+    const req = {
+      params: { jobId: "job-3" },
+    } as unknown as Request;
+    const res = mockResponse();
+
+    await cancelEnrichment(req, res);
+
+    expect(enrichmentMock.cancelEnrichmentJob).toHaveBeenCalledWith("job-3");
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jobId: "job-3",
+        status: "cancelled",
+      }),
+    );
   });
 });

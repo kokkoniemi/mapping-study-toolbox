@@ -2,7 +2,7 @@ import type { Request, Response } from "express";
 import { Op } from "sequelize";
 
 import { badRequest, notFound } from "../lib/http";
-import { createEnrichmentJob, getEnrichmentJob } from "../lib/recordEnrichment";
+import { cancelEnrichmentJob, createEnrichmentJob, getEnrichmentJob } from "../lib/recordEnrichment";
 import {
   assertAllowedKeys,
   parseIntegerArray,
@@ -304,7 +304,11 @@ export const removeOption = async (req: Request, res: Response) => {
 
 export const createEnrichment = async (req: Request, res: Response) => {
   const body = parseObject(req.body, "body");
-  assertAllowedKeys(body, ["recordIds"], "enrichment job body");
+  assertAllowedKeys(
+    body,
+    ["recordIds", "provider", "maxCitations", "forceRefresh"],
+    "enrichment job body",
+  );
 
   const recordIds = parseIntegerArray(body.recordIds, "recordIds", {
     min: 1,
@@ -315,7 +319,34 @@ export const createEnrichment = async (req: Request, res: Response) => {
     throw badRequest("recordIds are required");
   }
 
-  const job = createEnrichmentJob(recordIds);
+  const provider = parseString(body.provider, "provider", {
+    optional: true,
+    trim: true,
+    allowEmpty: false,
+    maxLength: 20,
+  });
+  if (provider !== undefined && !["crossref", "openalex", "all"].includes(provider)) {
+    throw badRequest("provider must be one of: crossref, openalex, all");
+  }
+
+  const maxCitations = body.maxCitations === undefined
+    ? undefined
+    : parseInteger(body.maxCitations, "maxCitations", {
+      min: 0,
+      max: 50000,
+    });
+
+  const forceRefreshRaw = body.forceRefresh;
+  if (forceRefreshRaw !== undefined && typeof forceRefreshRaw !== "boolean") {
+    throw badRequest("forceRefresh must be a boolean");
+  }
+  const forceRefresh = forceRefreshRaw === true;
+
+  const job = createEnrichmentJob(recordIds, {
+    ...(provider !== undefined ? { provider: provider as "crossref" | "openalex" | "all" } : {}),
+    ...(maxCitations !== undefined ? { maxCitations } : {}),
+    forceRefresh,
+  });
   return res.status(202).send(job);
 };
 
@@ -330,6 +361,24 @@ export const getEnrichment = async (req: Request, res: Response) => {
   }
 
   const job = getEnrichmentJob(jobId);
+  if (!job) {
+    throw notFound(`Enrichment job ${jobId} not found`);
+  }
+
+  return res.send(job);
+};
+
+export const cancelEnrichment = async (req: Request, res: Response) => {
+  const jobId = parseString(req.params.jobId, "jobId", {
+    trim: true,
+    allowEmpty: false,
+    maxLength: 120,
+  });
+  if (!jobId) {
+    throw badRequest("jobId is required");
+  }
+
+  const job = cancelEnrichmentJob(jobId);
   if (!job) {
     throw notFound(`Enrichment job ${jobId} not found`);
   }

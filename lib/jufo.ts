@@ -228,6 +228,8 @@ export const extractJufoName = (payload: unknown): string | null => {
 };
 
 export class JufoClient {
+  public requestCount = 0;
+
   private lastRequestAt = 0;
 
   private async waitForRequestSlot() {
@@ -260,6 +262,7 @@ export class JufoClient {
       const timeoutId = setTimeout(() => controller.abort(), JUFO_TIMEOUT_MS);
 
       try {
+        this.requestCount += 1;
         const response = await fetch(url, {
           method: "GET",
           headers: {

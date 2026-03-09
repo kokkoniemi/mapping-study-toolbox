@@ -11,9 +11,32 @@ import {
   type CrossrefWork,
 } from "./crossref";
 import { JufoClient, type JufoLookupResult } from "./jufo";
+import { OpenAlexClient, type OpenAlexResolvedWork } from "./openalex";
 
-type JobStatus = "queued" | "running" | "completed" | "failed";
+type JobStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
 type ResultStatus = "enriched" | "skipped" | "failed";
+type EnrichmentProvider = "crossref" | "openalex" | "all";
+
+export type EnrichmentJobMetrics = {
+  crossref: {
+    records: number;
+    requests: number;
+  };
+  openalex: {
+    records: number;
+    requests: number;
+  };
+  jufo: {
+    records: number;
+    requests: number;
+  };
+};
+
+export type EnrichmentJobOptions = {
+  provider?: EnrichmentProvider;
+  maxCitations?: number | null;
+  forceRefresh?: boolean;
+};
 
 export type EnrichmentJobResult = {
   recordId: number;
@@ -32,20 +55,25 @@ export type EnrichmentJobSnapshot = {
   finishedAt: string | null;
   results: EnrichmentJobResult[];
   updatedRecords: Array<Record<string, unknown>>;
+  metrics: EnrichmentJobMetrics;
 };
 
 type InternalJob = EnrichmentJobSnapshot & {
   recordIds: number[];
+  options: Required<EnrichmentJobOptions>;
+  cancelRequested: boolean;
   latestError?: string;
 };
 
-const crossrefClient = new CrossrefClient();
-const jufoClient = new JufoClient();
 const jobs = new Map<string, InternalJob>();
 const queue: InternalJob[] = [];
 let queueActive = false;
 const MAX_STORED_JOBS = 100;
 const JUFO_REFRESH_MS = Number.parseInt(process.env.JUFO_REFRESH_MS ?? String(1000 * 60 * 60 * 24 * 30), 10);
+const OPENALEX_REFRESH_MS = Number.parseInt(
+  process.env.OPENALEX_REFRESH_MS ?? String(1000 * 60 * 60 * 24 * 30),
+  10,
+);
 
 type ForumSnapshot = {
   id: number;
@@ -60,6 +88,53 @@ type ForumSnapshot = {
 type JobContext = {
   jufoByIssn: Map<string, JufoLookupResult | null>;
   jufoProcessedForumIds: Set<number>;
+  crossrefClient: CrossrefClient;
+  openAlexClient: OpenAlexClient;
+  jufoClient: JufoClient;
+  metrics: EnrichmentJobMetrics;
+  referenceMetadataByDoi: Map<string, {
+    articleTitle: string | null;
+    journalTitle: string | null;
+    year: string | null;
+  } | null>;
+};
+
+const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+const openAlexDefaultMaxCitationsRaw = Number.parseInt(process.env.OPENALEX_MAX_CITATIONS ?? "", 10);
+const OPENALEX_DEFAULT_MAX_CITATIONS =
+  process.env.OPENALEX_MAX_CITATIONS === undefined || !Number.isFinite(openAlexDefaultMaxCitationsRaw)
+    ? 5000
+    : clamp(openAlexDefaultMaxCitationsRaw, 0, 50_000);
+const crossrefReferenceTitleLookupLimitRaw = Number.parseInt(
+  process.env.CROSSREF_REFERENCE_TITLE_LOOKUP_MAX ?? "12",
+  10,
+);
+const CROSSREF_REFERENCE_TITLE_LOOKUP_MAX = Number.isFinite(crossrefReferenceTitleLookupLimitRaw)
+  ? clamp(crossrefReferenceTitleLookupLimitRaw, 0, 100)
+  : 12;
+
+const normalizeJobOptions = (options: EnrichmentJobOptions = {}): Required<EnrichmentJobOptions> => {
+  const provider: EnrichmentProvider = options.provider ?? "all";
+  const maxCitationsRaw = options.maxCitations;
+  const parsedMaxCitations = Number(maxCitationsRaw);
+  const maxCitations =
+    maxCitationsRaw === null || maxCitationsRaw === undefined
+      ? OPENALEX_DEFAULT_MAX_CITATIONS
+      : Number.isFinite(parsedMaxCitations)
+        ? clamp(parsedMaxCitations, 0, 50_000)
+        : OPENALEX_DEFAULT_MAX_CITATIONS;
+
+  return {
+    provider: provider === "openalex" || provider === "all" ? provider : "crossref",
+    maxCitations,
+    forceRefresh: Boolean(options.forceRefresh),
+  };
+};
+
+const syncRequestMetrics = (context: JobContext) => {
+  context.metrics.crossref.requests = context.crossrefClient.requestCount;
+  context.metrics.openalex.requests = context.openAlexClient.requestCount;
+  context.metrics.jufo.requests = context.jufoClient.requestCount;
 };
 
 const normalizeName = (value: string | null | undefined) =>
@@ -136,6 +211,103 @@ const normalizeReferenceItems = (references: CrossrefWork["reference"]): Crossre
     volume: reference.volume?.trim() || null,
     firstPage: reference["first-page"]?.trim() || null,
   }));
+};
+
+const pickFirstNonEmpty = (values: Array<string | null | undefined>) =>
+  values.find((value) => typeof value === "string" && value.trim().length > 0)?.trim() ?? null;
+
+const extractWorkYear = (work: CrossrefWork): string | null => {
+  const workWithDates = work as CrossrefWork & {
+    issued?: { "date-parts"?: Array<Array<number>> };
+    "published-print"?: { "date-parts"?: Array<Array<number>> };
+    "published-online"?: { "date-parts"?: Array<Array<number>> };
+    created?: { "date-parts"?: Array<Array<number>> };
+  };
+
+  const candidates = [
+    workWithDates.issued?.["date-parts"]?.[0]?.[0],
+    workWithDates["published-print"]?.["date-parts"]?.[0]?.[0],
+    workWithDates["published-online"]?.["date-parts"]?.[0]?.[0],
+    workWithDates.created?.["date-parts"]?.[0]?.[0],
+  ];
+
+  const year = candidates.find((value) => Number.isInteger(value) && Number(value) > 0);
+  return year ? String(year) : null;
+};
+
+const lookupReferenceMetadataByDoi = async (
+  doi: string,
+  context: JobContext,
+) => {
+  const normalizedDoi = sanitizeDoi(doi)?.toLocaleLowerCase();
+  if (!normalizedDoi) {
+    return null;
+  }
+
+  const cached = context.referenceMetadataByDoi.get(normalizedDoi);
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  const work = await context.crossrefClient.fetchWorkByDoi(normalizedDoi);
+  syncRequestMetrics(context);
+  if (!work) {
+    context.referenceMetadataByDoi.set(normalizedDoi, null);
+    return null;
+  }
+
+  const metadata = {
+    articleTitle: pickFirstNonEmpty(work.title ?? []),
+    journalTitle: pickFirstNonEmpty([
+      ...(work["container-title"] ?? []),
+      ...(work["short-container-title"] ?? []),
+    ]),
+    year: extractWorkYear(work),
+  };
+
+  context.referenceMetadataByDoi.set(normalizedDoi, metadata);
+  return metadata;
+};
+
+const enrichReferenceTitlesByDoi = async (
+  referenceItems: CrossrefReferenceItem[],
+  context: JobContext,
+) => {
+  if (CROSSREF_REFERENCE_TITLE_LOOKUP_MAX <= 0 || referenceItems.length === 0) {
+    return referenceItems;
+  }
+
+  let lookupCount = 0;
+  const enriched: CrossrefReferenceItem[] = [];
+
+  for (const item of referenceItems) {
+    if (item.articleTitle || !item.doi || lookupCount >= CROSSREF_REFERENCE_TITLE_LOOKUP_MAX) {
+      enriched.push(item);
+      continue;
+    }
+
+    lookupCount += 1;
+    let metadata: Awaited<ReturnType<typeof lookupReferenceMetadataByDoi>> = null;
+    try {
+      metadata = await lookupReferenceMetadataByDoi(item.doi, context);
+    } catch {
+      metadata = null;
+    }
+
+    if (!metadata) {
+      enriched.push(item);
+      continue;
+    }
+
+    enriched.push({
+      ...item,
+      articleTitle: item.articleTitle ?? metadata.articleTitle,
+      journalTitle: item.journalTitle ?? metadata.journalTitle,
+      year: item.year ?? metadata.year,
+    });
+  }
+
+  return enriched;
 };
 
 const pickForumName = (work: CrossrefWork) => {
@@ -223,6 +395,33 @@ const shouldRefreshJufo = (fetchedAt: Date | null) => {
 
   const age = Date.now() - fetchedAt.getTime();
   return age > JUFO_REFRESH_MS;
+};
+
+const toDateOrNull = (value: unknown): Date | null => {
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+
+  if (typeof value === "string") {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  return null;
+};
+
+const shouldRefreshOpenAlex = (enrichedAt: unknown, forceRefresh: boolean) => {
+  if (forceRefresh) {
+    return true;
+  }
+
+  const enrichedDate = toDateOrNull(enrichedAt);
+  if (!enrichedDate) {
+    return true;
+  }
+
+  const age = Date.now() - enrichedDate.getTime();
+  return age > OPENALEX_REFRESH_MS;
 };
 
 const updateForumFromWork = async (
@@ -377,6 +576,7 @@ const enrichForumWithJufo = async (
   }
 
   context.jufoProcessedForumIds.add(forum.id);
+  context.metrics.jufo.records += 1;
 
   const issn = normalizeIssn(forum.issn);
   if (!issn) {
@@ -393,7 +593,7 @@ const enrichForumWithJufo = async (
 
   let lookup = context.jufoByIssn.get(issn);
   if (lookup === undefined) {
-    lookup = await jufoClient.lookupByIssn(issn);
+    lookup = await context.jufoClient.lookupByIssn(issn);
     context.jufoByIssn.set(issn, lookup ?? null);
   }
 
@@ -418,10 +618,12 @@ const enrichForumWithJufo = async (
   return { message: null };
 };
 
-const enrichRecord = async (recordId: number, context: JobContext): Promise<{
+type EnrichRecordResult = {
   result: EnrichmentJobResult;
   updatedRecord?: Record<string, unknown>;
-}> => {
+};
+
+const enrichRecordWithCrossref = async (recordId: number, context: JobContext): Promise<EnrichRecordResult> => {
   const record = await db.Record.findByPk(recordId, { include: ["Forum", "MappingOptions"] });
   if (!record) {
     return {
@@ -441,11 +643,11 @@ const enrichRecord = async (recordId: number, context: JobContext): Promise<{
   let doiUsed: string | null = doiCandidate;
 
   if (doiCandidate) {
-    work = await crossrefClient.fetchWorkByDoi(doiCandidate);
+    work = await context.crossrefClient.fetchWorkByDoi(doiCandidate);
   }
 
   if (!work && record.title?.trim()) {
-    work = await crossrefClient.searchWorkByTitleAndAuthor(record.title, record.author);
+    work = await context.crossrefClient.searchWorkByTitleAndAuthor(record.title, record.author);
     doiUsed = sanitizeDoi(work?.DOI) ?? doiUsed;
   }
 
@@ -485,7 +687,8 @@ const enrichRecord = async (recordId: number, context: JobContext): Promise<{
   const normalizedDoi = sanitizeDoi(work.DOI) ?? doiUsed;
   const authorDetails = normalizeAuthorDetails(work.author);
   const displayAuthor = formatAuthorDisplay(authorDetails);
-  const referenceItems = normalizeReferenceItems(work.reference);
+  const normalizedReferenceItems = normalizeReferenceItems(work.reference);
+  const referenceItems = await enrichReferenceTitlesByDoi(normalizedReferenceItems, context);
   const forum = await updateForumFromWork(
     record as typeof record & { Forum?: Record<string, unknown> | null },
     work,
@@ -535,6 +738,181 @@ const enrichRecord = async (recordId: number, context: JobContext): Promise<{
   };
 };
 
+const resolveOpenAlexWork = async (
+  context: JobContext,
+  record: {
+    title?: string | null;
+    author?: string | null;
+    doi?: string | null;
+    url?: string | null;
+    alternateUrls?: string[] | null;
+  },
+) => {
+  const doiFromUrls = extractDoiFromRecordUrls(record.url, record.alternateUrls);
+  const doiFromRecord = sanitizeDoi(record.doi);
+  const doiCandidate = doiFromUrls ?? doiFromRecord;
+
+  let openAlexWork: OpenAlexResolvedWork | null = null;
+  let doiUsed: string | null = doiCandidate;
+
+  if (doiCandidate) {
+    openAlexWork = await context.openAlexClient.fetchWorkByDoi(doiCandidate);
+  }
+
+  if (!openAlexWork && record.title?.trim()) {
+    openAlexWork = await context.openAlexClient.searchWorkByTitleAndAuthor(record.title, record.author);
+    doiUsed = sanitizeDoi(openAlexWork?.doi) ?? doiUsed;
+  }
+
+  return { openAlexWork, doiUsed };
+};
+
+const enrichRecordWithOpenAlex = async (
+  recordId: number,
+  context: JobContext,
+  options: Required<EnrichmentJobOptions>,
+): Promise<EnrichRecordResult> => {
+  const record = await db.Record.findByPk(recordId, { include: ["Forum", "MappingOptions"] });
+  if (!record) {
+    return {
+      result: {
+        recordId,
+        status: "failed",
+        doi: null,
+        message: "Record not found",
+      },
+    };
+  }
+
+  if (!shouldRefreshOpenAlex(record.openAlexEnrichedAt, options.forceRefresh)) {
+    const refreshed = await db.Record.findByPk(record.id, { include: ["Forum", "MappingOptions"] });
+    return {
+      result: {
+        recordId,
+        status: "skipped",
+        doi: sanitizeDoi(record.doi),
+        message: "OpenAlex enrichment is fresh",
+      },
+      ...(refreshed ? { updatedRecord: toPlainRecord(refreshed) } : {}),
+    };
+  }
+
+  const { openAlexWork, doiUsed } = await resolveOpenAlexWork(context, record);
+  if (!openAlexWork || !openAlexWork.openAlexId) {
+    await record.update({
+      openAlexEnrichedAt: new Date(),
+      openAlexLastError: "OpenAlex metadata not found for this record",
+    });
+
+    const refreshed = await db.Record.findByPk(record.id, { include: ["Forum", "MappingOptions"] });
+    return {
+      result: {
+        recordId,
+        status: "failed",
+        doi: doiUsed,
+        message: "OpenAlex metadata not found",
+      },
+      ...(refreshed ? { updatedRecord: toPlainRecord(refreshed) } : {}),
+    };
+  }
+
+  const citationItems = await context.openAlexClient.fetchCitationsForWork(
+    openAlexWork.openAlexId,
+    options.maxCitations,
+  );
+
+  const updatePayload: Record<string, unknown> = {
+    openAlexId: openAlexWork.openAlexId,
+    citationCount: openAlexWork.citationCount,
+    openAlexReferenceItems: null,
+    openAlexCitationItems: citationItems,
+    openAlexTopicItems: openAlexWork.topics,
+    openAlexAuthorAffiliations: openAlexWork.authorAffiliations,
+    openAlexEnrichedAt: new Date(),
+    openAlexLastError: null,
+  };
+
+  if (!record.doi && openAlexWork.doi) {
+    updatePayload.doi = openAlexWork.doi;
+  }
+
+  await record.update(updatePayload);
+  const refreshed = await db.Record.findByPk(record.id, { include: ["Forum", "MappingOptions"] });
+
+  return {
+    result: {
+      recordId,
+      status: "enriched",
+      doi: openAlexWork.doi ?? doiUsed,
+    },
+    ...(refreshed ? { updatedRecord: toPlainRecord(refreshed) } : {}),
+  };
+};
+
+const mergeResults = (results: EnrichmentJobResult[]): EnrichmentJobResult => {
+  const [first] = results;
+  if (!first) {
+    return {
+      recordId: 0,
+      status: "failed",
+      doi: null,
+      message: "No enrichment providers executed",
+    };
+  }
+
+  const status: ResultStatus =
+    results.some((item) => item.status === "enriched")
+      ? "enriched"
+      : results.some((item) => item.status === "failed")
+        ? "failed"
+        : "skipped";
+
+  const doi = results.map((item) => item.doi).find((item) => Boolean(item)) ?? null;
+  const message = results
+    .map((item) => item.message?.trim())
+    .filter((item): item is string => Boolean(item))
+    .filter((item, index, all) => all.indexOf(item) === index)
+    .join("; ");
+
+  return {
+    recordId: first.recordId,
+    status,
+    doi,
+    ...(message ? { message } : {}),
+  };
+};
+
+const enrichRecord = async (
+  recordId: number,
+  context: JobContext,
+  options: Required<EnrichmentJobOptions>,
+): Promise<EnrichRecordResult> => {
+  const providerResults: EnrichRecordResult[] = [];
+
+  if (options.provider === "crossref" || options.provider === "all") {
+    context.metrics.crossref.records += 1;
+    providerResults.push(await enrichRecordWithCrossref(recordId, context));
+    syncRequestMetrics(context);
+  }
+
+  if (options.provider === "openalex" || options.provider === "all") {
+    context.metrics.openalex.records += 1;
+    providerResults.push(await enrichRecordWithOpenAlex(recordId, context, options));
+    syncRequestMetrics(context);
+  }
+
+  const mergedResult = mergeResults(providerResults.map((item) => item.result));
+  const lastUpdatedRecord = [...providerResults]
+    .reverse()
+    .find((item) => item.updatedRecord !== undefined)
+    ?.updatedRecord;
+
+  return {
+    result: mergedResult,
+    ...(lastUpdatedRecord ? { updatedRecord: lastUpdatedRecord } : {}),
+  };
+};
+
 const snapshot = (job: InternalJob): EnrichmentJobSnapshot => ({
   jobId: job.jobId,
   status: job.status,
@@ -545,6 +923,11 @@ const snapshot = (job: InternalJob): EnrichmentJobSnapshot => ({
   finishedAt: job.finishedAt,
   results: [...job.results],
   updatedRecords: [...job.updatedRecords],
+  metrics: {
+    crossref: { ...job.metrics.crossref },
+    openalex: { ...job.metrics.openalex },
+    jufo: { ...job.metrics.jufo },
+  },
 });
 
 const pruneJobs = () => {
@@ -576,17 +959,38 @@ const runQueuedJobs = async () => {
         continue;
       }
 
+      if (job.cancelRequested || job.status === "cancelled") {
+        job.status = "cancelled";
+        job.latestError = "Cancelled by user";
+        job.finishedAt = new Date().toISOString();
+        continue;
+      }
+
       job.status = "running";
       job.startedAt = new Date().toISOString();
+      const crossrefClient = new CrossrefClient();
+      const openAlexClient = new OpenAlexClient();
+      const jufoClient = new JufoClient();
       const context: JobContext = {
         jufoByIssn: new Map<string, JufoLookupResult | null>(),
         jufoProcessedForumIds: new Set<number>(),
+        crossrefClient,
+        openAlexClient,
+        jufoClient,
+        metrics: job.metrics,
+        referenceMetadataByDoi: new Map(),
       };
 
       try {
         for (const recordId of job.recordIds) {
+          if (job.cancelRequested) {
+            job.status = "cancelled";
+            job.latestError = "Cancelled by user";
+            break;
+          }
+
           try {
-            const { result, updatedRecord } = await enrichRecord(recordId, context);
+            const { result, updatedRecord } = await enrichRecord(recordId, context, job.options);
             job.results.push(result);
             if (updatedRecord) {
               job.updatedRecords.push(updatedRecord);
@@ -602,13 +1006,17 @@ const runQueuedJobs = async () => {
             job.latestError = message;
           } finally {
             job.processed += 1;
+            syncRequestMetrics(context);
           }
         }
-        job.status = "completed";
+        if (job.status === "running") {
+          job.status = "completed";
+        }
       } catch (error) {
         job.latestError = error instanceof Error ? error.message : "Unexpected enrichment error";
         job.status = "failed";
       } finally {
+        syncRequestMetrics(context);
         job.finishedAt = new Date().toISOString();
       }
     }
@@ -617,9 +1025,13 @@ const runQueuedJobs = async () => {
   }
 };
 
-export const createEnrichmentJob = (recordIds: number[]): EnrichmentJobSnapshot => {
+export const createEnrichmentJob = (
+  recordIds: number[],
+  options: EnrichmentJobOptions = {},
+): EnrichmentJobSnapshot => {
   const dedupedRecordIds = [...new Set(recordIds)];
   const now = new Date().toISOString();
+  const normalizedOptions = normalizeJobOptions(options);
 
   const job: InternalJob = {
     jobId: randomUUID(),
@@ -631,7 +1043,14 @@ export const createEnrichmentJob = (recordIds: number[]): EnrichmentJobSnapshot 
     finishedAt: null,
     results: [],
     updatedRecords: [],
+    metrics: {
+      crossref: { records: 0, requests: 0 },
+      openalex: { records: 0, requests: 0 },
+      jufo: { records: 0, requests: 0 },
+    },
     recordIds: dedupedRecordIds,
+    options: normalizedOptions,
+    cancelRequested: false,
   };
 
   jobs.set(job.jobId, job);
@@ -646,5 +1065,26 @@ export const getEnrichmentJob = (jobId: string): EnrichmentJobSnapshot | null =>
   if (!job) {
     return null;
   }
+  return snapshot(job);
+};
+
+export const cancelEnrichmentJob = (jobId: string): EnrichmentJobSnapshot | null => {
+  const job = jobs.get(jobId);
+  if (!job) {
+    return null;
+  }
+
+  if (job.status === "completed" || job.status === "failed" || job.status === "cancelled") {
+    return snapshot(job);
+  }
+
+  job.cancelRequested = true;
+  job.latestError = "Cancelled by user";
+
+  if (job.status === "queued") {
+    job.status = "cancelled";
+    job.finishedAt = new Date().toISOString();
+  }
+
   return snapshot(job);
 };
