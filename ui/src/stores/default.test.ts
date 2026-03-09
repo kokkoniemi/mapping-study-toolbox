@@ -155,6 +155,50 @@ describe("defaultStore", () => {
     expect(apiMocks.recordsIndex).toHaveBeenCalledWith({ offset: 0, limit: 30 });
   });
 
+  it("loadInitialData and loadMoreData append all rows for infinite feed", async () => {
+    const store = defaultStore();
+
+    apiMocks.recordsIndex
+      .mockResolvedValueOnce({
+        status: 200,
+        data: { count: 3, records: [makeRecord({ id: 1 }), makeRecord({ id: 2 })] },
+      })
+      .mockResolvedValueOnce({
+        status: 200,
+        data: { count: 3, records: [makeRecord({ id: 3 })] },
+      });
+
+    await store.loadInitialData();
+    await store.loadMoreData();
+
+    expect(apiMocks.recordsIndex).toHaveBeenNthCalledWith(1, { offset: 0, limit: 100 });
+    expect(apiMocks.recordsIndex).toHaveBeenNthCalledWith(2, { offset: 2, limit: 100 });
+    expect(store.dataItems.map((item) => item.id)).toEqual([1, 2, 3]);
+    expect(store.dataOffset).toBe(3);
+    expect(store.dataTotal).toBe(3);
+    expect(store.dataHasMore).toBe(false);
+  });
+
+  it("setSearchFilter in data tab reloads infinite feed", async () => {
+    const store = defaultStore();
+    store.tab = "data";
+
+    apiMocks.recordsIndex.mockResolvedValue({
+      status: 200,
+      data: { count: 1, records: [makeRecord({ id: 77, title: "Filtered" })] },
+    });
+
+    await store.setSearchFilter("filtered");
+
+    expect(apiMocks.recordsIndex).toHaveBeenCalledWith({
+      offset: 0,
+      limit: 100,
+      search: "filtered",
+    });
+    expect(store.dataItems.map((item) => item.id)).toEqual([77]);
+    expect(store.searchFilter).toBe("filtered");
+  });
+
   it("setItemStatus updates current record in-place when filter is not active", async () => {
     const store = defaultStore();
     const first = makeRecord({ id: 1, status: null });

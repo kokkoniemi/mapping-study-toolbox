@@ -94,7 +94,7 @@ const updateTab = (value: "inc-exc" | "map" | "data") => {
   width: 100%;
   min-width: 0;
   min-height: 0;
-  overflow: auto;
+  overflow: hidden;
 }
 .app-name {
   border-bottom: 1px solid #eaeaea;

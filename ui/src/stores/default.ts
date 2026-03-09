@@ -48,6 +48,12 @@ interface DefaultState {
   page: number;
   pageLength: PageLength;
   pageItems: RecordItem[];
+  dataItems: RecordItem[];
+  dataOffset: number;
+  dataLimit: number;
+  dataTotal: number;
+  dataHasMore: boolean;
+  dataLoading: boolean;
   itemCount: number;
   currentItemId: number | null;
   statusFilter: StatusFilter;
@@ -97,6 +103,12 @@ export const defaultStore = defineStore("default", {
     page: 1,
     pageLength: 25,
     pageItems: [],
+    dataItems: [],
+    dataOffset: 0,
+    dataLimit: 100,
+    dataTotal: 0,
+    dataHasMore: true,
+    dataLoading: false,
     itemCount: 0,
     currentItemId: null,
     statusFilter: "",
@@ -164,15 +176,20 @@ export const defaultStore = defineStore("default", {
     },
 
     updateRecordInPage(recordId: number, nextRecord: RecordItem) {
-      const index = this.pageItems.findIndex((item) => item.id === recordId);
-      if (index < 0) {
-        return;
+      const updated = normalizeRecordItem(nextRecord);
+      const pageIndex = this.pageItems.findIndex((item) => item.id === recordId);
+      if (pageIndex >= 0) {
+        const nextItems = [...this.pageItems];
+        nextItems[pageIndex] = updated;
+        this.pageItems = nextItems;
       }
 
-      const updated = normalizeRecordItem(nextRecord);
-      const nextItems = [...this.pageItems];
-      nextItems[index] = updated;
-      this.pageItems = nextItems;
+      const dataIndex = this.dataItems.findIndex((item) => item.id === recordId);
+      if (dataIndex >= 0) {
+        const nextDataItems = [...this.dataItems];
+        nextDataItems[dataIndex] = updated;
+        this.dataItems = nextDataItems;
+      }
 
       if (this.currentItemId === recordId) {
         this.currentItemId = updated.id;
@@ -207,13 +224,61 @@ export const defaultStore = defineStore("default", {
     async setStatusFilter(payload: StatusFilter) {
       this.statusFilter = payload;
       this.page = 1;
+      if (this.tab === "data") {
+        await this.loadInitialData();
+        return;
+      }
       await this.fetchPageItems();
     },
 
     async setSearchFilter(payload: string) {
       this.searchFilter = payload;
       this.page = 1;
+      if (this.tab === "data") {
+        await this.loadInitialData();
+        return;
+      }
       await this.fetchPageItems({ search: payload });
+    },
+
+    resetDataFeed() {
+      this.dataItems = [];
+      this.dataOffset = 0;
+      this.dataTotal = 0;
+      this.dataHasMore = true;
+      this.dataLoading = false;
+    },
+
+    async loadInitialData() {
+      this.resetDataFeed();
+      await this.loadMoreData();
+    },
+
+    async loadMoreData() {
+      if (this.dataLoading || !this.dataHasMore) {
+        return;
+      }
+
+      this.dataLoading = true;
+      try {
+        const items = await records.index({
+          offset: this.dataOffset,
+          limit: this.dataLimit,
+          ...(this.statusFilter !== "" ? { status: this.statusFilter } : {}),
+          ...(this.searchFilter !== "" ? { search: this.searchFilter } : {}),
+        });
+
+        const normalized = items.data.records.map(normalizeRecordItem);
+        const existingIds = new Set(this.dataItems.map((item) => item.id));
+        const appended = normalized.filter((item) => !existingIds.has(item.id));
+
+        this.dataItems = [...this.dataItems, ...appended];
+        this.dataOffset += normalized.length;
+        this.dataTotal = items.data.count;
+        this.dataHasMore = this.dataOffset < this.dataTotal && normalized.length > 0;
+      } finally {
+        this.dataLoading = false;
+      }
     },
 
     async fetchPageItems(where: QueryParams = {}) {
@@ -267,19 +332,29 @@ export const defaultStore = defineStore("default", {
 
     // id can differ from currentItemId because of debounce and must be given as parameter
     async setItemComment(id: number, payload: string) {
-      const index = this.pageItems.findIndex((item) => item.id === id);
-      if (index < 0) {
+      const pageIndex = this.pageItems.findIndex((item) => item.id === id);
+      const dataIndex = this.dataItems.findIndex((item) => item.id === id);
+      if (pageIndex < 0 && dataIndex < 0) {
         return;
       }
 
-      const newItems = [...this.pageItems];
-      const current = newItems[index];
-      if (!current) {
-        return;
+      if (pageIndex >= 0) {
+        const nextPageItems = [...this.pageItems];
+        const current = nextPageItems[pageIndex];
+        if (current) {
+          current.comment = payload;
+          this.pageItems = nextPageItems;
+        }
       }
 
-      current.comment = payload;
-      this.pageItems = newItems;
+      if (dataIndex >= 0) {
+        const nextDataItems = [...this.dataItems];
+        const current = nextDataItems[dataIndex];
+        if (current) {
+          current.comment = payload;
+          this.dataItems = nextDataItems;
+        }
+      }
 
       await records.update(id, { comment: payload || null, editedBy: this.nick });
     },
@@ -335,20 +410,35 @@ export const defaultStore = defineStore("default", {
           mappingOptionId,
         });
 
-        const index = this.pageItems.findIndex((item) => item.id === recordId);
-        if (index >= 0) {
-          const current = this.pageItems[index];
-          if (current) {
-            const exists = current.MappingOptions.some((item) => item.id === option.data.id);
-            if (!exists) {
-              const nextItems = [...this.pageItems];
-              nextItems[index] = {
-                ...current,
-                MappingOptions: [...current.MappingOptions, option.data],
-              };
-              this.pageItems = nextItems;
-            }
+        const appendOption = (items: RecordItem[]) => {
+          const index = items.findIndex((item) => item.id === recordId);
+          if (index < 0) {
+            return null;
           }
+          const current = items[index];
+          if (!current) {
+            return null;
+          }
+          const exists = current.MappingOptions.some((item) => item.id === option.data.id);
+          if (exists) {
+            return null;
+          }
+          const nextItems = [...items];
+          nextItems[index] = {
+            ...current,
+            MappingOptions: [...current.MappingOptions, option.data],
+          };
+          return nextItems;
+        };
+
+        const nextPageItems = appendOption(this.pageItems);
+        if (nextPageItems) {
+          this.pageItems = nextPageItems;
+        }
+
+        const nextDataItems = appendOption(this.dataItems);
+        if (nextDataItems) {
+          this.dataItems = nextDataItems;
         }
       } catch (error) {
         this.setCellError(recordId, field, getErrorMessage(error));
@@ -359,7 +449,9 @@ export const defaultStore = defineStore("default", {
     },
 
     async unlinkRecordMappingOption(recordId: number, mappingOptionId: number) {
-      const record = this.pageItems.find((item) => item.id === recordId);
+      const record =
+        this.pageItems.find((item) => item.id === recordId)
+        ?? this.dataItems.find((item) => item.id === recordId);
       if (!record) {
         return;
       }
@@ -371,22 +463,34 @@ export const defaultStore = defineStore("default", {
 
       try {
         await records.mappingOptions.delete(recordId, mappingOptionId);
-        const index = this.pageItems.findIndex((item) => item.id === recordId);
-        if (index < 0) {
-          return;
-        }
+        const removeOption = (items: RecordItem[]) => {
+          const index = items.findIndex((item) => item.id === recordId);
+          if (index < 0) {
+            return null;
+          }
 
-        const current = this.pageItems[index];
-        if (!current) {
-          return;
-        }
+          const current = items[index];
+          if (!current) {
+            return null;
+          }
 
-        const nextItems = [...this.pageItems];
-        nextItems[index] = {
-          ...current,
-          MappingOptions: current.MappingOptions.filter((item) => item.id !== mappingOptionId),
+          const nextItems = [...items];
+          nextItems[index] = {
+            ...current,
+            MappingOptions: current.MappingOptions.filter((item) => item.id !== mappingOptionId),
+          };
+          return nextItems;
         };
-        this.pageItems = nextItems;
+
+        const nextPageItems = removeOption(this.pageItems);
+        if (nextPageItems) {
+          this.pageItems = nextPageItems;
+        }
+
+        const nextDataItems = removeOption(this.dataItems);
+        if (nextDataItems) {
+          this.dataItems = nextDataItems;
+        }
       } catch (error) {
         this.setCellError(recordId, field, getErrorMessage(error));
         throw error;

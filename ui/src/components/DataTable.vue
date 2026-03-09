@@ -15,54 +15,49 @@
         <input
           :value="searchInput"
           @input="onSearchInput"
-          placeholder="Search title, author, comment..."
+          placeholder="Search title, abstract, comment..."
           type="text"
         />
       </div>
 
-      <div class="data-toolbar__group">
-        <label>Page</label>
-        <input :value="page" @input="onPageInput" :max="maxPages" min="1" type="number" />
-      </div>
-
       <div class="data-toolbar__meta">
-        Records {{ recordRange }} of {{ itemCount }}
+        Loaded {{ loadedCount }} / {{ totalCountLabel }}
       </div>
     </header>
 
-    <div class="data-pagination">
-      <button :disabled="page <= 1" @click="movePage(1)">First</button>
-      <button :disabled="page <= 1" @click="movePage(page - 1)">Prev</button>
-      <button :disabled="page >= maxPages" @click="movePage(page + 1)">Next</button>
-      <button :disabled="page >= maxPages" @click="movePage(maxPages)">Last</button>
-    </div>
-
-    <div class="data-grid-shell">
+    <div class="data-grid-shell" ref="dataGridShellRef">
       <hot-table
         ref="hotTableRef"
         :data="tableRows"
         :columns="columns"
         :colHeaders="columnHeaders"
-        :rowHeaders="true"
-        :autoWrapRow="true"
-        :autoWrapCol="true"
+        :rowHeaders="false"
+        :autoWrapRow="false"
+        :autoWrapCol="false"
         :copyPaste="true"
         :fillHandle="true"
         :manualColumnResize="true"
-        :stretchH="'all'"
+        :stretchH="'none'"
         :width="'100%'"
-        :height="700"
+        :height="gridHeight"
         :licenseKey="'non-commercial-and-evaluation'"
         :afterChange="onAfterChange"
+        :afterScrollVertically="onAfterScrollVertically"
         :cells="cellMetaFactory"
         :className="'ht-theme-main'"
       />
     </div>
+
+    <footer class="data-footer">
+      <span v-if="dataLoading">Loading more records...</span>
+      <span v-else-if="!dataHasMore">All records loaded</span>
+      <span v-else>Scroll to load more</span>
+    </footer>
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { storeToRefs } from "pinia";
 import { format as formatDate } from "date-fns";
 import { HotTable } from "@handsontable/vue3";
@@ -81,6 +76,11 @@ registerAllModules();
 
 type GridRow = Record<string, string | number> & { __recordId: number };
 
+type HotInstance = {
+  render: () => void;
+  rootElement?: HTMLElement;
+};
+
 const statusOptions: Array<{ label: string; value: StatusFilter }> = [
   { label: "All", value: "" },
   { label: "Unset", value: "null" },
@@ -98,18 +98,31 @@ const editableSources = new Set<string>([
 ]);
 
 const store = defaultStore();
-const { page, pageLength, pageItems, itemCount, statusFilter, searchFilter, mappingQuestions, cellStates } =
-  storeToRefs(store);
+const {
+  dataItems,
+  dataTotal,
+  dataHasMore,
+  dataLoading,
+  statusFilter,
+  searchFilter,
+  mappingQuestions,
+  cellStates,
+} = storeToRefs(store);
 
-const hotTableRef = ref<{ hotInstance?: { render: () => void } } | null>(null);
+const hotTableRef = ref<{ hotInstance?: HotInstance } | null>(null);
+const dataGridShellRef = ref<HTMLElement | null>(null);
 const searchInput = ref(searchFilter.value);
+const gridHeight = ref(520);
 
-const maxPages = computed(() => Math.max(1, Math.ceil(itemCount.value / pageLength.value)));
+let gridResizeObserver: ResizeObserver | null = null;
 
-const recordRange = computed(() => {
-  const first = itemCount.value <= 0 ? 0 : (page.value - 1) * pageLength.value + 1;
-  const last = Math.min(itemCount.value, page.value * pageLength.value);
-  return `${first} – ${last}`;
+const loadedCount = computed(() => dataItems.value.length);
+
+const totalCountLabel = computed(() => {
+  if (dataLoading.value && dataTotal.value <= 0) {
+    return "...";
+  }
+  return String(dataTotal.value);
 });
 
 const formatTimestamp = (value: string) => formatDate(new Date(value), "dd.MM.yyyy HH:mm:ss");
@@ -122,24 +135,24 @@ const recordMappingCellValue = (record: RecordItem, questionId: number) =>
     .join(", ");
 
 const tableRows = computed<GridRow[]>(() =>
-  pageItems.value.map((record) => {
+  dataItems.value.map((record) => {
     const row: GridRow = {
       __recordId: record.id,
       id: record.id,
-      createdAt: formatTimestamp(record.createdAt),
-      updatedAt: formatTimestamp(record.updatedAt),
-      publication: record.Publication
-        ? `${record.Publication.name ?? "—"} | jufo: ${record.Publication.jufoLevel ?? "—"}`
-        : "—",
       title: record.title,
-      author: record.author,
-      url: record.url,
+      abstract: record.abstract ?? "",
       status: record.status ?? "null",
+      comment: record.comment ?? "",
+      author: record.author,
+      publication: record.Publication
+        ? `${record.Publication.name ?? "-"} | jufo: ${record.Publication.jufoLevel ?? "-"}`
+        : "-",
+      url: record.url,
       databases: stringListToCell(record.databases),
       alternateUrls: stringListToCell(record.alternateUrls),
-      abstract: record.abstract ?? "",
       description: record.description ?? "",
-      comment: record.comment ?? "",
+      createdAt: formatTimestamp(record.createdAt),
+      updatedAt: formatTimestamp(record.updatedAt),
     };
 
     for (const question of mappingQuestions.value) {
@@ -150,57 +163,55 @@ const tableRows = computed<GridRow[]>(() =>
   }),
 );
 
-const baseColumnHeaders = [
-  "id",
-  "created",
-  "updated",
-  "publication",
-  "title",
-  "author",
-  "url",
-  "status",
-  "databases",
-  "alternateUrls",
-  "abstract",
-  "description",
-  "comment",
-];
-
-const baseColumns: ColumnSettings[] = [
-  { data: "id", readOnly: true },
-  { data: "createdAt", readOnly: true },
-  { data: "updatedAt", readOnly: true },
-  { data: "publication", readOnly: true },
-  { data: "title", type: "text" },
-  { data: "author", type: "text" },
-  { data: "url", type: "text" },
+const priorityColumns: Array<{ header: string; settings: ColumnSettings }> = [
+  { header: "id", settings: { data: "id", readOnly: true, width: 70 } },
+  { header: "title", settings: { data: "title", type: "text", width: 320 } },
+  { header: "abstract", settings: { data: "abstract", type: "text", width: 420 } },
   {
-    data: "status",
-    type: "dropdown",
-    source: ["null", "uncertain", "excluded", "included"],
-    strict: true,
-    allowInvalid: false,
+    header: "status",
+    settings: {
+      data: "status",
+      type: "dropdown",
+      source: ["null", "uncertain", "excluded", "included"],
+      strict: true,
+      allowInvalid: false,
+      width: 120,
+    },
   },
-  { data: "databases", type: "text" },
-  { data: "alternateUrls", type: "text" },
-  { data: "abstract", type: "text" },
-  { data: "description", type: "text" },
-  { data: "comment", type: "text" },
+  { header: "comment", settings: { data: "comment", type: "text", width: 280 } },
 ];
 
-const mappingColumns = computed<ColumnSettings[]>(() =>
+const trailingColumns: Array<{ header: string; settings: ColumnSettings }> = [
+  { header: "author", settings: { data: "author", type: "text", width: 220 } },
+  { header: "publication", settings: { data: "publication", readOnly: true, width: 240 } },
+  { header: "url", settings: { data: "url", type: "text", width: 260 } },
+  { header: "databases", settings: { data: "databases", type: "text", width: 220 } },
+  { header: "alternateUrls", settings: { data: "alternateUrls", type: "text", width: 240 } },
+  { header: "description", settings: { data: "description", type: "text", width: 260 } },
+  { header: "created", settings: { data: "createdAt", readOnly: true, width: 170 } },
+  { header: "updated", settings: { data: "updatedAt", readOnly: true, width: 170 } },
+];
+
+const mappingColumns = computed<Array<{ header: string; settings: ColumnSettings }>>(() =>
   mappingQuestions.value.map((question) => ({
-    data: `mapping_${question.id}`,
-    type: "text",
+    header: question.title || `Question ${question.id}`,
+    settings: {
+      data: `mapping_${question.id}`,
+      type: "text",
+      width: 220,
+    },
   })),
 );
 
-const columns = computed<ColumnSettings[]>(() => [...baseColumns, ...mappingColumns.value]);
-
-const columnHeaders = computed<string[]>(() => [
-  ...baseColumnHeaders,
-  ...mappingQuestions.value.map((question) => question.title || `Question ${question.id}`),
+const orderedColumns = computed(() => [
+  ...priorityColumns,
+  ...mappingColumns.value,
+  ...trailingColumns,
 ]);
+
+const columns = computed<ColumnSettings[]>(() => orderedColumns.value.map((column) => column.settings));
+
+const columnHeaders = computed<string[]>(() => orderedColumns.value.map((column) => column.header));
 
 const parseListCellValue = (value: string) => {
   const seen = new Set<string>();
@@ -240,7 +251,7 @@ const randomColor = () => {
 };
 
 const getRecordById = (recordId: number) =>
-  pageItems.value.find((record) => record.id === recordId) ?? null;
+  dataItems.value.find((record) => record.id === recordId) ?? null;
 
 const syncMappingCell = async (recordId: number, questionId: number, rawValue: string) => {
   const desiredTitles = parseListCellValue(rawValue);
@@ -279,11 +290,7 @@ const syncMappingCell = async (recordId: number, questionId: number, rawValue: s
   }
 };
 
-const handleCellChange = async (
-  recordId: number,
-  prop: string,
-  nextValue: string,
-) => {
+const handleCellChange = async (recordId: number, prop: string, nextValue: string) => {
   if (prop === "title" || prop === "author" || prop === "url") {
     await store.patchRecord(recordId, { [prop]: nextValue });
     return;
@@ -314,10 +321,7 @@ const handleCellChange = async (
   }
 };
 
-const onAfterChange: GridSettings["afterChange"] = async (
-  changes: CellChange[] | null,
-  source?: string,
-) => {
+const onAfterChange: GridSettings["afterChange"] = async (changes: CellChange[] | null, source?: string) => {
   if (!changes || !source || !editableSources.has(source)) {
     return;
   }
@@ -327,7 +331,7 @@ const onAfterChange: GridSettings["afterChange"] = async (
       continue;
     }
 
-    const record = pageItems.value[rowIndex];
+    const record = dataItems.value[rowIndex];
     if (!record) {
       continue;
     }
@@ -349,12 +353,8 @@ const mapPropToCellStateField = (prop: string) => {
   return prop;
 };
 
-const cellMetaFactory: GridSettings["cells"] = (
-  row: number,
-  _col: number,
-  prop: string | number,
-): CellProperties => {
-  const record = pageItems.value[row];
+const cellMetaFactory: GridSettings["cells"] = (row: number, _col: number, prop: string | number): CellProperties => {
+  const record = dataItems.value[row];
   if (!record) {
     return {} as CellProperties;
   }
@@ -376,6 +376,51 @@ const cellMetaFactory: GridSettings["cells"] = (
   return meta as CellProperties;
 };
 
+const getTableScrollHolder = () => {
+  const rootElement = hotTableRef.value?.hotInstance?.rootElement;
+  if (!rootElement) {
+    return null;
+  }
+  return rootElement.querySelector(".ht_master .wtHolder") as HTMLElement | null;
+};
+
+const maybeLoadMoreFromScrollPosition = async () => {
+  if (dataLoading.value || !dataHasMore.value) {
+    return;
+  }
+
+  const holder = getTableScrollHolder();
+  if (!holder) {
+    return;
+  }
+
+  const remaining = holder.scrollHeight - holder.scrollTop - holder.clientHeight;
+  if (remaining <= 140) {
+    await store.loadMoreData();
+  }
+};
+
+const ensureViewportFilled = async () => {
+  let holder = getTableScrollHolder();
+  if (!holder) {
+    return;
+  }
+
+  while (dataHasMore.value && !dataLoading.value && holder.scrollHeight <= holder.clientHeight + 20) {
+    await store.loadMoreData();
+    await nextTick();
+    hotTableRef.value?.hotInstance?.render();
+    holder = getTableScrollHolder();
+    if (!holder) {
+      break;
+    }
+  }
+};
+
+const onAfterScrollVertically: GridSettings["afterScrollVertically"] = () => {
+  void maybeLoadMoreFromScrollPosition();
+};
+
 const debouncedSearch = debounce((value: string) => {
   void store.setSearchFilter(value);
 }, 350);
@@ -391,14 +436,20 @@ const onStatusFilterChange = (event: Event) => {
   void store.setStatusFilter(value);
 };
 
-const movePage = (nextPage: number) => {
-  void store.setPage(nextPage);
+const updateGridHeight = () => {
+  const shell = dataGridShellRef.value;
+  if (!shell) {
+    return;
+  }
+  gridHeight.value = Math.max(260, Math.floor(shell.clientHeight));
 };
 
-const onPageInput = (event: Event) => {
-  const value = Number((event.target as HTMLInputElement).value || "1");
-  movePage(value);
-};
+watch(
+  () => searchFilter.value,
+  (value) => {
+    searchInput.value = value;
+  },
+);
 
 watch(
   () => cellStates.value,
@@ -408,9 +459,36 @@ watch(
   { deep: true },
 );
 
+watch(
+  () => dataItems.value.length,
+  async () => {
+    await nextTick();
+    hotTableRef.value?.hotInstance?.render();
+    void ensureViewportFilled();
+  },
+);
+
 onMounted(async () => {
   searchInput.value = searchFilter.value;
-  await Promise.all([store.fetchPageItems(), store.fetchMappingQuestions()]);
+
+  if (dataGridShellRef.value) {
+    gridResizeObserver = new ResizeObserver(() => {
+      updateGridHeight();
+    });
+    gridResizeObserver.observe(dataGridShellRef.value);
+  }
+
+  await Promise.all([store.fetchMappingQuestions(), store.loadInitialData()]);
+
+  await nextTick();
+  updateGridHeight();
+  hotTableRef.value?.hotInstance?.render();
+  await ensureViewportFilled();
+});
+
+onUnmounted(() => {
+  gridResizeObserver?.disconnect();
+  gridResizeObserver = null;
 });
 </script>
 
@@ -419,6 +497,10 @@ onMounted(async () => {
   position: relative;
   width: 100%;
   min-width: 0;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .data-toolbar {
@@ -439,7 +521,7 @@ onMounted(async () => {
     gap: 4px;
 
     &--search {
-      min-width: 320px;
+      min-width: min(320px, 100%);
       flex: 1;
     }
   }
@@ -448,6 +530,7 @@ onMounted(async () => {
     margin-left: auto;
     font-size: 12px;
     color: #5b5858;
+    white-space: nowrap;
   }
 
   label {
@@ -457,21 +540,20 @@ onMounted(async () => {
   }
 }
 
-.data-pagination {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-
 .data-grid-shell {
+  flex: 1;
+  min-height: 0;
   width: 100%;
   min-width: 0;
-  overflow-x: auto;
+  border: 1px solid #eaeaea;
+  background: #fff;
+  overflow: hidden;
 }
 
-:deep(.data-grid-shell .handsontable) {
-  min-width: 100%;
+.data-footer {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #5b5858;
 }
 
 :deep(.cell-saving) {
@@ -485,6 +567,10 @@ onMounted(async () => {
 
 :deep(.ht_master .handsontable td) {
   vertical-align: top;
+}
+
+:deep(.ht_master .wtHolder) {
+  overscroll-behavior: contain;
 }
 
 @media (max-width: 1024px) {
