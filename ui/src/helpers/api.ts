@@ -172,6 +172,10 @@ export interface Forum {
   id: number;
   name: string;
   jufoLevel: number | null;
+  jufoId?: number | null;
+  issn?: string | null;
+  jufoFetchedAt?: string | null;
+  jufoLastError?: string | null;
   publisher?: string | null;
   [key: string]: unknown;
 }

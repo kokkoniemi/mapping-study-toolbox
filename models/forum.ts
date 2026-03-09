@@ -9,8 +9,12 @@ const defineForum: ModelFactory<ForumModelStatic> = (sequelize: Sequelize, DataT
       name: DataTypes.STRING,
       alternateNames: DataTypes.JSON,
       jufoLevel: DataTypes.INTEGER,
+      jufoId: DataTypes.INTEGER,
+      jufoFetchedAt: DataTypes.DATE,
+      jufoLastError: DataTypes.TEXT,
       database: DataTypes.STRING,
       publisher: DataTypes.STRING,
+      issn: DataTypes.STRING,
     },
     {
       paranoid: true,

@@ -126,16 +126,22 @@ UI dev server runs on http://localhost:8080 and calls backend API at http://loca
 
 ### Crossref enrichment
 - In the `Data` tab, select rows (leftmost checkbox column) and click `Enrich selected`.
-- Enrichment updates record DOI/author details/references and forum publisher metadata.
+- Enrichment updates record DOI/author details/references and forum metadata (`publisher`, `issn`, `jufoLevel` when found).
 - DOI detection order:
   1. try extracting DOI from `url` / `alternateUrls`
   2. fallback to Crossref title + author search
+- JUFO lookup:
+  - if forum ISSN is available, service does `etsi.php?issn=...` then resolves `/kanava/{id}` for level
+  - JUFO requests are throttled with low concurrency and respectful pacing
 - Rate-limit handling:
   - requests are throttled
   - `429` / `503` responses use backoff + retry (`Retry-After` honored when provided)
 - Optional env vars:
   - `CROSSREF_BASE_URL` (default `https://api.crossref.org`)
   - `CROSSREF_MAILTO` (recommended contact email for Crossref requests)
+  - `JUFO_BASE_URL` (default `https://jufo-rest.csc.fi/v1.1`)
+  - `JUFO_MIN_DELAY_MS` (default `500`)
+  - `JUFO_MAX_DELAY_MS` (default `1000`)
 
 ### Build UI for deployment/static hosting
 ```shell

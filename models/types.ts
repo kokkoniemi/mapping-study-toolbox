@@ -15,8 +15,12 @@ export interface ForumAttributes {
   name: string | null;
   alternateNames: string[] | null;
   jufoLevel: number | null;
+  jufoId: number | null;
+  jufoFetchedAt: Date | null;
+  jufoLastError: string | null;
   database: string | null;
   publisher: string | null;
+  issn: string | null;
   createdAt: Date;
   updatedAt: Date;
   deletedAt: Date | null;

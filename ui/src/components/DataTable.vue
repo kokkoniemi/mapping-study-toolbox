@@ -46,10 +46,26 @@
             Enrich selected
           </button>
         </div>
-        <small class="data-toolbar__meta">Selected {{ selectedRecordCount }}</small>
       </div>
 
     </header>
+
+    <div
+      v-if="selectedRecordCount > 0 || enrichmentRunning || enrichmentMessage || enrichmentError"
+      class="data-enrichment-status"
+    >
+      <span class="data-enrichment-status__selection">Selected {{ selectedRecordCount }}</span>
+      <div v-if="enrichmentRunning" class="data-enrichment-status__progress">
+        <div class="data-enrichment-status__progress-track">
+          <div class="data-enrichment-status__progress-fill" :style="{ width: `${enrichmentProgressPercent}%` }"></div>
+        </div>
+        <span class="data-enrichment-status__progress-text">{{ enrichmentProcessed }} / {{ enrichmentTotal }}</span>
+      </div>
+      <span v-if="enrichmentMessage" class="data-enrichment-status__text">{{ enrichmentMessage }}</span>
+      <span v-if="enrichmentError" class="data-enrichment-status__text data-enrichment-status__text--error">
+        {{ enrichmentError }}
+      </span>
+    </div>
 
     <div class="data-grid-shell" ref="dataGridShellRef">
       <hot-table
@@ -132,8 +148,6 @@
 
     <footer class="data-footer">
       <span class="data-footer__loaded">Loaded {{ loadedCount }} / {{ totalCountLabel }}</span>
-      <span v-if="enrichmentMessage">{{ enrichmentMessage }}</span>
-      <span v-if="enrichmentError" class="data-footer__error">{{ enrichmentError }}</span>
       <span v-if="dataLoading">Loading more records...</span>
       <span v-else-if="!dataHasMore">All records loaded</span>
       <span v-else>Scroll to load more</span>
@@ -224,6 +238,8 @@ const selectedRecordIds = ref<number[]>([]);
 const enrichmentRunning = ref(false);
 const enrichmentMessage = ref("");
 const enrichmentError = ref("");
+const enrichmentProcessed = ref(0);
+const enrichmentTotal = ref(0);
 const gridHeight = ref(520);
 const defaultRowHeight = 62;
 const tableAutoRowSize = computed(() => !dataCellsTruncated.value);
@@ -246,6 +262,12 @@ let isUnmounted = false;
 const loadedCount = computed(() => dataItems.value.length);
 const selectedRecordCount = computed(() => selectedRecordIds.value.length);
 const selectedRecordIdSet = computed(() => new Set(selectedRecordIds.value));
+const enrichmentProgressPercent = computed(() => {
+  if (enrichmentTotal.value <= 0) {
+    return 0;
+  }
+  return Math.max(0, Math.min(100, Math.round((enrichmentProcessed.value / enrichmentTotal.value) * 100)));
+});
 
 const totalCountLabel = computed(() => {
   if (dataLoading.value && dataTotal.value <= 0) {
@@ -288,7 +310,7 @@ const tableRows = computed<GridRow[]>(() =>
       comment: record.comment ?? "",
       author: record.author,
       forum: record.Forum
-        ? `${record.Forum.name ?? "-"} | publisher: ${record.Forum.publisher ?? "-"} | jufo: ${record.Forum.jufoLevel ?? "-"}`
+        ? `${record.Forum.name ?? "-"} | issn: ${record.Forum.issn ?? "-"} | publisher: ${record.Forum.publisher ?? "-"} | jufo: ${record.Forum.jufoLevel ?? "-"}`
         : "-",
       url: record.url,
       databases: stringListToCell(record.databases),
@@ -782,6 +804,8 @@ const waitForJobCompletion = async (jobId: string) => {
 
     const response = await records.enrichment.getJob(jobId);
     const job = response.data;
+    enrichmentProcessed.value = job.processed;
+    enrichmentTotal.value = job.total;
     enrichmentMessage.value = `Crossref enrichment ${job.processed} / ${job.total}`;
 
     if (job.status === "completed" || job.status === "failed") {
@@ -802,6 +826,8 @@ const enrichSelectedRecords = async () => {
   enrichmentRunning.value = true;
   enrichmentError.value = "";
   enrichmentMessage.value = "Starting Crossref enrichment...";
+  enrichmentProcessed.value = 0;
+  enrichmentTotal.value = selectedRecordIds.value.length;
 
   try {
     const response = await records.enrichment.createJob({
@@ -1129,12 +1155,11 @@ onUnmounted(() => {
     }
 
     &--enrichment {
-      min-width: 250px;
+      min-width: 320px;
       border-left: 1px solid #dddddd;
       padding-left: 10px;
       margin-left: 2px;
-      align-self: stretch;
-      justify-content: center;
+      align-self: flex-end;
     }
   }
 
@@ -1200,11 +1225,59 @@ onUnmounted(() => {
     color: #2d4fc9 !important;
     font-weight: 600;
   }
+}
 
-  &__meta {
-    margin-top: 2px;
-    font-size: 11px;
-    color: #818181;
+.data-enrichment-status {
+  margin-top: -2px;
+  margin-bottom: 8px;
+  padding: 6px 10px;
+  border: 1px solid #eaeaea;
+  background: #fff;
+  font-size: 11px;
+  color: #5f5f5f;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+
+  &__selection {
+    color: #6b6b6b;
+    white-space: nowrap;
+  }
+
+  &__progress {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  &__progress-track {
+    width: 170px;
+    height: 8px;
+    border-radius: 6px;
+    background: #ececec;
+    overflow: hidden;
+  }
+
+  &__progress-fill {
+    height: 100%;
+    background: #3d66d8;
+    transition: width 0.2s ease;
+  }
+
+  &__progress-text {
+    color: #5f5f5f;
+    min-width: 56px;
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  &__text {
+    color: #5f5f5f;
+
+    &--error {
+      color: #8e2b2b;
+    }
   }
 }
 
@@ -1228,10 +1301,6 @@ onUnmounted(() => {
 
   &__loaded {
     white-space: nowrap;
-  }
-
-  &__error {
-    color: #8e2b2b;
   }
 }
 

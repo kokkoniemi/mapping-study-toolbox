@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { extractDoiFromRecordUrls, extractDoiFromText, pickBestSearchWork } from "../lib/crossref";
+import {
+  extractDoiFromRecordUrls,
+  extractDoiFromText,
+  extractIssnFromWork,
+  normalizeIssn,
+  pickBestSearchWork,
+} from "../lib/crossref";
 
 describe("crossref DOI extraction", () => {
   it("extracts DOI from doi.org URL", () => {
@@ -60,5 +66,21 @@ describe("crossref fallback search ranking", () => {
     ]);
 
     expect(selected?.DOI).toBe("10.1016/j.jss.2023.111795");
+  });
+});
+
+describe("crossref ISSN extraction", () => {
+  it("normalizes ISSN variants", () => {
+    expect(normalizeIssn("01641212")).toBe("0164-1212");
+    expect(normalizeIssn("0164-1212")).toBe("0164-1212");
+    expect(normalizeIssn("0164-121X")).toBe("0164-121X");
+  });
+
+  it("extracts ISSN from work payload", () => {
+    const issn = extractIssnFromWork({
+      ISSN: ["0164-1212"],
+      "issn-type": [{ value: "1234-5678", type: "electronic" }],
+    });
+    expect(issn).toBe("0164-1212");
   });
 });

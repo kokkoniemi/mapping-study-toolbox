@@ -41,6 +41,8 @@ export type CrossrefWork = {
   author?: CrossrefAuthorRaw[];
   reference?: CrossrefReferenceRaw[];
   publisher?: string;
+  ISSN?: string[];
+  "issn-type"?: Array<{ value?: string; type?: string }>;
   "container-title"?: string[];
   "short-container-title"?: string[];
 };
@@ -152,6 +154,37 @@ const sanitizeDoi = (value: string) =>
     .trim()
     .replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, "")
     .replace(/[)\].,;]+$/, "");
+
+const normalizeIssnCandidate = (value: string) => value.toUpperCase().replace(/[^0-9X]/g, "");
+
+export const normalizeIssn = (value: string | null | undefined): string | null => {
+  if (!value) {
+    return null;
+  }
+
+  const compact = normalizeIssnCandidate(value);
+  if (!/^\d{7}[\dX]$/.test(compact)) {
+    return null;
+  }
+
+  return `${compact.slice(0, 4)}-${compact.slice(4)}`;
+};
+
+export const extractIssnFromWork = (work: CrossrefWork): string | null => {
+  const candidates = [
+    ...(work.ISSN ?? []),
+    ...((work["issn-type"] ?? []).map((item) => item.value ?? "")),
+  ];
+
+  for (const candidate of candidates) {
+    const normalized = normalizeIssn(candidate);
+    if (normalized) {
+      return normalized;
+    }
+  }
+
+  return null;
+};
 
 export const extractDoiFromText = (input: string | null | undefined): string | null => {
   if (!input) {
