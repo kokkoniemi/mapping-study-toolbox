@@ -42,6 +42,11 @@ docker compose down -v   # also removes node_modules volumes
 docker compose build     # rebuild images after dependency changes
 ```
 
+Troubleshooting:
+- If frontend reports missing module imports after adding dependencies, run:
+  - `docker compose down -v && docker compose up --build`
+- If API requests fail right after startup, wait for backend healthcheck and refresh once.
+
 ## Local (without Docker)
 
 ### System requirements

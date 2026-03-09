@@ -4,4 +4,5 @@ WORKDIR /workspace/ui
 
 COPY ui/package.json ui/package-lock.json ./
 
-RUN npm ci --no-audit --no-fund
+RUN npm ci --no-audit --no-fund \
+  && sha256sum package-lock.json | awk '{print $1}' > node_modules/.package-lock.hash
