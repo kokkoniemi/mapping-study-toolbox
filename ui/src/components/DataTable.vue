@@ -36,16 +36,71 @@
         :autoWrapCol="false"
         :copyPaste="true"
         :fillHandle="true"
-        :manualColumnResize="true"
+        :manual-column-resize="true"
+        :manual-row-resize="true"
+        :auto-row-size="false"
+        :row-heights="defaultRowHeight"
         :stretchH="'none'"
         :width="'100%'"
         :height="gridHeight"
+        :themeName="'ht-theme-main'"
         :licenseKey="'non-commercial-and-evaluation'"
         :afterChange="onAfterChange"
         :afterScrollVertically="onAfterScrollVertically"
+        :afterOnCellMouseDown="onAfterOnCellMouseDown"
         :cells="cellMetaFactory"
-        :className="'ht-theme-main'"
       />
+    </div>
+
+    <div v-if="mappingEditorOpen" class="mapping-editor">
+      <div class="mapping-editor__backdrop" @click="closeMappingEditor"></div>
+      <section class="mapping-editor__panel" :style="mappingEditorPanelStyle">
+        <header class="mapping-editor__header">
+          <h3>{{ mappingEditorQuestionTitle }}</h3>
+          <button type="button" class="mapping-editor__close" @click="closeMappingEditor">Close</button>
+        </header>
+
+        <div class="mapping-editor__selected">
+          <button
+            v-for="option in mappingEditorSelectedOptions"
+            :key="option.id"
+            class="mapping-chip mapping-chip--selected"
+            :style="chipStyle(option.color)"
+            type="button"
+            @click="removeMappingOption(option.id)"
+          >
+            {{ option.title }}
+            <span class="mapping-chip__remove">⊗</span>
+          </button>
+          <div v-if="mappingEditorSelectedOptions.length === 0" class="mapping-editor__hint mapping-editor__hint--empty">
+            No options selected
+          </div>
+        </div>
+
+        <div class="mapping-editor__search">
+          <input
+            ref="mappingEditorInputRef"
+            v-model="mappingEditorInput"
+            type="text"
+            placeholder="Select an option or create one"
+          />
+        </div>
+
+        <ul class="mapping-editor__list">
+          <li v-if="canCreateMappingOption" class="mapping-editor__item">
+            <button type="button" class="mapping-editor__pick" @click="createMappingOption">
+              <span class="mapping-editor__create-label">Create:</span>
+              <span class="mapping-chip" :style="chipStyle(mappingEditorCreateColor)">{{ mappingEditorInputTrimmed }}</span>
+            </button>
+          </li>
+          <li v-for="option in mappingEditorAvailableOptions" :key="option.id" class="mapping-editor__item">
+            <button type="button" class="mapping-editor__pick" @click="addMappingOption(option.id)">
+              <span class="mapping-chip" :style="chipStyle(option.color)">{{ option.title }}</span>
+            </button>
+          </li>
+        </ul>
+
+      </section>
     </div>
 
     <footer class="data-footer">
@@ -65,20 +120,35 @@ import { registerAllModules } from "handsontable/registry";
 import type { CellChange } from "handsontable/common";
 import type { CellProperties, ColumnSettings, GridSettings } from "handsontable/settings";
 
-import "handsontable/styles/handsontable.min.css";
-import "handsontable/styles/ht-theme-main.min.css";
+import "handsontable/styles/handsontable.css";
+import "handsontable/styles/ht-theme-main.css";
 
 import { debounce } from "../helpers/utils";
 import { defaultStore, type StatusFilter } from "../stores/default";
-import type { RecordItem, RecordStatus } from "../helpers/api";
+import type { MappingOption, RecordItem, RecordStatus } from "../helpers/api";
 
 registerAllModules();
 
 type GridRow = Record<string, string | number> & { __recordId: number };
+type MappingEditorState = {
+  recordId: number;
+  questionId: number;
+};
+type AnchorRect = {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+  width: number;
+  height: number;
+};
 
 type HotInstance = {
   render: () => void;
+  loadData?: (data: GridRow[]) => void;
+  updateSettings?: (settings: Partial<GridSettings>) => void;
   rootElement?: HTMLElement;
+  getCell?: (row: number, col: number, topmost?: boolean) => HTMLTableCellElement | null;
 };
 
 const statusOptions: Array<{ label: string; value: StatusFilter }> = [
@@ -113,6 +183,16 @@ const hotTableRef = ref<{ hotInstance?: HotInstance } | null>(null);
 const dataGridShellRef = ref<HTMLElement | null>(null);
 const searchInput = ref(searchFilter.value);
 const gridHeight = ref(520);
+const defaultRowHeight = 62;
+const mappingEditorInputRef = ref<HTMLInputElement | null>(null);
+const mappingEditor = ref<MappingEditorState | null>(null);
+const mappingEditorAnchor = ref<AnchorRect | null>(null);
+const mappingEditorInput = ref("");
+const mappingEditorCreateColor = ref("#d8d8d8");
+const viewportSize = ref({
+  width: typeof window === "undefined" ? 1920 : window.innerWidth,
+  height: typeof window === "undefined" ? 1080 : window.innerHeight,
+});
 
 let gridResizeObserver: ResizeObserver | null = null;
 
@@ -164,8 +244,8 @@ const tableRows = computed<GridRow[]>(() =>
 
 const priorityColumns: Array<{ header: string; settings: ColumnSettings }> = [
   { header: "id", settings: { data: "id", readOnly: true, width: 70 } },
-  { header: "title", settings: { data: "title", type: "text", width: 320 } },
-  { header: "abstract", settings: { data: "abstract", type: "text", width: 420 } },
+  { header: "title", settings: { data: "title", type: "text", renderer: truncatedTextRenderer, width: 320 } },
+  { header: "abstract", settings: { data: "abstract", type: "text", renderer: truncatedTextRenderer, width: 420 } },
   {
     header: "status",
     settings: {
@@ -177,25 +257,145 @@ const priorityColumns: Array<{ header: string; settings: ColumnSettings }> = [
       width: 120,
     },
   },
-  { header: "comment", settings: { data: "comment", type: "text", width: 280 } },
+  { header: "comment", settings: { data: "comment", type: "text", renderer: truncatedTextRenderer, width: 280 } },
 ];
 
 const trailingColumns: Array<{ header: string; settings: ColumnSettings }> = [
-  { header: "author", settings: { data: "author", type: "text", width: 220 } },
-  { header: "publication", settings: { data: "publication", readOnly: true, width: 240 } },
-  { header: "url", settings: { data: "url", type: "text", width: 260 } },
-  { header: "databases", settings: { data: "databases", type: "text", width: 220 } },
-  { header: "alternateUrls", settings: { data: "alternateUrls", type: "text", width: 240 } },
+  { header: "author", settings: { data: "author", type: "text", renderer: truncatedTextRenderer, width: 220 } },
+  {
+    header: "publication",
+    settings: { data: "publication", readOnly: true, renderer: truncatedTextRenderer, width: 240 },
+  },
+  { header: "url", settings: { data: "url", type: "text", renderer: truncatedTextRenderer, width: 260 } },
+  { header: "databases", settings: { data: "databases", type: "text", renderer: truncatedTextRenderer, width: 220 } },
+  {
+    header: "alternateUrls",
+    settings: { data: "alternateUrls", type: "text", renderer: truncatedTextRenderer, width: 240 },
+  },
   { header: "created", settings: { data: "createdAt", readOnly: true, width: 170 } },
   { header: "updated", settings: { data: "updatedAt", readOnly: true, width: 170 } },
 ];
+
+const parseMappingQuestionId = (prop: unknown) => {
+  const value = String(prop);
+  if (!value.startsWith("mapping_")) {
+    return null;
+  }
+
+  const questionId = Number(value.replace("mapping_", ""));
+  if (!Number.isInteger(questionId) || questionId <= 0) {
+    return null;
+  }
+
+  return questionId;
+};
+
+const sanitizeColor = (color: string | null | undefined) => {
+  if (!color) {
+    return "#d8d8d8";
+  }
+
+  const trimmed = color.trim();
+  return /^#[0-9a-fA-F]{3,8}$/.test(trimmed) ? trimmed : "#d8d8d8";
+};
+
+const chipStyle = (color: string | null | undefined) => ({
+  backgroundColor: sanitizeColor(color),
+});
+
+const escapeHtml = (value: string) =>
+  value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+
+const textIndicatorThreshold = 90;
+
+function truncatedTextRenderer(
+  _instance: unknown,
+  td: HTMLTableCellElement,
+  _row: number,
+  _col: number,
+  _prop: string | number,
+  value: unknown,
+) {
+  td.classList.remove("mapping-cell");
+  td.classList.add("data-text-cell");
+
+  const rawText = value === null || value === undefined ? "" : String(value);
+  const normalizedText = rawText.replace(/\s+/g, " ").trim();
+
+  if (normalizedText.length === 0) {
+    td.textContent = "";
+    td.removeAttribute("title");
+    return td;
+  }
+
+  const isLikelyTruncated = rawText.includes("\n") || normalizedText.length > textIndicatorThreshold;
+  td.title = normalizedText;
+
+  const content = document.createElement("div");
+  content.className = "data-text-cell__content";
+
+  const text = document.createElement("span");
+  text.className = "data-text-cell__text";
+  text.textContent = normalizedText;
+  content.appendChild(text);
+
+  if (isLikelyTruncated) {
+    const marker = document.createElement("span");
+    marker.className = "data-text-cell__marker";
+    marker.setAttribute("aria-hidden", "true");
+    marker.textContent = "…";
+    content.appendChild(marker);
+  }
+
+  td.textContent = "";
+  td.appendChild(content);
+  return td;
+}
+
+function mappingChipRenderer(
+  _instance: unknown,
+  td: HTMLTableCellElement,
+  _row: number,
+  _col: number,
+  prop: string | number,
+  value: unknown,
+) {
+  td.classList.remove("data-text-cell");
+  td.classList.add("mapping-cell");
+
+  const questionId = parseMappingQuestionId(prop);
+  const question = mappingQuestions.value.find((item) => item.id === questionId);
+  const colorByTitle = new Map(
+    (question?.MappingOptions ?? []).map((item) => [item.title.toLocaleLowerCase(), sanitizeColor(item.color)]),
+  );
+
+  const titles = parseListCellValue(value === null || value === undefined ? "" : String(value));
+  if (titles.length === 0) {
+    td.innerHTML = '<span class="mapping-cell-placeholder">Double-click to edit</span>';
+    return td;
+  }
+
+  td.innerHTML = `<div class="mapping-cell-chips">${titles
+    .map((title) => {
+      const color = colorByTitle.get(title.toLocaleLowerCase()) ?? "#d8d8d8";
+      return `<span class="mapping-cell-chip" style="background-color:${color}">${escapeHtml(title)}</span>`;
+    })
+    .join("")}</div>`;
+  return td;
+}
 
 const mappingColumns = computed<Array<{ header: string; settings: ColumnSettings }>>(() =>
   mappingQuestions.value.map((question) => ({
     header: question.title || `Question ${question.id}`,
     settings: {
       data: `mapping_${question.id}`,
-      type: "text",
+      readOnly: true,
+      renderer: mappingChipRenderer,
       width: 220,
     },
   })),
@@ -251,41 +451,199 @@ const randomColor = () => {
 const getRecordById = (recordId: number) =>
   dataItems.value.find((record) => record.id === recordId) ?? null;
 
-const syncMappingCell = async (recordId: number, questionId: number, rawValue: string) => {
-  const desiredTitles = parseListCellValue(rawValue);
-  const desiredLower = new Set(desiredTitles.map((item) => item.toLocaleLowerCase()));
+const mappingEditorOpen = computed(() => mappingEditor.value !== null);
 
-  const currentRecord = getRecordById(recordId);
-  if (!currentRecord) {
+const mappingEditorRecord = computed(() => {
+  if (!mappingEditor.value) {
+    return null;
+  }
+  return getRecordById(mappingEditor.value.recordId);
+});
+
+const mappingEditorQuestion = computed(() => {
+  if (!mappingEditor.value) {
+    return null;
+  }
+  return mappingQuestions.value.find((item) => item.id === mappingEditor.value?.questionId) ?? null;
+});
+
+const mappingEditorQuestionTitle = computed(
+  () =>
+    mappingEditorQuestion.value?.title
+    || (mappingEditorQuestion.value ? `Question ${mappingEditorQuestion.value.id}` : "Mapping options"),
+);
+
+const mappingEditorPanelStyle = computed(() => {
+  const padding = 12;
+  const width = Math.max(320, Math.min(640, viewportSize.value.width - padding * 2));
+  const anchor = mappingEditorAnchor.value;
+
+  if (!anchor) {
+    const fallbackTop = Math.max(padding, Math.round(viewportSize.value.height * 0.12));
+    const fallbackLeft = Math.max(padding, Math.round((viewportSize.value.width - width) / 2));
+    const fallbackMaxHeight = Math.max(240, viewportSize.value.height - fallbackTop - padding);
+
+    return {
+      width: `${Math.round(width)}px`,
+      left: `${Math.round(fallbackLeft)}px`,
+      top: `${Math.round(fallbackTop)}px`,
+      maxHeight: `${Math.round(fallbackMaxHeight)}px`,
+    };
+  }
+
+  const availableBelow = viewportSize.value.height - anchor.bottom - padding;
+  const availableAbove = anchor.top - padding;
+  const placeBelow = availableBelow >= 260 || availableBelow >= availableAbove;
+  const maxHeight = Math.max(240, Math.floor(placeBelow ? availableBelow : availableAbove));
+
+  const preferredLeft = anchor.left;
+  const maxLeft = Math.max(padding, viewportSize.value.width - width - padding);
+  const left = Math.max(padding, Math.min(preferredLeft, maxLeft));
+  const top = placeBelow ? anchor.bottom + 6 : anchor.top - maxHeight - 6;
+
+  return {
+    width: `${Math.round(width)}px`,
+    left: `${Math.round(left)}px`,
+    top: `${Math.round(Math.max(padding, top))}px`,
+    maxHeight: `${Math.round(maxHeight)}px`,
+  };
+});
+
+const mappingEditorSelectedOptions = computed<MappingOption[]>(() => {
+  const record = mappingEditorRecord.value;
+  const questionId = mappingEditor.value?.questionId;
+  if (!record || !questionId) {
+    return [];
+  }
+  return record.MappingOptions.filter((option) => option.mappingQuestionId === questionId);
+});
+
+const mappingEditorInputTrimmed = computed(() => mappingEditorInput.value.trim());
+
+const mappingEditorAvailableOptions = computed(() => {
+  const question = mappingEditorQuestion.value;
+  if (!question) {
+    return [];
+  }
+
+  const selected = new Set(mappingEditorSelectedOptions.value.map((item) => item.id));
+  const search = mappingEditorInputTrimmed.value.toLocaleLowerCase();
+
+  return (question.MappingOptions ?? []).filter((option) => {
+    if (selected.has(option.id)) {
+      return false;
+    }
+
+    if (search.length === 0) {
+      return true;
+    }
+
+    return option.title.toLocaleLowerCase().includes(search);
+  });
+});
+
+const canCreateMappingOption = computed(() => {
+  const title = mappingEditorInputTrimmed.value;
+  if (title.length === 0) {
+    return false;
+  }
+
+  const questionOptions = mappingEditorQuestion.value?.MappingOptions ?? [];
+  return !questionOptions.some((option) => option.title.toLocaleLowerCase() === title.toLocaleLowerCase());
+});
+
+const updateViewportSize = () => {
+  viewportSize.value = {
+    width: window.innerWidth,
+    height: window.innerHeight,
+  };
+};
+
+const getCellAnchorRectFromEvent = (event: MouseEvent): AnchorRect | null => {
+  const target = event.target as HTMLElement | null;
+  const cell = target?.closest("td");
+  if (!cell) {
+    return null;
+  }
+
+  const rect = cell.getBoundingClientRect();
+  return {
+    left: rect.left,
+    top: rect.top,
+    right: rect.right,
+    bottom: rect.bottom,
+    width: rect.width,
+    height: rect.height,
+  };
+};
+
+const getCellAnchorRectByCoords = (row: number, col: number): AnchorRect | null => {
+  const instance = hotTableRef.value?.hotInstance;
+  const cell = instance?.getCell?.(row, col, true) ?? instance?.getCell?.(row, col) ?? null;
+  if (!cell) {
+    return null;
+  }
+
+  const rect = cell.getBoundingClientRect();
+  return {
+    left: rect.left,
+    top: rect.top,
+    right: rect.right,
+    bottom: rect.bottom,
+    width: rect.width,
+    height: rect.height,
+  };
+};
+
+const closeMappingEditor = () => {
+  mappingEditor.value = null;
+  mappingEditorAnchor.value = null;
+  mappingEditorInput.value = "";
+};
+
+const openMappingEditor = async (recordId: number, questionId: number, anchor: AnchorRect | null) => {
+  mappingEditor.value = { recordId, questionId };
+  mappingEditorAnchor.value = anchor;
+  mappingEditorInput.value = "";
+  mappingEditorCreateColor.value = randomColor();
+  await nextTick();
+  mappingEditorInputRef.value?.focus();
+};
+
+const addMappingOption = async (mappingOptionId: number) => {
+  if (!mappingEditor.value) {
     return;
   }
 
-  const linked = currentRecord.MappingOptions.filter((option) => option.mappingQuestionId === questionId);
-  for (const option of linked) {
-    if (!desiredLower.has(option.title.toLocaleLowerCase())) {
-      await store.unlinkRecordMappingOption(recordId, option.id);
-    }
+  await store.linkRecordMappingOption(
+    mappingEditor.value.recordId,
+    mappingEditor.value.questionId,
+    mappingOptionId,
+  );
+  mappingEditorInput.value = "";
+};
+
+const removeMappingOption = async (mappingOptionId: number) => {
+  if (!mappingEditor.value) {
+    return;
   }
 
-  for (const title of desiredTitles) {
-    const question = mappingQuestions.value.find((item) => item.id === questionId);
-    const existing =
-      question?.MappingOptions?.find((option) => option.title.toLocaleLowerCase() === title.toLocaleLowerCase()) ??
-      null;
+  await store.unlinkRecordMappingOption(mappingEditor.value.recordId, mappingOptionId);
+};
 
-    const latest = getRecordById(recordId);
-    const latestLinked = latest?.MappingOptions.filter((option) => option.mappingQuestionId === questionId) ?? [];
-
-    if (existing) {
-      const alreadyLinked = latestLinked.some((option) => option.id === existing.id);
-      if (!alreadyLinked) {
-        await store.linkRecordMappingOption(recordId, questionId, existing.id);
-      }
-      continue;
-    }
-
-    await store.createMappingOptionAndLink(recordId, questionId, title, randomColor());
+const createMappingOption = async () => {
+  if (!mappingEditor.value || !canCreateMappingOption.value) {
+    return;
   }
+
+  await store.createMappingOptionAndLink(
+    mappingEditor.value.recordId,
+    mappingEditor.value.questionId,
+    mappingEditorInputTrimmed.value,
+    mappingEditorCreateColor.value,
+  );
+  mappingEditorInput.value = "";
+  mappingEditorCreateColor.value = randomColor();
 };
 
 const handleCellChange = async (recordId: number, prop: string, nextValue: string) => {
@@ -309,13 +667,6 @@ const handleCellChange = async (recordId: number, prop: string, nextValue: strin
   if (prop === "abstract" || prop === "comment") {
     await store.patchRecord(recordId, { [prop]: nextValue === "" ? null : nextValue });
     return;
-  }
-
-  if (prop.startsWith("mapping_")) {
-    const questionId = Number(prop.replace("mapping_", ""));
-    if (Number.isInteger(questionId) && questionId > 0) {
-      await syncMappingCell(recordId, questionId, nextValue);
-    }
   }
 };
 
@@ -419,6 +770,34 @@ const onAfterScrollVertically: GridSettings["afterScrollVertically"] = () => {
   void maybeLoadMoreFromScrollPosition();
 };
 
+const onAfterOnCellMouseDown: GridSettings["afterOnCellMouseDown"] = (event, coords) => {
+  const mouseEvent = event as MouseEvent;
+  if (mouseEvent.detail < 2 || coords.row < 0 || coords.col < 0) {
+    return;
+  }
+
+  const row = dataItems.value[coords.row];
+  const column = orderedColumns.value[coords.col];
+  if (!row || !column) {
+    return;
+  }
+
+  const questionId = parseMappingQuestionId(column.settings.data);
+  if (!questionId) {
+    return;
+  }
+
+  mouseEvent.preventDefault();
+  const anchor = getCellAnchorRectByCoords(coords.row, coords.col) ?? getCellAnchorRectFromEvent(mouseEvent);
+  void openMappingEditor(row.id, questionId, anchor);
+};
+
+const onWindowKeyDown = (event: KeyboardEvent) => {
+  if (event.key === "Escape" && mappingEditorOpen.value) {
+    closeMappingEditor();
+  }
+};
+
 const debouncedSearch = debounce((value: string) => {
   void store.setSearchFilter(value);
 }, 350);
@@ -426,11 +805,13 @@ const debouncedSearch = debounce((value: string) => {
 const onSearchInput = (event: Event) => {
   const value = (event.target as HTMLInputElement).value;
   searchInput.value = value;
+  closeMappingEditor();
   debouncedSearch(value);
 };
 
 const onStatusFilterChange = (event: Event) => {
   const value = (event.target as HTMLSelectElement).value as StatusFilter;
+  closeMappingEditor();
   void store.setStatusFilter(value);
 };
 
@@ -457,17 +838,38 @@ watch(
   { deep: true },
 );
 
+const syncHotTableData = () => {
+  const instance = hotTableRef.value?.hotInstance;
+  if (!instance) {
+    return;
+  }
+  instance.loadData?.(tableRows.value);
+  instance.render();
+};
+
 watch(
-  () => dataItems.value.length,
+  () => tableRows.value,
   async () => {
     await nextTick();
-    hotTableRef.value?.hotInstance?.render();
+    syncHotTableData();
     void ensureViewportFilled();
+  },
+);
+
+watch(
+  () => [mappingEditorRecord.value, mappingEditorQuestion.value] as const,
+  ([record, question]) => {
+    if (mappingEditor.value && (!record || !question)) {
+      closeMappingEditor();
+    }
   },
 );
 
 onMounted(async () => {
   searchInput.value = searchFilter.value;
+  updateViewportSize();
+  window.addEventListener("resize", updateViewportSize);
+  window.addEventListener("keydown", onWindowKeyDown);
 
   if (dataGridShellRef.value) {
     gridResizeObserver = new ResizeObserver(() => {
@@ -485,6 +887,8 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+  window.removeEventListener("resize", updateViewportSize);
+  window.removeEventListener("keydown", onWindowKeyDown);
   gridResizeObserver?.disconnect();
   gridResizeObserver = null;
 });
@@ -554,6 +958,193 @@ onUnmounted(() => {
   color: #5b5858;
 }
 
+.mapping-editor {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+
+  &__backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.2);
+  }
+
+  &__panel {
+    position: fixed;
+    z-index: 2001;
+    background: #fff;
+    border: 1px solid #aeaeae;
+    box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+    padding: 10px 8px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    overflow: hidden;
+  }
+
+  &__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 0 4px;
+    min-height: 28px;
+
+    h3 {
+      margin: 0;
+      font-size: 20px;
+      line-height: 1.2;
+      font-weight: 600;
+      color: #2c3e50;
+    }
+  }
+
+  &__selected {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 5px;
+    max-height: 180px;
+    overflow: auto;
+    padding: 2px 4px;
+    scrollbar-width: thin;
+    scrollbar-color: #c4c4c4 #f4f4f4;
+
+    &::-webkit-scrollbar {
+      width: 10px;
+    }
+
+    &::-webkit-scrollbar-track {
+      background: #f4f4f4;
+    }
+
+    &::-webkit-scrollbar-thumb {
+      background: #c4c4c4;
+      border-radius: 8px;
+      border: 2px solid #f4f4f4;
+    }
+  }
+
+  &__search {
+    padding: 0 4px;
+
+    input {
+      width: 100%;
+      box-sizing: border-box;
+      border: 0;
+      border-bottom: 1px solid #eaeaea;
+      padding: 6px 4px 8px;
+      font-size: 15px;
+      background: transparent;
+      color: #2c3e50;
+
+      &:focus {
+        outline: none;
+      }
+    }
+  }
+
+  &__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-height: 320px;
+    min-height: 120px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    border: 0;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: #c4c4c4 #f4f4f4;
+
+    &::-webkit-scrollbar {
+      width: 10px;
+    }
+
+    &::-webkit-scrollbar-track {
+      background: #f4f4f4;
+    }
+
+    &::-webkit-scrollbar-thumb {
+      background: #c4c4c4;
+      border-radius: 8px;
+      border: 2px solid #f4f4f4;
+    }
+  }
+
+  &__item {
+    height: 32px;
+    display: flex;
+    align-items: center;
+    margin: 0 -3px;
+    padding: 0 3px;
+    transition: background-color 0.2s ease-in;
+
+    &:hover {
+      background-color: #eaeaea;
+    }
+  }
+
+  &__pick {
+    width: 100%;
+    text-align: left;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: transparent;
+  }
+
+  &__create-label {
+    font-size: 12px;
+    color: #5b5858;
+    margin-right: 2px;
+  }
+
+  &__hint {
+    font-size: 12px;
+    color: #c0c0c0;
+    margin: 0 4px;
+
+    &--empty {
+      font-style: italic;
+    }
+  }
+
+  &__close {
+    font-size: 12px;
+    color: #5b5858;
+    padding: 2px 8px;
+    background: #fff;
+    border: 1px solid #e0e0e0;
+
+    &:hover {
+      background: #f7f7f7;
+    }
+  }
+}
+
+.mapping-chip {
+  font-size: 10px;
+  border-radius: 3px;
+  padding: 5px;
+  color: rgba(0, 0, 0, 0.65);
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+}
+
+.mapping-chip__remove {
+  font-size: 14px;
+  display: none;
+}
+
+.mapping-chip--selected:hover .mapping-chip__remove {
+  display: inline-flex;
+}
+
 :deep(.cell-saving) {
   background: #fff6d8 !important;
 }
@@ -565,10 +1156,75 @@ onUnmounted(() => {
 
 :deep(.ht_master .handsontable td) {
   vertical-align: top;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
 }
 
 :deep(.ht_master .wtHolder) {
   overscroll-behavior: contain;
+}
+
+:deep(td.data-text-cell) {
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+}
+
+:deep(.data-text-cell__content) {
+  position: relative;
+}
+
+:deep(.data-text-cell__text) {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  max-height: calc(3 * 1.35em);
+  line-height: 1.35;
+  white-space: normal;
+  word-break: break-word;
+  padding-right: 14px;
+}
+
+:deep(.data-text-cell__marker) {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  font-size: 12px;
+  line-height: 1;
+  font-weight: 700;
+  color: #6e6e6e;
+  padding-left: 8px;
+  background: linear-gradient(to right, rgba(255, 255, 255, 0), #fff 45%);
+}
+
+:deep(td.mapping-cell) {
+  padding-left: 2px !important;
+  padding-right: 2px !important;
+}
+
+:deep(.mapping-cell-chips) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: flex-start;
+  margin: 0;
+  max-height: calc(3 * 1.35em);
+  overflow: hidden;
+}
+
+:deep(.mapping-cell-chip) {
+  font-size: 10px;
+  border-radius: 3px;
+  padding: 3px 5px;
+  line-height: 1.2;
+  font-weight: 600;
+  color: rgba(0, 0, 0, 0.7);
+}
+
+:deep(.mapping-cell-placeholder) {
+  font-size: 11px;
+  color: #a0a0a0;
 }
 
 @media (max-width: 1024px) {
