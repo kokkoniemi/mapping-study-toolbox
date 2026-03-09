@@ -17,9 +17,13 @@ const dbMock = vi.hoisted(() => ({
   MappingOption: {
     findByPk: vi.fn(),
   },
+  MappingQuestion: {
+    findByPk: vi.fn(),
+  },
   RecordMappingOption: {
     create: vi.fn(),
     destroy: vi.fn(),
+    findOne: vi.fn(),
   },
 }));
 
@@ -60,8 +64,10 @@ describe("routes/records", () => {
     dbMock.Record.findAll.mockReset();
     dbMock.Record.findByPk.mockReset();
     dbMock.MappingOption.findByPk.mockReset();
+    dbMock.MappingQuestion.findByPk.mockReset();
     dbMock.RecordMappingOption.create.mockReset();
     dbMock.RecordMappingOption.destroy.mockReset();
+    dbMock.RecordMappingOption.findOne.mockReset();
     enrichmentMock.createEnrichmentJob.mockReset();
     enrichmentMock.getEnrichmentJob.mockReset();
     enrichmentMock.cancelEnrichmentJob.mockReset();
@@ -122,8 +128,11 @@ describe("routes/records", () => {
   });
 
   it("createOption links option to record and returns option", async () => {
+    dbMock.Record.findByPk.mockResolvedValue({ id: 42 });
+    dbMock.MappingQuestion.findByPk.mockResolvedValue({ id: 9 });
     dbMock.RecordMappingOption.create.mockResolvedValue({});
-    dbMock.MappingOption.findByPk.mockResolvedValue({ id: 55, title: "Tag" });
+    dbMock.RecordMappingOption.findOne.mockResolvedValue(null);
+    dbMock.MappingOption.findByPk.mockResolvedValue({ id: 55, title: "Tag", mappingQuestionId: 9 });
 
     const req = {
       params: { recordId: "42" },
@@ -139,7 +148,40 @@ describe("routes/records", () => {
       mappingOptionId: 55,
     });
     expect(dbMock.MappingOption.findByPk).toHaveBeenCalledWith(55);
-    expect(res.send).toHaveBeenCalledWith({ id: 55, title: "Tag" });
+    expect(res.send).toHaveBeenCalledWith({ id: 55, title: "Tag", mappingQuestionId: 9 });
+  });
+
+  it("createOption rejects option-question mismatch", async () => {
+    dbMock.Record.findByPk.mockResolvedValue({ id: 42 });
+    dbMock.MappingQuestion.findByPk.mockResolvedValue({ id: 9 });
+    dbMock.MappingOption.findByPk.mockResolvedValue({ id: 55, title: "Tag", mappingQuestionId: 100 });
+
+    const req = {
+      params: { recordId: "42" },
+      body: { mappingOptionId: "55", mappingQuestionId: "9" },
+    } as unknown as Request;
+    const res = mockResponse();
+
+    await expect(createOption(req, res)).rejects.toBeInstanceOf(ApiError);
+    expect(dbMock.RecordMappingOption.create).not.toHaveBeenCalled();
+  });
+
+  it("createOption is idempotent when link already exists", async () => {
+    dbMock.Record.findByPk.mockResolvedValue({ id: 42 });
+    dbMock.MappingQuestion.findByPk.mockResolvedValue({ id: 9 });
+    dbMock.MappingOption.findByPk.mockResolvedValue({ id: 55, title: "Tag", mappingQuestionId: 9 });
+    dbMock.RecordMappingOption.findOne.mockResolvedValue({ id: 999 });
+
+    const req = {
+      params: { recordId: "42" },
+      body: { mappingOptionId: "55", mappingQuestionId: "9" },
+    } as unknown as Request;
+    const res = mockResponse();
+
+    await createOption(req, res);
+
+    expect(dbMock.RecordMappingOption.create).not.toHaveBeenCalled();
+    expect(res.send).toHaveBeenCalledWith({ id: 55, title: "Tag", mappingQuestionId: 9 });
   });
 
   it("removeOption deletes relation and returns success message", async () => {

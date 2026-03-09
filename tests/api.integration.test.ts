@@ -23,6 +23,7 @@ const dbMock = vi.hoisted(() => ({
   RecordMappingOption: {
     create: vi.fn(),
     destroy: vi.fn(),
+    findOne: vi.fn(),
   },
 }));
 
@@ -67,6 +68,7 @@ describeWhenSocketAllowed("API integration", () => {
 
     dbMock.RecordMappingOption.create.mockReset();
     dbMock.RecordMappingOption.destroy.mockReset();
+    dbMock.RecordMappingOption.findOne.mockReset();
     enrichmentMock.createEnrichmentJob.mockReset();
     enrichmentMock.getEnrichmentJob.mockReset();
     enrichmentMock.cancelEnrichmentJob.mockReset();

@@ -191,6 +191,7 @@ import { storeToRefs } from "pinia";
 import { format as formatDate } from "date-fns";
 import { HotTable } from "@handsontable/vue3";
 import { registerAllModules } from "handsontable/registry";
+import type Handsontable from "handsontable/base";
 import type { CellChange } from "handsontable/common";
 import type { CellProperties, ColumnSettings, GridSettings } from "handsontable/settings";
 
@@ -224,13 +225,7 @@ type AnchorRect = {
   height: number;
 };
 
-type HotInstance = {
-  render: () => void;
-  loadData?: (data: GridRow[]) => void;
-  updateSettings?: (settings: Partial<GridSettings>) => void;
-  rootElement?: HTMLElement;
-  getCell?: (row: number, col: number, topmost?: boolean) => HTMLTableCellElement | null;
-};
+type HotInstance = Pick<Handsontable, "render" | "loadData" | "updateSettings" | "rootElement" | "getCell">;
 
 type EnrichmentMetrics = EnrichmentJob["metrics"];
 

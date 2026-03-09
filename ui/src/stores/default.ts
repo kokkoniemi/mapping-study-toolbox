@@ -98,7 +98,16 @@ const getErrorMessage = (error: unknown) => {
 const pageLengthOptions: PageLength[] = [20, 25, 30];
 
 export const defaultStore = defineStore("default", {
-  persist: true,
+  persist: {
+    pick: [
+      "tab",
+      "dataCellsTruncated",
+      "pageLength",
+      "statusFilter",
+      "searchFilter",
+      "nick",
+    ],
+  },
   state: (): DefaultState => ({
     tab: "inc-exc",
     dataCellsTruncated: true,

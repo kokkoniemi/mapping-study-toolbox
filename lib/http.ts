@@ -22,6 +22,9 @@ export const badRequest = (message: string, details?: unknown) =>
 export const notFound = (message: string, details?: unknown) =>
   new ApiError(404, "NOT_FOUND", message, details);
 
+export const tooManyRequests = (message: string, details?: unknown) =>
+  new ApiError(429, "RATE_LIMITED", message, details);
+
 const isSequelizeValidationError = (error: unknown) => {
   if (!error || typeof error !== "object") {
     return false;

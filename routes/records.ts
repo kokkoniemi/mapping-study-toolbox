@@ -276,16 +276,40 @@ export const createOption = async (req: Request, res: Response) => {
 
   const mappingOptionId = parseInteger(body.mappingOptionId, "mappingOptionId", { min: 1 });
   const mappingQuestionId = parseInteger(body.mappingQuestionId, "mappingQuestionId", { min: 1 });
+  const [record, question, option] = await Promise.all([
+    db.Record.findByPk(recordId),
+    db.MappingQuestion.findByPk(mappingQuestionId),
+    db.MappingOption.findByPk(mappingOptionId),
+  ]);
 
-  await db.RecordMappingOption.create({
-    recordId,
-    mappingQuestionId,
-    mappingOptionId,
-  });
+  if (!record) {
+    throw notFound(`Record ${recordId} not found`);
+  }
 
-  const option = await db.MappingOption.findByPk(mappingOptionId);
+  if (!question) {
+    throw notFound(`MappingQuestion ${mappingQuestionId} not found`);
+  }
+
   if (!option) {
     throw notFound(`MappingOption ${mappingOptionId} not found`);
+  }
+
+  if (option.mappingQuestionId !== mappingQuestionId) {
+    throw badRequest(
+      `MappingOption ${mappingOptionId} does not belong to MappingQuestion ${mappingQuestionId}`,
+    );
+  }
+
+  const existing = await db.RecordMappingOption.findOne({
+    where: { recordId, mappingOptionId },
+  });
+
+  if (!existing) {
+    await db.RecordMappingOption.create({
+      recordId,
+      mappingQuestionId,
+      mappingOptionId,
+    });
   }
 
   return res.send(option);

@@ -1,9 +1,22 @@
 import { Router } from "express";
 
+import { createRateLimitMiddleware } from "../lib/security";
 import * as records from "./records";
 import * as mappingQuestions from "./mappingQuestions";
 
 const router = Router();
+const parsePositiveInteger = (value: string | undefined, fallback: number) => {
+  const parsed = Number.parseInt(value ?? "", 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallback;
+  }
+  return parsed;
+};
+const enrichmentRateLimit = createRateLimitMiddleware({
+  windowMs: parsePositiveInteger(process.env.ENRICHMENT_RATE_LIMIT_WINDOW_MS, 60_000),
+  maxRequests: parsePositiveInteger(process.env.ENRICHMENT_RATE_LIMIT_MAX_REQUESTS, 20),
+  scope: "enrichment",
+});
 
 router.get("/health", (_req, res) => {
   res.send({ status: "ok" });
@@ -14,9 +27,9 @@ router.get("/records", records.listing);
 router.get("/records/:id", records.get);
 router.patch("/records/:id", records.patch);
 router.put("/records/:id", records.update);
-router.post("/records/enrichment-jobs", records.createEnrichment);
+router.post("/records/enrichment-jobs", enrichmentRateLimit, records.createEnrichment);
 router.get("/records/enrichment-jobs/:jobId", records.getEnrichment);
-router.post("/records/enrichment-jobs/:jobId/cancel", records.cancelEnrichment);
+router.post("/records/enrichment-jobs/:jobId/cancel", enrichmentRateLimit, records.cancelEnrichment);
 router.post("/records/:recordId/mapping-options", records.createOption);
 router.delete("/records/:recordId/mapping-options/:mappingOptionId", records.removeOption);
 

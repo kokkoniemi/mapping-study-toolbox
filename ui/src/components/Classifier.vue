@@ -26,7 +26,7 @@
                                 <b>Abstract:</b>
                             </small>
                             <br />
-                            <span v-if="currentItem.abstract" v-html="nltobr(sanitizeAbstract(currentItem.abstract))"></span>
+                            <span v-if="currentItem.abstract" class="abstract__text">{{ sanitizeAbstract(currentItem.abstract) }}</span>
                             <span v-else>No abstract available.</span>
                         </p>
                         <div v-if="isLongContent" :class="[
@@ -337,8 +337,6 @@ const setIncluded = async () => {
   setNextItem(nextFlag.value);
 };
 
-const nltobr = (value: string) => value.replace(/(?:\r\n|\r|\n)/g, "<br>");
-
 const sanitizeAbstract = (value: string) =>
   value.replace("Abstract:\n", "").replace("Abstract\n", "").split("\n•\n").join("");
 
@@ -482,6 +480,10 @@ h1 {
     font-family: Georgia;
     font-size: 18px;
     margin: 0;
+}
+
+.abstract__text {
+    white-space: pre-line;
 }
 
 .abstract-wrapper {

@@ -162,6 +162,10 @@ UI dev server runs on http://localhost:8080 and calls backend API at http://loca
   - `JUFO_BASE_URL` (default `https://jufo-rest.csc.fi/v1.1`)
   - `JUFO_MIN_DELAY_MS` (default `500`)
   - `JUFO_MAX_DELAY_MS` (default `1000`)
+  - `CORS_ALLOWED_ORIGINS` (comma-separated list, default `http://localhost:8080,http://localhost:3000`)
+  - `REQUEST_BODY_LIMIT` (default `1mb`)
+  - `ENRICHMENT_RATE_LIMIT_MAX_REQUESTS` (default `20`)
+  - `ENRICHMENT_RATE_LIMIT_WINDOW_MS` (default `60000`)
 
 ### Where to put `OPENALEX_API_KEY`
 - Docker: add `OPENALEX_API_KEY` under `services.backend.environment` in `docker-compose.yml` (or use `${OPENALEX_API_KEY}` with a local `.env` file).
