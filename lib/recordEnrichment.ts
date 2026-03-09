@@ -2,6 +2,15 @@ import { randomUUID } from "node:crypto";
 
 import db from "../models";
 import type { CrossrefAuthorDetail, CrossrefReferenceItem } from "../models/types";
+import type {
+  EnrichmentJobMetrics as SharedEnrichmentJobMetrics,
+  EnrichmentJobOptions as SharedEnrichmentJobOptions,
+  EnrichmentJobResult as SharedEnrichmentJobResult,
+  EnrichmentJobSnapshot as SharedEnrichmentJobSnapshot,
+  EnrichmentJobStatus,
+  EnrichmentProvider,
+  EnrichmentResultStatus,
+} from "../shared/contracts";
 import {
   CrossrefClient,
   extractDoiFromRecordUrls,
@@ -13,50 +22,16 @@ import {
 import { JufoClient, type JufoLookupResult } from "./jufo";
 import { OpenAlexClient, type OpenAlexResolvedWork } from "./openalex";
 
-type JobStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
-type ResultStatus = "enriched" | "skipped" | "failed";
-type EnrichmentProvider = "crossref" | "openalex" | "all";
+type JobStatus = EnrichmentJobStatus;
+type ResultStatus = EnrichmentResultStatus;
 
-export type EnrichmentJobMetrics = {
-  crossref: {
-    records: number;
-    requests: number;
-  };
-  openalex: {
-    records: number;
-    requests: number;
-  };
-  jufo: {
-    records: number;
-    requests: number;
-  };
-};
+export type EnrichmentJobMetrics = SharedEnrichmentJobMetrics;
 
-export type EnrichmentJobOptions = {
-  provider?: EnrichmentProvider;
-  maxCitations?: number | null;
-  forceRefresh?: boolean;
-};
+export type EnrichmentJobOptions = SharedEnrichmentJobOptions;
 
-export type EnrichmentJobResult = {
-  recordId: number;
-  status: ResultStatus;
-  doi: string | null;
-  message?: string;
-};
+export type EnrichmentJobResult = SharedEnrichmentJobResult;
 
-export type EnrichmentJobSnapshot = {
-  jobId: string;
-  status: JobStatus;
-  total: number;
-  processed: number;
-  createdAt: string;
-  startedAt: string | null;
-  finishedAt: string | null;
-  results: EnrichmentJobResult[];
-  updatedRecords: Array<Record<string, unknown>>;
-  metrics: EnrichmentJobMetrics;
-};
+export type EnrichmentJobSnapshot = SharedEnrichmentJobSnapshot<Record<string, unknown>>;
 
 type InternalJob = EnrichmentJobSnapshot & {
   recordIds: number[];

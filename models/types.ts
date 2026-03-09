@@ -1,5 +1,6 @@
 import type { Model, ModelStatic, Sequelize } from "sequelize";
 import type * as SequelizeModule from "sequelize";
+import type { RecordStatus } from "../shared/contracts";
 
 export type DataTypesInstance = typeof import("sequelize").DataTypes;
 
@@ -77,8 +78,6 @@ export type RecordMappingOptionModel = BaseModel<
   RecordMappingOptionCreationAttributes
 >;
 export type RecordMappingOptionModelStatic = AssociableModel<RecordMappingOptionModel>;
-
-export type RecordStatus = "excluded" | "included" | "uncertain" | null;
 
 export interface CrossrefAuthorDetail {
   given: string | null;

@@ -1,4 +1,5 @@
 import { extractDoiFromText } from "./crossref";
+import { parseAuthorFamilyFromText, parseRetryAfterMs, scoreTitleSimilarity, sleep } from "./enrichmentCommon";
 
 const OPENALEX_BASE_URL = (process.env.OPENALEX_BASE_URL ?? "https://api.openalex.org").replace(/\/+$/, "");
 const OPENALEX_API_KEY = process.env.OPENALEX_API_KEY?.trim() ?? "";
@@ -104,29 +105,6 @@ export type OpenAlexResolvedWork = {
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 
-const sleep = async (ms: number) =>
-  new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-
-const parseRetryAfterMs = (retryAfterHeader: string | null) => {
-  if (!retryAfterHeader) {
-    return null;
-  }
-
-  const asSeconds = Number.parseInt(retryAfterHeader, 10);
-  if (Number.isFinite(asSeconds) && asSeconds >= 0) {
-    return asSeconds * 1000;
-  }
-
-  const asDate = Date.parse(retryAfterHeader);
-  if (Number.isNaN(asDate)) {
-    return null;
-  }
-
-  return Math.max(0, asDate - Date.now());
-};
-
 const normalizeOpenAlexId = (value: string | null | undefined) => {
   if (!value) {
     return null;
@@ -170,61 +148,8 @@ const sanitizeDoi = (value: string | null | undefined) => {
   return fallback.length > 0 ? fallback : null;
 };
 
-const normalizeText = (value: string) =>
-  value
-    .toLocaleLowerCase()
-    .replace(/[^a-z0-9\s]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-
-const scoreTitleSimilarity = (left: string, right: string) => {
-  const leftNorm = normalizeText(left);
-  const rightNorm = normalizeText(right);
-  if (leftNorm.length === 0 || rightNorm.length === 0) {
-    return 0;
-  }
-
-  if (leftNorm === rightNorm) {
-    return 1;
-  }
-
-  const leftTokens = new Set(leftNorm.split(" "));
-  const rightTokens = new Set(rightNorm.split(" "));
-
-  let overlap = 0;
-  leftTokens.forEach((token) => {
-    if (rightTokens.has(token)) {
-      overlap += 1;
-    }
-  });
-
-  const denom = Math.max(leftTokens.size, rightTokens.size, 1);
-  return overlap / denom;
-};
-
-const authorFamilyFromText = (authorText: string | null | undefined) => {
-  if (!authorText) {
-    return null;
-  }
-
-  const normalized = authorText
-    .split(/[;,]/)[0]
-    ?.trim()
-    .toLocaleLowerCase();
-
-  if (!normalized) {
-    return null;
-  }
-
-  const parts = normalized.split(/\s+/).filter(Boolean);
-  if (parts.length === 0) {
-    return null;
-  }
-  return parts[0] ?? null;
-};
-
 const scoreAuthorSimilarity = (queryAuthor: string | null | undefined, work: OpenAlexWorkRaw) => {
-  const queryFamily = authorFamilyFromText(queryAuthor);
+  const queryFamily = parseAuthorFamilyFromText(queryAuthor);
   if (!queryFamily) {
     return 0;
   }

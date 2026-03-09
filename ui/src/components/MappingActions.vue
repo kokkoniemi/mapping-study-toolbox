@@ -83,6 +83,7 @@ import { computed, nextTick, onMounted, ref } from "vue";
 import type { ComponentPublicInstance } from "vue";
 import { storeToRefs } from "pinia";
 
+import { getRandomMappingOptionColor, normalizeMappingColor } from "../constants/mapping";
 import { debounce } from "../helpers/utils";
 import { defaultStore } from "../stores/default";
 import type { MappingOption, MappingQuestion } from "../helpers/api";
@@ -239,24 +240,11 @@ const createOption = async (question: MappingQuestion, color: string) => {
 };
 
 const getOptionColor = () => {
-  const colors = [
-    "#e6b0b0",
-    "#e6cab0",
-    "#e1e6b0",
-    "#b0e6bf",
-    "#9cdacd",
-    "#96c9e1",
-    "#a7adc6",
-    "#b4a9ed",
-    "#e2a9ed",
-    "#e89dba",
-    "#c69696",
-  ];
-  return colors[Math.floor(Math.random() * colors.length)] ?? colors[0] ?? "#e6b0b0";
+  return getRandomMappingOptionColor();
 };
 
 const tagStyle = (color: string | null | undefined) => ({
-  backgroundColor: color ?? "#d8d8d8",
+  backgroundColor: normalizeMappingColor(color),
 });
 
 const filterOptionList = (option: MappingOption) => {

@@ -1,3 +1,15 @@
+import type {
+  CreateEnrichmentJobPayload,
+  EnrichmentJobSnapshot,
+  MappingOptionsIndexResponse as SharedMappingOptionsIndexResponse,
+  MappingQuestionsIndexResponse as SharedMappingQuestionsIndexResponse,
+  PatchRecordPayload,
+  RecordStatus,
+  RecordsIndexResponse as SharedRecordsIndexResponse,
+} from "@shared/contracts";
+
+export type { CreateEnrichmentJobPayload, PatchRecordPayload, RecordStatus };
+
 const API_ROOT = "http://localhost:3000/api/";
 const REQUEST_TIMEOUT_MS = 10000;
 const REQUEST_RETRY_COUNT = 3;
@@ -157,8 +169,6 @@ export interface MappingOption {
   [key: string]: unknown;
 }
 
-export type RecordStatus = "uncertain" | "excluded" | "included" | null;
-
 export interface MappingQuestion {
   id: number;
   title: string;
@@ -250,64 +260,12 @@ export interface RecordItem {
   [key: string]: unknown;
 }
 
-interface RecordsIndexResponse {
-  count: number;
-  records: RecordItem[];
-}
-
-export interface EnrichmentJobResult {
-  recordId: number;
-  status: "enriched" | "skipped" | "failed";
-  doi: string | null;
-  message?: string;
-}
-
-export interface EnrichmentJob {
-  jobId: string;
-  status: "queued" | "running" | "completed" | "failed" | "cancelled";
-  total: number;
-  processed: number;
-  createdAt: string;
-  startedAt: string | null;
-  finishedAt: string | null;
-  results: EnrichmentJobResult[];
-  updatedRecords: RecordItem[];
-  metrics: {
-    crossref: { records: number; requests: number };
-    openalex: { records: number; requests: number };
-    jufo: { records: number; requests: number };
-  };
-}
-
-type CreateEnrichmentJobPayload = {
-  recordIds: number[];
-  provider?: "crossref" | "openalex" | "all";
-  maxCitations?: number | null;
-  forceRefresh?: boolean;
-};
-
-interface MappingQuestionsIndexResponse {
-  count: number;
-  questions: MappingQuestion[];
-}
-
-interface MappingOptionsIndexResponse {
-  count: number;
-  options: MappingOption[];
-}
+export type EnrichmentJob = EnrichmentJobSnapshot<RecordItem>;
+type RecordsIndexResponse = SharedRecordsIndexResponse<RecordItem>;
+type MappingQuestionsIndexResponse = SharedMappingQuestionsIndexResponse<MappingQuestion>;
+type MappingOptionsIndexResponse = SharedMappingOptionsIndexResponse<MappingOption>;
 
 type UpdateRecordPayload = Record<string, unknown>;
-export type PatchRecordPayload = Partial<{
-  title: string;
-  author: string;
-  url: string;
-  status: RecordStatus;
-  comment: string | null;
-  abstract: string | null;
-  databases: string[];
-  alternateUrls: string[];
-  editedBy: string;
-}>;
 type SaveMappingOptionPayload = {
   mappingOptionId: number;
   mappingQuestionId: number;

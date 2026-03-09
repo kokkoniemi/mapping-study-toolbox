@@ -11,6 +11,7 @@
     "types": ["node", "vitest/globals"]
   },
   "include": [
+    "shared/**/*.ts",
     "lib/**/*.ts",
     "server.ts",
     "routes/**/*.ts",

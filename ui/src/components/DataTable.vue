@@ -189,6 +189,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { storeToRefs } from "pinia";
 import { format as formatDate } from "date-fns";
+import type { StatusFilter } from "@shared/contracts";
 import { HotTable } from "@handsontable/vue3";
 import { registerAllModules } from "handsontable/registry";
 import type Handsontable from "handsontable/base";
@@ -198,10 +199,12 @@ import type { CellProperties, ColumnSettings, GridSettings } from "handsontable/
 import "handsontable/styles/handsontable.css";
 import "handsontable/styles/ht-theme-main.css";
 
+import { DEFAULT_MAPPING_OPTION_COLOR, getRandomMappingOptionColor, normalizeMappingColor } from "../constants/mapping";
+import { STATUS_FILTER_OPTIONS } from "../constants/status";
+import { getApiErrorMessage } from "../helpers/errors";
 import { debounce } from "../helpers/utils";
-import { defaultStore, type StatusFilter } from "../stores/default";
+import { defaultStore } from "../stores/default";
 import {
-  HttpError,
   records,
   type EnrichmentJob,
   type MappingOption,
@@ -235,13 +238,7 @@ const createEmptyMetrics = (): EnrichmentMetrics => ({
   jufo: { records: 0, requests: 0 },
 });
 
-const statusOptions: Array<{ label: string; value: StatusFilter }> = [
-  { label: "All", value: "" },
-  { label: "Unset", value: "null" },
-  { label: "Uncertain", value: "uncertain" },
-  { label: "Excluded", value: "excluded" },
-  { label: "Included", value: "included" },
-];
+const statusOptions = STATUS_FILTER_OPTIONS;
 
 const editableSources = new Set<string>([
   "edit",
@@ -288,7 +285,7 @@ const mappingEditorInputRef = ref<HTMLInputElement | null>(null);
 const mappingEditor = ref<MappingEditorState | null>(null);
 const mappingEditorAnchor = ref<AnchorRect | null>(null);
 const mappingEditorInput = ref("");
-const mappingEditorCreateColor = ref("#d8d8d8");
+const mappingEditorCreateColor = ref(DEFAULT_MAPPING_OPTION_COLOR);
 const viewportSize = ref({
   width: typeof window === "undefined" ? 1920 : window.innerWidth,
   height: typeof window === "undefined" ? 1080 : window.innerHeight,
@@ -313,19 +310,6 @@ const totalCountLabel = computed(() => {
   }
   return String(dataTotal.value);
 });
-
-const getErrorMessage = (error: unknown) => {
-  if (error instanceof HttpError) {
-    const data = error.response.data as { error?: { message?: string } } | undefined;
-    return data?.error?.message ?? `Request failed (${error.response.status})`;
-  }
-
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return "Request failed";
-};
 
 const formatTimestamp = (value: string) => formatDate(new Date(value), "dd.MM.yyyy HH:mm:ss");
 
@@ -422,17 +406,8 @@ const parseMappingQuestionId = (prop: unknown) => {
   return questionId;
 };
 
-const sanitizeColor = (color: string | null | undefined) => {
-  if (!color) {
-    return "#d8d8d8";
-  }
-
-  const trimmed = color.trim();
-  return /^#[0-9a-fA-F]{3,8}$/.test(trimmed) ? trimmed : "#d8d8d8";
-};
-
 const chipStyle = (color: string | null | undefined) => ({
-  backgroundColor: sanitizeColor(color),
+  backgroundColor: normalizeMappingColor(color),
 });
 
 const escapeHtml = (value: string) =>
@@ -521,7 +496,7 @@ function mappingChipRenderer(
   const questionId = parseMappingQuestionId(prop);
   const question = mappingQuestions.value.find((item) => item.id === questionId);
   const colorByTitle = new Map(
-    (question?.MappingOptions ?? []).map((item) => [item.title.toLocaleLowerCase(), sanitizeColor(item.color)]),
+    (question?.MappingOptions ?? []).map((item) => [item.title.toLocaleLowerCase(), normalizeMappingColor(item.color)]),
   );
 
   const titles = parseListCellValue(value === null || value === undefined ? "" : String(value));
@@ -533,7 +508,7 @@ function mappingChipRenderer(
   const chipsClass = shouldTruncate ? "mapping-cell-chips mapping-cell-chips--truncated" : "mapping-cell-chips";
   td.innerHTML = `<div class="${chipsClass}">${titles
     .map((title) => {
-      const color = colorByTitle.get(title.toLocaleLowerCase()) ?? "#d8d8d8";
+      const color = colorByTitle.get(title.toLocaleLowerCase()) ?? DEFAULT_MAPPING_OPTION_COLOR;
       return `<span class="mapping-cell-chip" style="background-color:${color}">${escapeHtml(title)}</span>`;
     })
     .join("")}</div>`;
@@ -580,23 +555,6 @@ const parseListCellValue = (value: string) => {
   }
 
   return result;
-};
-
-const randomColor = () => {
-  const colors = [
-    "#e6b0b0",
-    "#e6cab0",
-    "#e1e6b0",
-    "#b0e6bf",
-    "#9cdacd",
-    "#96c9e1",
-    "#a7adc6",
-    "#b4a9ed",
-    "#e2a9ed",
-    "#e89dba",
-    "#c69696",
-  ];
-  return colors[Math.floor(Math.random() * colors.length)] ?? "#d8d8d8";
 };
 
 const getRecordById = (recordId: number) =>
@@ -756,7 +714,7 @@ const openMappingEditor = async (recordId: number, questionId: number, anchor: A
   mappingEditor.value = { recordId, questionId };
   mappingEditorAnchor.value = anchor;
   mappingEditorInput.value = "";
-  mappingEditorCreateColor.value = randomColor();
+  mappingEditorCreateColor.value = getRandomMappingOptionColor();
   await nextTick();
   mappingEditorInputRef.value?.focus();
 };
@@ -794,7 +752,7 @@ const createMappingOption = async () => {
     mappingEditorCreateColor.value,
   );
   mappingEditorInput.value = "";
-  mappingEditorCreateColor.value = randomColor();
+  mappingEditorCreateColor.value = getRandomMappingOptionColor();
 };
 
 const toggleRecordSelection = (recordId: number) => {
@@ -895,7 +853,7 @@ const enrichSelectedRecords = async () => {
     activeEnrichmentJobId.value = response.data.jobId;
     await waitForJobCompletion(response.data.jobId);
   } catch (error) {
-    enrichmentError.value = getErrorMessage(error);
+    enrichmentError.value = getApiErrorMessage(error);
   } finally {
     enrichmentRunning.value = false;
     enrichmentStopping.value = false;
@@ -913,7 +871,7 @@ const stopEnrichment = async () => {
     await records.enrichment.cancelJob(activeEnrichmentJobId.value);
     enrichmentMessage.value = "Stopping enrichment...";
   } catch (error) {
-    enrichmentError.value = getErrorMessage(error);
+    enrichmentError.value = getApiErrorMessage(error);
     enrichmentStopping.value = false;
   }
 };

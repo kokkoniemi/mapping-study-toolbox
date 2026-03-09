@@ -56,22 +56,18 @@
 <script setup lang="ts">
 import { computed, onMounted } from "vue";
 import { storeToRefs } from "pinia";
+import type { StatusFilter } from "@shared/contracts";
 
 import { type RecordItem } from "../helpers/api";
-import { defaultStore, type StatusFilter } from "../stores/default";
+import { STATUS_FILTER_OPTIONS } from "../constants/status";
+import { defaultStore } from "../stores/default";
 
 const store = defaultStore();
 const { page, pageLength, pageItems, itemCount, statusFilter, searchFilter, currentItem } =
   storeToRefs(store);
 const pageLengthOptions = [20, 25, 30] as const;
 
-const statusOptions: Array<{ label: string; value: StatusFilter }> = [
-  { label: "All", value: "" },
-  { label: "Unset", value: "null" },
-  { label: "Uncertain", value: "uncertain" },
-  { label: "Excluded", value: "excluded" },
-  { label: "Included", value: "included" },
-];
+const statusOptions = STATUS_FILTER_OPTIONS;
 
 const recordRange = computed(() => {
   const first = itemCount.value <= 0 ? 0 : (page.value - 1) * pageLength.value + 1;

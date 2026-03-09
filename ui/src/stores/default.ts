@@ -1,18 +1,16 @@
 import { defineStore } from "pinia";
+import type { PatchRecordPayload, RecordStatus, StatusFilter } from "@shared/contracts";
 
 import {
-  HttpError,
   mappingQuestions,
   records,
   type MappingQuestion,
-  type PatchRecordPayload,
   type QueryParams,
   type RecordItem,
-  type RecordStatus,
 } from "../helpers/api";
+import { getApiErrorMessage } from "../helpers/errors";
 
 export type TabMode = "inc-exc" | "map" | "data";
-export type StatusFilter = "" | "null" | "uncertain" | "excluded" | "included";
 export type RecordArrayField = "databases" | "alternateUrls";
 export type PageLength = 20 | 25 | 30;
 
@@ -81,19 +79,6 @@ const normalizeRecordItem = (record: RecordItem): RecordItem => ({
   alternateUrls: Array.isArray(record.alternateUrls) ? record.alternateUrls : [],
   MappingOptions: Array.isArray(record.MappingOptions) ? record.MappingOptions : [],
 });
-
-const getErrorMessage = (error: unknown) => {
-  if (error instanceof HttpError) {
-    const data = error.response.data as { error?: { message?: string } } | undefined;
-    return data?.error?.message ?? `Request failed (${error.response.status})`;
-  }
-
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return "Request failed";
-};
 
 const pageLengthOptions: PageLength[] = [20, 25, 30];
 
@@ -397,7 +382,7 @@ export const defaultStore = defineStore("default", {
           this.setCellError(recordId, field, null);
         }
       } catch (error) {
-        const message = getErrorMessage(error);
+        const message = getApiErrorMessage(error);
         for (const field of fields) {
           this.setCellSaving(recordId, field, false);
           this.setCellError(recordId, field, message);
@@ -452,7 +437,7 @@ export const defaultStore = defineStore("default", {
           this.dataItems = nextDataItems;
         }
       } catch (error) {
-        this.setCellError(recordId, field, getErrorMessage(error));
+        this.setCellError(recordId, field, getApiErrorMessage(error));
         throw error;
       } finally {
         this.setCellSaving(recordId, field, false);
@@ -503,7 +488,7 @@ export const defaultStore = defineStore("default", {
           this.dataItems = nextDataItems;
         }
       } catch (error) {
-        this.setCellError(recordId, field, getErrorMessage(error));
+        this.setCellError(recordId, field, getApiErrorMessage(error));
         throw error;
       } finally {
         this.setCellSaving(recordId, field, false);

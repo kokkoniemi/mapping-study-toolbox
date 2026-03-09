@@ -1,4 +1,5 @@
 import { normalizeIssn } from "./crossref";
+import { parseRetryAfterMs, sleep } from "./enrichmentCommon";
 
 const JUFO_BASE_URL = (process.env.JUFO_BASE_URL ?? "https://jufo-rest.csc.fi/v1.1").replace(/\/+$/, "");
 const JUFO_TIMEOUT_MS = 10_000;
@@ -12,29 +13,6 @@ export type JufoLookupResult = {
   issn: string | null;
   name: string | null;
 };
-
-const parseRetryAfterMs = (retryAfterHeader: string | null) => {
-  if (!retryAfterHeader) {
-    return null;
-  }
-
-  const asSeconds = Number.parseInt(retryAfterHeader, 10);
-  if (Number.isFinite(asSeconds) && asSeconds >= 0) {
-    return asSeconds * 1000;
-  }
-
-  const asDate = Date.parse(retryAfterHeader);
-  if (Number.isNaN(asDate)) {
-    return null;
-  }
-
-  return Math.max(0, asDate - Date.now());
-};
-
-const sleep = async (ms: number) =>
-  new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 

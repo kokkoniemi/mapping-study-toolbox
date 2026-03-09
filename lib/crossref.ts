@@ -1,3 +1,5 @@
+import { parseAuthorFamilyFromText, parseRetryAfterMs, scoreTitleSimilarity, sleep } from "./enrichmentCommon";
+
 const CROSSREF_BASE_URL = (process.env.CROSSREF_BASE_URL ?? "https://api.crossref.org").replace(/\/+$/, "");
 const CROSSREF_MAILTO = process.env.CROSSREF_MAILTO?.trim() ?? "";
 const CROSSREF_TIMEOUT_MS = 20_000;
@@ -51,67 +53,8 @@ type CrossrefSearchMessage = {
   items?: CrossrefWork[];
 };
 
-const sleep = async (ms: number) =>
-  new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-
-const normalizeText = (value: string) =>
-  value
-    .toLocaleLowerCase()
-    .replace(/[^a-z0-9\s]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-
-const scoreTitleSimilarity = (left: string, right: string) => {
-  const leftNorm = normalizeText(left);
-  const rightNorm = normalizeText(right);
-  if (leftNorm.length === 0 || rightNorm.length === 0) {
-    return 0;
-  }
-
-  if (leftNorm === rightNorm) {
-    return 1;
-  }
-
-  const leftTokens = new Set(leftNorm.split(" "));
-  const rightTokens = new Set(rightNorm.split(" "));
-
-  let overlap = 0;
-  leftTokens.forEach((token) => {
-    if (rightTokens.has(token)) {
-      overlap += 1;
-    }
-  });
-
-  const denom = Math.max(leftTokens.size, rightTokens.size, 1);
-  return overlap / denom;
-};
-
-const authorFamilyFromText = (authorText: string | null | undefined) => {
-  if (!authorText) {
-    return null;
-  }
-
-  const normalized = authorText
-    .split(/[;,]/)[0]
-    ?.trim()
-    .toLocaleLowerCase();
-
-  if (!normalized) {
-    return null;
-  }
-
-  // "Family, Given" and "Given Family" are both used in source data.
-  const parts = normalized.split(/\s+/).filter(Boolean);
-  if (parts.length === 0) {
-    return null;
-  }
-  return parts[0] ?? null;
-};
-
 const scoreAuthorSimilarity = (queryAuthor: string | null | undefined, work: CrossrefWork) => {
-  const queryFamily = authorFamilyFromText(queryAuthor);
+  const queryFamily = parseAuthorFamilyFromText(queryAuthor);
   if (!queryFamily) {
     return 0;
   }
@@ -129,24 +72,6 @@ const scoreAuthorSimilarity = (queryAuthor: string | null | undefined, work: Cro
   }
 
   return families.some((family) => family.includes(queryFamily) || queryFamily.includes(family)) ? 0.5 : 0;
-};
-
-const parseRetryAfterMs = (retryAfterHeader: string | null) => {
-  if (!retryAfterHeader) {
-    return null;
-  }
-
-  const asSeconds = Number.parseInt(retryAfterHeader, 10);
-  if (Number.isFinite(asSeconds) && asSeconds >= 0) {
-    return asSeconds * 1000;
-  }
-
-  const asDate = Date.parse(retryAfterHeader);
-  if (Number.isNaN(asDate)) {
-    return null;
-  }
-
-  return Math.max(0, asDate - Date.now());
 };
 
 const sanitizeDoi = (value: string) =>

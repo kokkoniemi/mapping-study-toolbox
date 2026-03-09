@@ -4,6 +4,13 @@ import { Op } from "sequelize";
 import { badRequest, notFound } from "../lib/http";
 import { cancelEnrichmentJob, createEnrichmentJob, getEnrichmentJob } from "../lib/recordEnrichment";
 import {
+  RECORD_STATUS_VALUES,
+  type EnrichmentJobOptions,
+  type EnrichmentProvider,
+  type PatchRecordPayload,
+  type RecordStatus,
+} from "../shared/contracts";
+import {
   assertAllowedKeys,
   parseIntegerArray,
   parseInteger,
@@ -13,9 +20,8 @@ import {
   parseStringArray,
 } from "../lib/validation";
 import db from "../models";
-import type { RecordStatus } from "../models/types";
 
-const VALID_STATUSES: readonly RecordStatus[] = [null, "uncertain", "excluded", "included"];
+const VALID_STATUSES: readonly RecordStatus[] = RECORD_STATUS_VALUES;
 const VALID_STATUSES_TEXT = ["null", "uncertain", "excluded", "included"] as const;
 
 const parseStatusQuery = (value: unknown): RecordStatus | undefined => {
@@ -70,18 +76,6 @@ const parseStatusRequired = (value: unknown): RecordStatus => {
 
   throw badRequest(`status must be one of: ${VALID_STATUSES_TEXT.join(", ")}`);
 };
-
-type RecordPatchPayload = Partial<{
-  title: string;
-  author: string;
-  url: string;
-  status: RecordStatus;
-  comment: string | null;
-  abstract: string | null;
-  databases: string[];
-  alternateUrls: string[];
-  editedBy: string;
-}>;
 
 export const listing = async (req: Request, res: Response) => {
   const offset = parseInteger(req.query.offset, "offset", { defaultValue: 0, min: 0 });
@@ -185,7 +179,7 @@ export const patch = async (req: Request, res: Response) => {
     "record patch body",
   );
 
-  const updates: RecordPatchPayload = {};
+  const updates: PatchRecordPayload = {};
 
   if ("title" in body) {
     updates.title = parseString(body.title, "title", { trim: true, allowEmpty: false, maxLength: 500 });
@@ -349,7 +343,8 @@ export const createEnrichment = async (req: Request, res: Response) => {
     allowEmpty: false,
     maxLength: 20,
   });
-  if (provider !== undefined && !["crossref", "openalex", "all"].includes(provider)) {
+  const validProviders: EnrichmentProvider[] = ["crossref", "openalex", "all"];
+  if (provider !== undefined && !validProviders.includes(provider as EnrichmentProvider)) {
     throw badRequest("provider must be one of: crossref, openalex, all");
   }
 
@@ -366,11 +361,13 @@ export const createEnrichment = async (req: Request, res: Response) => {
   }
   const forceRefresh = forceRefreshRaw === true;
 
-  const job = createEnrichmentJob(recordIds, {
-    ...(provider !== undefined ? { provider: provider as "crossref" | "openalex" | "all" } : {}),
+  const jobPayload: EnrichmentJobOptions = {
+    ...(provider !== undefined ? { provider: provider as EnrichmentProvider } : {}),
     ...(maxCitations !== undefined ? { maxCitations } : {}),
     forceRefresh,
-  });
+  };
+
+  const job = createEnrichmentJob(recordIds, jobPayload);
   return res.status(202).send(job);
 };
 
