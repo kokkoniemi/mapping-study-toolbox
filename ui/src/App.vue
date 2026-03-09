@@ -69,7 +69,11 @@ const updateTab = (value: "inc-exc" | "map" | "data") => {
   -moz-osx-font-smoothing: grayscale;
   color: #2c3e50;
   width: 100%;
+  height: 100vh;
   min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   box-sizing: border-box;
   padding: 0 var(--layout-gutter) var(--layout-gutter);
 }
@@ -78,15 +82,19 @@ const updateTab = (value: "inc-exc" | "map" | "data") => {
   grid-template-columns: var(--layout-sidebar-width) minmax(0, 1fr);
   gap: var(--layout-gutter);
   align-items: stretch;
+  flex: 1;
   width: 100%;
   min-width: 0;
-  min-height: 700px;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .data-container {
+  flex: 1;
   width: 100%;
   min-width: 0;
-  min-height: 700px;
+  min-height: 0;
+  overflow: auto;
 }
 .app-name {
   border-bottom: 1px solid #eaeaea;
@@ -174,12 +182,18 @@ const updateTab = (value: "inc-exc" | "map" | "data") => {
 }
 
 body {
-  overflow-y: scroll;
+  overflow: hidden;
 }
 
 @media (max-width: 768px) {
+  body {
+    overflow-y: auto;
+  }
+
   #app {
+    height: auto;
     --layout-sidebar-width: 100%;
+    overflow: visible;
   }
 
   .main-container {

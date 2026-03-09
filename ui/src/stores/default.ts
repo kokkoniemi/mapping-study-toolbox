@@ -14,6 +14,7 @@ import {
 export type TabMode = "inc-exc" | "map" | "data";
 export type StatusFilter = "" | "null" | "uncertain" | "excluded" | "included";
 export type RecordArrayField = "databases" | "alternateUrls";
+export type PageLength = 20 | 25 | 30;
 
 type MappingQuestionUpdate = {
   id: number;
@@ -45,7 +46,7 @@ type CellStates = Record<string, CellState>;
 interface DefaultState {
   tab: TabMode;
   page: number;
-  pageLength: number;
+  pageLength: PageLength;
   pageItems: RecordItem[];
   itemCount: number;
   currentItemId: number | null;
@@ -86,6 +87,8 @@ const getErrorMessage = (error: unknown) => {
 
   return "Request failed";
 };
+
+const pageLengthOptions: PageLength[] = [20, 25, 30];
 
 export const defaultStore = defineStore("default", {
   persist: true,
@@ -185,6 +188,16 @@ export const defaultStore = defineStore("default", {
       this.page = payload;
       await this.fetchPageItems();
       this.setCurrentItem(this.pageItems[0] ?? null);
+    },
+
+    async setPageLength(payload: number) {
+      if (!pageLengthOptions.includes(payload as PageLength) || payload === this.pageLength) {
+        return;
+      }
+
+      this.pageLength = payload as PageLength;
+      this.page = 1;
+      await this.fetchPageItems();
     },
 
     setCurrentItem(payload: RecordItem | null | undefined) {

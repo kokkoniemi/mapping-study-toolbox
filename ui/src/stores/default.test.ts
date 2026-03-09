@@ -129,13 +129,30 @@ describe("defaultStore", () => {
 
   it("setPage ignores requests above max pages", async () => {
     const store = defaultStore();
-    store.itemCount = 10;
-    store.pageLength = 5;
+    store.itemCount = 40;
+    store.pageLength = 20;
 
     await store.setPage(3);
 
     expect(store.page).toBe(1);
     expect(apiMocks.recordsIndex).not.toHaveBeenCalled();
+  });
+
+  it("setPageLength updates pagination size, resets page, and refetches", async () => {
+    const store = defaultStore();
+    store.page = 3;
+    store.itemCount = 120;
+
+    apiMocks.recordsIndex.mockResolvedValue({
+      status: 200,
+      data: { count: 120, records: [makeRecord({ id: 99 })] },
+    });
+
+    await store.setPageLength(30);
+
+    expect(store.pageLength).toBe(30);
+    expect(store.page).toBe(1);
+    expect(apiMocks.recordsIndex).toHaveBeenCalledWith({ offset: 0, limit: 30 });
   });
 
   it("setItemStatus updates current record in-place when filter is not active", async () => {

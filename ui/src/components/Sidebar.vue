@@ -27,19 +27,29 @@
                 <span class="item-title">{{ truncate(item.title) }}</span>
             </li>
         </ul>
-        <ul class="pagination">
-            <li @click="movePage(1)" class="pagination-item" :class="[page <= 1 && 'pagination-item--disabled']">‹‹ First
-            </li>
-            <li @click="movePage(page - 1)" class="pagination-item" :class="[page <= 1 && 'pagination-item--disabled']">‹
-                Prev</li>
-            <li @click="movePage(page + 1)" class="pagination-item"
-                :class="[page >= itemCount / pageLength && 'pagination-item--disabled']">Next ›</li>
-            <li @click="movePage(Math.ceil(itemCount / pageLength))" class="pagination-item"
-                :class="[page >= itemCount / pageLength && 'pagination-item--disabled']">Last ››</li>
-        </ul>
-        <div class="jump">
-            <label>Move to page:</label>
-            <input @input="onPageInput" type="number" min="1" :max="maxPages" :value="page"/>
+        <div class="sidebar-footer">
+            <ul class="pagination">
+                <li @click="movePage(1)" class="pagination-item" :class="[page <= 1 && 'pagination-item--disabled']">‹‹ First
+                </li>
+                <li @click="movePage(page - 1)" class="pagination-item" :class="[page <= 1 && 'pagination-item--disabled']">‹
+                    Prev</li>
+                <li @click="movePage(page + 1)" class="pagination-item"
+                    :class="[page >= maxPages && 'pagination-item--disabled']">Next ›</li>
+                <li @click="movePage(maxPages)" class="pagination-item"
+                    :class="[page >= maxPages && 'pagination-item--disabled']">Last ››</li>
+            </ul>
+            <div class="pagination-controls">
+                <div class="page-length-inline">
+                    <label>Per page:</label>
+                    <select :value="pageLength" @change="onPageLengthChange" class="page-length-filter">
+                        <option v-for="option in pageLengthOptions" :key="option" :value="option">{{ option }}</option>
+                    </select>
+                </div>
+                <div class="jump">
+                    <label>Go to:</label>
+                    <input @input="onPageInput" type="number" min="1" :max="maxPages" :value="page"/>
+                </div>
+            </div>
         </div>
     </section>
 </template>
@@ -53,6 +63,7 @@ import { defaultStore, type StatusFilter } from "../stores/default";
 const store = defaultStore();
 const { page, pageLength, pageItems, itemCount, statusFilter, searchFilter, currentItem } =
   storeToRefs(store);
+const pageLengthOptions = [20, 25, 30] as const;
 
 const statusOptions: Array<{ label: string; value: StatusFilter }> = [
   { label: "All", value: "" },
@@ -68,15 +79,17 @@ const recordRange = computed(() => {
   return `${first} – ${last}`;
 });
 
-const maxPages = computed(() => Math.ceil(itemCount.value / pageLength.value));
+const maxPages = computed(() => Math.max(1, Math.ceil(itemCount.value / pageLength.value)));
 
 onMounted(() => {
   void store.fetchPageItems();
 });
 
 const onStatusChange = (event: Event) => {
-  const value = (event.target as HTMLSelectElement).value as StatusFilter;
+  const target = event.target as HTMLSelectElement;
+  const value = target.value as StatusFilter;
   void store.setStatusFilter(value);
+  target.blur();
 };
 
 const onSearchInput = (event: Event) => {
@@ -97,6 +110,16 @@ const onPageInput = (event: Event) => {
   movePage(input);
 };
 
+const onPageLengthChange = (event: Event) => {
+  const target = event.target as HTMLSelectElement;
+  const value = Number(target.value);
+  if (!pageLengthOptions.includes(value as (typeof pageLengthOptions)[number])) {
+    return;
+  }
+  void store.setPageLength(value);
+  target.blur();
+};
+
 const onSelectItem = (item: RecordItem) => {
   store.setCurrentItem(item);
 };
@@ -104,14 +127,18 @@ const onSelectItem = (item: RecordItem) => {
 <style scoped lang="scss">
 #sidebar {
     width: 100%;
+    height: 100%;
     box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
     border: 1px solid #eaeaea;
     padding: 5px;
-    align-self: start;
+    align-self: stretch;
     position: sticky;
     top: var(--layout-gutter, 12px);
     background: #fff;
     z-index: 3;
+    overflow: hidden;
 }
 
 h4 {
@@ -137,25 +164,37 @@ h4 {
     margin-bottom: 5px;
 }
 
+.page-length-filter {
+    width: auto;
+    margin-top: 0;
+}
+
 .jump {
     display: flex;
-    width: 100%;
+    width: auto;
+    margin-top: 5px;
+    align-items: center;
 
     label {
         font-size: 12px;
         padding-right: 5px;
-        padding-top: 3px;
-        flex: 1
+        padding-top: 0;
+        white-space: nowrap;
     }
 
     input {
-        max-width: 50%;
+        width: 58px;
+        max-width: none;
     }
 }
 
 .item-list {
     list-style: none;
     padding: 0;
+    margin: 0;
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
 
     .item {
         border-bottom: 1px solid rgba(0, 0, 0, 0.15);
@@ -208,6 +247,31 @@ h4 {
     }
 }
 
+.sidebar-footer {
+    margin-top: 8px;
+    padding-top: 6px;
+    border-top: 1px solid #eaeaea;
+}
+
+.pagination-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    margin-top: 5px;
+}
+
+.page-length-inline {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+
+    label {
+        font-size: 12px;
+        white-space: nowrap;
+    }
+}
+
 .pagination {
     list-style: none;
     padding: 0;
@@ -238,6 +302,20 @@ h4 {
 @media (max-width: 768px) {
     #sidebar {
         position: static;
+        height: auto;
+        overflow: visible;
+    }
+
+    .item-list {
+        overflow: visible;
+    }
+
+    .pagination-controls {
+        flex-wrap: wrap;
+    }
+
+    .jump {
+        margin-top: 0;
     }
 }
 </style>

@@ -18,8 +18,12 @@
                         currentItem.Publication.jufoLevel }}</span>
                 </p>
                 <div class="abstract-wrapper" :settings="{}" :style="{ paddingBottom: abstractPaddingBottom }">
+                    <div v-if="isLongContent" class="content-toggle-row">
+                        <button class="content-toggle" @click="toggleContentVisibility">
+                            {{ showFullContent ? "Show less" : "Show more" }}
+                        </button>
+                    </div>
                     <div class="text-content" :class="[
-                        isLongContent && 'text-content--toggleable',
                         isLongContent && !showFullContent && 'text-content--collapsed',
                     ]">
                         <p v-if="currentItem.abstract" class="abstract">
@@ -37,9 +41,6 @@
                             <span class="description-text">{{ currentItem.description }}</span>
                         </p>
                     </div>
-                    <button v-if="isLongContent" class="content-toggle" @click="toggleContentVisibility">
-                        {{ showFullContent ? "Show less" : "Show more" }}
-                    </button>
                 </div>
 
                 <section class="bottom-bar">
@@ -206,6 +207,21 @@ const nltobr = (value: string) => value.replace(/(?:\r\n|\r|\n)/g, "<br>");
 const sanitizeAbstract = (value: string) =>
   value.replace("Abstract:\n", "").replace("Abstract\n", "").split("\n•\n").join("");
 
+const isInteractiveTarget = (target: EventTarget | null) => {
+  const element = target as HTMLElement | null;
+  if (!element) {
+    return false;
+  }
+
+  return (
+    element.tagName === "INPUT"
+    || element.tagName === "TEXTAREA"
+    || element.tagName === "SELECT"
+    || element.tagName === "BUTTON"
+    || element.isContentEditable
+  );
+};
+
 watch(
   () => currentItem.value?.id,
   () => {
@@ -214,6 +230,10 @@ watch(
 );
 
 const moveTo = (event: KeyboardEvent) => {
+  if (isInteractiveTarget(event.target)) {
+    return;
+  }
+
   if (!moveLock.value) {
     switch (event.keyCode) {
       case keyCodes.ARROW_LEFT:
@@ -273,7 +293,8 @@ onUnmounted(() => {
     flex: 1;
     min-width: 0;
     height: 100%;
-    overflow: auto;
+    min-height: 0;
+    overflow: hidden;
     display: flex;
     flex-direction: column;
 }
@@ -282,6 +303,7 @@ onUnmounted(() => {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
     gap: var(--layout-gutter, 12px);
+    flex: 1;
     width: 100%;
     min-width: 0;
     min-height: 100%;
@@ -289,6 +311,7 @@ onUnmounted(() => {
 
 .classifier-main {
     min-width: 0;
+    height: 100%;
     min-height: 100%;
     display: flex;
     flex-direction: column;
@@ -339,6 +362,7 @@ h1 {
     min-height: 0;
     display: flex;
     flex-direction: column;
+    overflow: auto;
 }
 
 .text-content {
@@ -346,11 +370,8 @@ h1 {
     position: relative;
 }
 
-.text-content--toggleable {
-    overflow: hidden;
-}
-
 .text-content--collapsed {
+    overflow: hidden;
     max-height: clamp(220px, 36vh, 420px);
 }
 
@@ -365,9 +386,17 @@ h1 {
     background: linear-gradient(180deg, rgba(255, 255, 255, 0) 0%, #ffffff 92%);
 }
 
+.content-toggle-row {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: #fff;
+    padding-bottom: 4px;
+}
+
 .content-toggle {
     align-self: flex-start;
-    margin-top: 6px;
+    margin-top: 0;
     padding: 2px 0;
     border: 0;
     background: transparent;
@@ -560,6 +589,7 @@ h1 {
         position: sticky;
         top: var(--layout-gutter, 12px);
         align-self: start;
+        box-sizing: border-box;
         border: 1px solid #eaeaea;
         background: #fff;
         margin-top: 0;
