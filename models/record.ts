@@ -13,6 +13,12 @@ const defineRecord: ModelFactory<RecordModelStatic> = (sequelize: Sequelize, Dat
       abstract: DataTypes.TEXT,
       databases: DataTypes.JSON, // JSON array
       alternateUrls: DataTypes.JSON, // JSON array
+      forumId: DataTypes.INTEGER,
+      doi: DataTypes.STRING,
+      authorDetails: DataTypes.JSON, // normalized Crossref author objects
+      referenceItems: DataTypes.JSON, // normalized Crossref references
+      crossrefEnrichedAt: DataTypes.DATE,
+      crossrefLastError: DataTypes.TEXT,
       editedBy: DataTypes.STRING,
       comment: DataTypes.TEXT,
     },
@@ -22,7 +28,7 @@ const defineRecord: ModelFactory<RecordModelStatic> = (sequelize: Sequelize, Dat
   ) as RecordModelStatic;
 
   Record.associate = (models: DbModels) => {
-    Record.belongsTo(models.Forum);
+    Record.belongsTo(models.Forum, { foreignKey: "forumId" });
     Record.belongsToMany(models.MappingOption, { through: models.RecordMappingOption });
   };
 

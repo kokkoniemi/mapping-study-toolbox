@@ -26,9 +26,15 @@ const dbMock = vi.hoisted(() => ({
   },
 }));
 
+const enrichmentMock = vi.hoisted(() => ({
+  createEnrichmentJob: vi.fn(),
+  getEnrichmentJob: vi.fn(),
+}));
+
 vi.mock("../models", () => ({
   default: dbMock,
 }));
+vi.mock("../lib/recordEnrichment", () => enrichmentMock);
 
 import { createApp } from "../server";
 
@@ -60,6 +66,8 @@ describeWhenSocketAllowed("API integration", () => {
 
     dbMock.RecordMappingOption.create.mockReset();
     dbMock.RecordMappingOption.destroy.mockReset();
+    enrichmentMock.createEnrichmentJob.mockReset();
+    enrichmentMock.getEnrichmentJob.mockReset();
   });
 
   it("GET /api/health returns ok", async () => {
@@ -163,6 +171,55 @@ describeWhenSocketAllowed("API integration", () => {
       error: {
         code: "NOT_FOUND",
       },
+    });
+  });
+
+  it("POST /api/records/enrichment-jobs creates enrichment job", async () => {
+    enrichmentMock.createEnrichmentJob.mockReturnValue({
+      jobId: "job-1",
+      status: "queued",
+      total: 2,
+      processed: 0,
+      createdAt: "2026-03-09T00:00:00.000Z",
+      startedAt: null,
+      finishedAt: null,
+      results: [],
+      updatedRecords: [],
+    });
+
+    const app = createApp();
+    const response = await request(app).post("/api/records/enrichment-jobs").send({ recordIds: [1, 2] });
+
+    expect(response.status).toBe(202);
+    expect(response.body).toMatchObject({
+      jobId: "job-1",
+      status: "queued",
+      total: 2,
+      processed: 0,
+    });
+  });
+
+  it("GET /api/records/enrichment-jobs/:id returns created job", async () => {
+    enrichmentMock.getEnrichmentJob.mockReturnValue({
+      jobId: "job-2",
+      status: "completed",
+      total: 1,
+      processed: 1,
+      createdAt: "2026-03-09T00:00:00.000Z",
+      startedAt: "2026-03-09T00:00:01.000Z",
+      finishedAt: "2026-03-09T00:00:02.000Z",
+      results: [{ recordId: 1, status: "enriched", doi: "10.1016/x" }],
+      updatedRecords: [{ id: 1 }],
+    });
+
+    const app = createApp();
+    const response = await request(app).get("/api/records/enrichment-jobs/job-2");
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      jobId: "job-2",
+      status: "completed",
+      processed: 1,
     });
   });
 

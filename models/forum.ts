@@ -10,6 +10,7 @@ const defineForum: ModelFactory<ForumModelStatic> = (sequelize: Sequelize, DataT
       alternateNames: DataTypes.JSON,
       jufoLevel: DataTypes.INTEGER,
       database: DataTypes.STRING,
+      publisher: DataTypes.STRING,
     },
     {
       paranoid: true,
@@ -17,7 +18,7 @@ const defineForum: ModelFactory<ForumModelStatic> = (sequelize: Sequelize, DataT
   ) as ForumModelStatic;
 
   Forum.associate = (models: DbModels) => {
-    Forum.hasMany(models.Record);
+    Forum.hasMany(models.Record, { foreignKey: "forumId" });
   };
 
   return Forum;

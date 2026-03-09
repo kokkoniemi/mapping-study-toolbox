@@ -172,7 +172,29 @@ export interface Forum {
   id: number;
   name: string;
   jufoLevel: number | null;
+  publisher?: string | null;
   [key: string]: unknown;
+}
+
+export interface CrossrefAuthorDetail {
+  given: string | null;
+  family: string | null;
+  name: string | null;
+  sequence: string | null;
+  orcid: string | null;
+  affiliations: string[];
+}
+
+export interface CrossrefReferenceItem {
+  doi: string | null;
+  key: string | null;
+  unstructured: string | null;
+  articleTitle: string | null;
+  journalTitle: string | null;
+  author: string | null;
+  year: string | null;
+  volume: string | null;
+  firstPage: string | null;
 }
 
 export interface RecordItem {
@@ -182,6 +204,11 @@ export interface RecordItem {
   url: string;
   databases: string[];
   alternateUrls: string[];
+  doi?: string | null;
+  authorDetails?: CrossrefAuthorDetail[] | null;
+  referenceItems?: CrossrefReferenceItem[] | null;
+  crossrefEnrichedAt?: string | null;
+  crossrefLastError?: string | null;
   abstract: string | null;
   createdAt: string;
   updatedAt: string;
@@ -196,6 +223,29 @@ interface RecordsIndexResponse {
   count: number;
   records: RecordItem[];
 }
+
+export interface EnrichmentJobResult {
+  recordId: number;
+  status: "enriched" | "skipped" | "failed";
+  doi: string | null;
+  message?: string;
+}
+
+export interface EnrichmentJob {
+  jobId: string;
+  status: "queued" | "running" | "completed" | "failed";
+  total: number;
+  processed: number;
+  createdAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  results: EnrichmentJobResult[];
+  updatedRecords: RecordItem[];
+}
+
+type CreateEnrichmentJobPayload = {
+  recordIds: number[];
+};
 
 interface MappingQuestionsIndexResponse {
   count: number;
@@ -253,6 +303,12 @@ export const records = {
       }),
     delete: (id: number, optionId: number, params?: QueryParams) =>
       http.delete<string>(`records/${id}/mapping-options/${optionId}`, { params }),
+  },
+  enrichment: {
+    createJob: (data: CreateEnrichmentJobPayload, params?: QueryParams) =>
+      http.post<EnrichmentJob, CreateEnrichmentJobPayload>("records/enrichment-jobs", data, { params }),
+    getJob: (jobId: string, params?: QueryParams) =>
+      http.get<EnrichmentJob>(`records/enrichment-jobs/${jobId}`, { params }),
   },
 };
 

@@ -28,6 +28,27 @@
         </label>
       </div>
 
+      <div class="data-toolbar__group data-toolbar__group--enrichment">
+        <label>Crossref</label>
+        <div class="data-toolbar__actions">
+          <button type="button" @click="selectAllLoadedRecords" :disabled="dataItems.length === 0 || enrichmentRunning">
+            Select loaded
+          </button>
+          <button type="button" @click="clearSelectedRecords" :disabled="selectedRecordCount === 0 || enrichmentRunning">
+            Clear
+          </button>
+          <button
+            type="button"
+            class="data-toolbar__primary"
+            @click="enrichSelectedRecords"
+            :disabled="selectedRecordCount === 0 || enrichmentRunning"
+          >
+            Enrich selected
+          </button>
+        </div>
+        <small class="data-toolbar__meta">Selected {{ selectedRecordCount }}</small>
+      </div>
+
     </header>
 
     <div class="data-grid-shell" ref="dataGridShellRef">
@@ -111,6 +132,8 @@
 
     <footer class="data-footer">
       <span class="data-footer__loaded">Loaded {{ loadedCount }} / {{ totalCountLabel }}</span>
+      <span v-if="enrichmentMessage">{{ enrichmentMessage }}</span>
+      <span v-if="enrichmentError" class="data-footer__error">{{ enrichmentError }}</span>
       <span v-if="dataLoading">Loading more records...</span>
       <span v-else-if="!dataHasMore">All records loaded</span>
       <span v-else>Scroll to load more</span>
@@ -132,11 +155,18 @@ import "handsontable/styles/ht-theme-main.css";
 
 import { debounce } from "../helpers/utils";
 import { defaultStore, type StatusFilter } from "../stores/default";
-import type { MappingOption, RecordItem, RecordStatus } from "../helpers/api";
+import {
+  HttpError,
+  records,
+  type EnrichmentJob,
+  type MappingOption,
+  type RecordItem,
+  type RecordStatus,
+} from "../helpers/api";
 
 registerAllModules();
 
-type GridRow = Record<string, string | number> & { __recordId: number };
+type GridRow = Record<string, string | number | boolean> & { __recordId: number };
 type MappingEditorState = {
   recordId: number;
   questionId: number;
@@ -190,6 +220,10 @@ const {
 const hotTableRef = ref<{ hotInstance?: HotInstance } | null>(null);
 const dataGridShellRef = ref<HTMLElement | null>(null);
 const searchInput = ref(searchFilter.value);
+const selectedRecordIds = ref<number[]>([]);
+const enrichmentRunning = ref(false);
+const enrichmentMessage = ref("");
+const enrichmentError = ref("");
 const gridHeight = ref(520);
 const defaultRowHeight = 62;
 const tableAutoRowSize = computed(() => !dataCellsTruncated.value);
@@ -207,8 +241,11 @@ const viewportSize = ref({
 });
 
 let gridResizeObserver: ResizeObserver | null = null;
+let isUnmounted = false;
 
 const loadedCount = computed(() => dataItems.value.length);
+const selectedRecordCount = computed(() => selectedRecordIds.value.length);
+const selectedRecordIdSet = computed(() => new Set(selectedRecordIds.value));
 
 const totalCountLabel = computed(() => {
   if (dataLoading.value && dataTotal.value <= 0) {
@@ -216,6 +253,19 @@ const totalCountLabel = computed(() => {
   }
   return String(dataTotal.value);
 });
+
+const getErrorMessage = (error: unknown) => {
+  if (error instanceof HttpError) {
+    const data = error.response.data as { error?: { message?: string } } | undefined;
+    return data?.error?.message ?? `Request failed (${error.response.status})`;
+  }
+
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return "Request failed";
+};
 
 const formatTimestamp = (value: string) => formatDate(new Date(value), "dd.MM.yyyy HH:mm:ss");
 
@@ -230,6 +280,7 @@ const tableRows = computed<GridRow[]>(() =>
   dataItems.value.map((record) => {
     const row: GridRow = {
       __recordId: record.id,
+      __selected: selectedRecordIdSet.value.has(record.id),
       id: record.id,
       title: record.title,
       abstract: record.abstract ?? "",
@@ -237,11 +288,13 @@ const tableRows = computed<GridRow[]>(() =>
       comment: record.comment ?? "",
       author: record.author,
       forum: record.Forum
-        ? `${record.Forum.name ?? "-"} | jufo: ${record.Forum.jufoLevel ?? "-"}`
+        ? `${record.Forum.name ?? "-"} | publisher: ${record.Forum.publisher ?? "-"} | jufo: ${record.Forum.jufoLevel ?? "-"}`
         : "-",
       url: record.url,
       databases: stringListToCell(record.databases),
       alternateUrls: stringListToCell(record.alternateUrls),
+      doi: record.doi ?? "",
+      references: String(record.referenceItems?.length ?? 0),
       createdAt: formatTimestamp(record.createdAt),
       updatedAt: formatTimestamp(record.updatedAt),
     };
@@ -255,7 +308,8 @@ const tableRows = computed<GridRow[]>(() =>
 );
 
 const priorityColumns: Array<{ header: string; settings: ColumnSettings }> = [
-  { header: "id", settings: { data: "id", readOnly: true, width: 70 } },
+  { header: "", settings: { data: "__selected", readOnly: true, renderer: selectionRenderer, width: 42 } },
+  { header: "id", settings: { data: "id", readOnly: true, width: 64 } },
   { header: "title", settings: { data: "title", type: "text", renderer: truncatedTextRenderer, width: 320 } },
   { header: "abstract", settings: { data: "abstract", type: "text", renderer: truncatedTextRenderer, width: 420 } },
   {
@@ -274,10 +328,12 @@ const priorityColumns: Array<{ header: string; settings: ColumnSettings }> = [
 
 const trailingColumns: Array<{ header: string; settings: ColumnSettings }> = [
   { header: "author", settings: { data: "author", type: "text", renderer: truncatedTextRenderer, width: 220 } },
+  { header: "doi", settings: { data: "doi", type: "text", renderer: truncatedTextRenderer, width: 210 } },
   {
     header: "forum",
     settings: { data: "forum", readOnly: true, renderer: truncatedTextRenderer, width: 240 },
   },
+  { header: "references", settings: { data: "references", readOnly: true, width: 100 } },
   { header: "url", settings: { data: "url", type: "text", renderer: truncatedTextRenderer, width: 260 } },
   { header: "databases", settings: { data: "databases", type: "text", renderer: truncatedTextRenderer, width: 220 } },
   {
@@ -324,6 +380,21 @@ const escapeHtml = (value: string) =>
     .replace(/'/g, "&#039;");
 
 const textIndicatorThreshold = 90;
+
+function selectionRenderer(
+  _instance: unknown,
+  td: HTMLTableCellElement,
+  _row: number,
+  _col: number,
+  _prop: string | number,
+  value: unknown,
+) {
+  td.classList.remove("data-text-cell", "mapping-cell");
+  td.classList.add("selection-cell");
+  const checked = Boolean(value);
+  td.innerHTML = `<div class="selection-cell__inner"><input class="selection-cell__checkbox" type="checkbox" tabindex="-1" aria-label="Select row" ${checked ? "checked" : ""} /></div>`;
+  return td;
+}
 
 function truncatedTextRenderer(
   _instance: unknown,
@@ -662,6 +733,88 @@ const createMappingOption = async () => {
   mappingEditorCreateColor.value = randomColor();
 };
 
+const toggleRecordSelection = (recordId: number) => {
+  if (selectedRecordIdSet.value.has(recordId)) {
+    selectedRecordIds.value = selectedRecordIds.value.filter((id) => id !== recordId);
+    return;
+  }
+  selectedRecordIds.value = [...selectedRecordIds.value, recordId];
+};
+
+const clearSelectedRecords = () => {
+  selectedRecordIds.value = [];
+};
+
+const selectAllLoadedRecords = () => {
+  selectedRecordIds.value = dataItems.value.map((item) => item.id);
+};
+
+const syncSelectionToLoadedRecords = () => {
+  const loadedIds = new Set(dataItems.value.map((item) => item.id));
+  selectedRecordIds.value = selectedRecordIds.value.filter((id) => loadedIds.has(id));
+};
+
+const wait = async (ms: number) =>
+  new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+
+const updateStoreFromEnrichmentJob = (job: EnrichmentJob) => {
+  for (const updatedRecord of job.updatedRecords) {
+    store.updateRecordInPage(updatedRecord.id, updatedRecord);
+  }
+};
+
+const summarizeJob = (job: EnrichmentJob) => {
+  const enrichedCount = job.results.filter((result) => result.status === "enriched").length;
+  const failedCount = job.results.filter((result) => result.status === "failed").length;
+  const skippedCount = job.results.filter((result) => result.status === "skipped").length;
+  return `Enriched ${enrichedCount}, failed ${failedCount}, skipped ${skippedCount}`;
+};
+
+const waitForJobCompletion = async (jobId: string) => {
+  const pollIntervalMs = 1200;
+
+  while (true) {
+    if (isUnmounted) {
+      return;
+    }
+
+    const response = await records.enrichment.getJob(jobId);
+    const job = response.data;
+    enrichmentMessage.value = `Crossref enrichment ${job.processed} / ${job.total}`;
+
+    if (job.status === "completed" || job.status === "failed") {
+      updateStoreFromEnrichmentJob(job);
+      enrichmentMessage.value = summarizeJob(job);
+      return;
+    }
+
+    await wait(pollIntervalMs);
+  }
+};
+
+const enrichSelectedRecords = async () => {
+  if (selectedRecordIds.value.length === 0 || enrichmentRunning.value) {
+    return;
+  }
+
+  enrichmentRunning.value = true;
+  enrichmentError.value = "";
+  enrichmentMessage.value = "Starting Crossref enrichment...";
+
+  try {
+    const response = await records.enrichment.createJob({
+      recordIds: selectedRecordIds.value,
+    });
+    await waitForJobCompletion(response.data.jobId);
+  } catch (error) {
+    enrichmentError.value = getErrorMessage(error);
+  } finally {
+    enrichmentRunning.value = false;
+  }
+};
+
 const handleCellChange = async (recordId: number, prop: string, nextValue: string) => {
   if (prop === "title" || prop === "author" || prop === "url") {
     await store.patchRecord(recordId, { [prop]: nextValue });
@@ -788,13 +941,23 @@ const onAfterScrollVertically: GridSettings["afterScrollVertically"] = () => {
 
 const onAfterOnCellMouseDown: GridSettings["afterOnCellMouseDown"] = (event, coords) => {
   const mouseEvent = event as MouseEvent;
-  if (mouseEvent.detail < 2 || coords.row < 0 || coords.col < 0) {
+  if (coords.row < 0 || coords.col < 0) {
     return;
   }
 
   const row = dataItems.value[coords.row];
   const column = orderedColumns.value[coords.col];
   if (!row || !column) {
+    return;
+  }
+
+  if (column.settings.data === "__selected") {
+    mouseEvent.preventDefault();
+    toggleRecordSelection(row.id);
+    return;
+  }
+
+  if (mouseEvent.detail < 2) {
     return;
   }
 
@@ -853,6 +1016,13 @@ watch(
 );
 
 watch(
+  () => dataItems.value.map((item) => item.id),
+  () => {
+    syncSelectionToLoadedRecords();
+  },
+);
+
+watch(
   () => cellStates.value,
   () => {
     hotTableRef.value?.hotInstance?.render();
@@ -888,6 +1058,7 @@ watch(
 );
 
 onMounted(async () => {
+  isUnmounted = false;
   searchInput.value = searchFilter.value;
   updateViewportSize();
   window.addEventListener("resize", updateViewportSize);
@@ -909,6 +1080,7 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+  isUnmounted = true;
   window.removeEventListener("resize", updateViewportSize);
   window.removeEventListener("keydown", onWindowKeyDown);
   gridResizeObserver?.disconnect();
@@ -955,6 +1127,15 @@ onUnmounted(() => {
       padding-left: 10px;
       margin-left: 2px;
     }
+
+    &--enrichment {
+      min-width: 250px;
+      border-left: 1px solid #dddddd;
+      padding-left: 10px;
+      margin-left: 2px;
+      align-self: stretch;
+      justify-content: center;
+    }
   }
 
   &__toggle {
@@ -988,6 +1169,43 @@ onUnmounted(() => {
     height: 30px;
     box-sizing: border-box;
   }
+
+  &__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+
+    button {
+      height: 30px;
+      padding: 0 10px;
+      border: 1px solid #dedede;
+      background: #ffffff;
+      color: #5b5858;
+      font-size: 12px;
+
+      &:hover:not(:disabled) {
+        background: #f6f6f6;
+      }
+
+      &:disabled {
+        opacity: 0.6;
+        cursor: default;
+      }
+    }
+  }
+
+  &__primary {
+    border-color: #3c67d8 !important;
+    color: #2d4fc9 !important;
+    font-weight: 600;
+  }
+
+  &__meta {
+    margin-top: 2px;
+    font-size: 11px;
+    color: #818181;
+  }
 }
 
 .data-grid-shell {
@@ -1010,6 +1228,10 @@ onUnmounted(() => {
 
   &__loaded {
     white-space: nowrap;
+  }
+
+  &__error {
+    color: #8e2b2b;
   }
 }
 
@@ -1260,6 +1482,24 @@ onUnmounted(() => {
   padding-right: 2px !important;
 }
 
+:deep(td.selection-cell) {
+  padding: 0 !important;
+  cursor: pointer;
+}
+
+:deep(.selection-cell__inner) {
+  width: 100%;
+  height: 100%;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+:deep(.selection-cell__checkbox) {
+  cursor: pointer;
+}
+
 :deep(.mapping-cell-chips) {
   display: flex;
   flex-wrap: wrap;
@@ -1288,8 +1528,13 @@ onUnmounted(() => {
 }
 
 @media (max-width: 1024px) {
-  .data-toolbar__group--search {
+  .data-toolbar__group--search,
+  .data-toolbar__group--toggle,
+  .data-toolbar__group--enrichment {
     min-width: 100%;
+    margin-left: 0;
+    padding-left: 0;
+    border-left: 0;
   }
 }
 </style>

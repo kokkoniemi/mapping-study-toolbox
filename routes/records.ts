@@ -2,8 +2,10 @@ import type { Request, Response } from "express";
 import { Op } from "sequelize";
 
 import { badRequest, notFound } from "../lib/http";
+import { createEnrichmentJob, getEnrichmentJob } from "../lib/recordEnrichment";
 import {
   assertAllowedKeys,
+  parseIntegerArray,
   parseInteger,
   parseObject,
   parseOptionalNullableString,
@@ -298,4 +300,39 @@ export const removeOption = async (req: Request, res: Response) => {
   });
 
   return res.send(`${mappingOptionId} deleted successfully`);
+};
+
+export const createEnrichment = async (req: Request, res: Response) => {
+  const body = parseObject(req.body, "body");
+  assertAllowedKeys(body, ["recordIds"], "enrichment job body");
+
+  const recordIds = parseIntegerArray(body.recordIds, "recordIds", {
+    min: 1,
+    minItems: 1,
+    maxItems: 500,
+  });
+  if (!recordIds) {
+    throw badRequest("recordIds are required");
+  }
+
+  const job = createEnrichmentJob(recordIds);
+  return res.status(202).send(job);
+};
+
+export const getEnrichment = async (req: Request, res: Response) => {
+  const jobId = parseString(req.params.jobId, "jobId", {
+    trim: true,
+    allowEmpty: false,
+    maxLength: 120,
+  });
+  if (!jobId) {
+    throw badRequest("jobId is required");
+  }
+
+  const job = getEnrichmentJob(jobId);
+  if (!job) {
+    throw notFound(`Enrichment job ${jobId} not found`);
+  }
+
+  return res.send(job);
 };

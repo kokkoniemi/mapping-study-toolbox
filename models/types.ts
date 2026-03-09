@@ -16,6 +16,7 @@ export interface ForumAttributes {
   alternateNames: string[] | null;
   jufoLevel: number | null;
   database: string | null;
+  publisher: string | null;
   createdAt: Date;
   updatedAt: Date;
   deletedAt: Date | null;
@@ -75,6 +76,27 @@ export type RecordMappingOptionModelStatic = AssociableModel<RecordMappingOption
 
 export type RecordStatus = "excluded" | "included" | "uncertain" | null;
 
+export interface CrossrefAuthorDetail {
+  given: string | null;
+  family: string | null;
+  name: string | null;
+  sequence: string | null;
+  orcid: string | null;
+  affiliations: string[];
+}
+
+export interface CrossrefReferenceItem {
+  doi: string | null;
+  key: string | null;
+  unstructured: string | null;
+  articleTitle: string | null;
+  journalTitle: string | null;
+  author: string | null;
+  year: string | null;
+  volume: string | null;
+  firstPage: string | null;
+}
+
 export interface RecordAttributes {
   id: number;
   title: string | null;
@@ -84,6 +106,12 @@ export interface RecordAttributes {
   abstract: string | null;
   databases: string[] | null;
   alternateUrls: string[] | null;
+  doi: string | null;
+  authorDetails: CrossrefAuthorDetail[] | null;
+  referenceItems: CrossrefReferenceItem[] | null;
+  crossrefEnrichedAt: Date | null;
+  crossrefLastError: string | null;
+  forumId: number | null;
   editedBy: string | null;
   comment: string | null;
   createdAt: Date;

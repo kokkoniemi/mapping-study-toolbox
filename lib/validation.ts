@@ -62,6 +62,46 @@ export const parseInteger = (value: unknown, fieldName: string, options: Integer
   return parsed;
 };
 
+type IntegerArrayOptions = {
+  optional?: boolean;
+  min?: number;
+  max?: number;
+  minItems?: number;
+  maxItems?: number;
+};
+
+export const parseIntegerArray = (
+  value: unknown,
+  fieldName: string,
+  options: IntegerArrayOptions = {},
+) => {
+  if (value === undefined || value === null) {
+    if (options.optional) {
+      return undefined;
+    }
+    throw badRequest(`${fieldName} is required`);
+  }
+
+  if (!Array.isArray(value)) {
+    throw badRequest(`${fieldName} must be an array`);
+  }
+
+  if (options.minItems !== undefined && value.length < options.minItems) {
+    throw badRequest(`${fieldName} must have at least ${options.minItems} items`);
+  }
+
+  if (options.maxItems !== undefined && value.length > options.maxItems) {
+    throw badRequest(`${fieldName} must have at most ${options.maxItems} items`);
+  }
+
+  return value.map((item, index) =>
+    parseInteger(item, `${fieldName}[${index}]`, {
+      min: options.min,
+      max: options.max,
+    }),
+  );
+};
+
 type StringOptions = {
   optional?: boolean;
   trim?: boolean;

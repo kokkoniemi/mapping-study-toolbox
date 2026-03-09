@@ -25,7 +25,21 @@ const dbMock = vi.hoisted(() => ({
 
 vi.mock("../models", () => ({ default: dbMock }));
 
-import { createOption, listing, removeOption, update } from "./records";
+const enrichmentMock = vi.hoisted(() => ({
+  createEnrichmentJob: vi.fn(),
+  getEnrichmentJob: vi.fn(),
+}));
+
+vi.mock("../lib/recordEnrichment", () => enrichmentMock);
+
+import {
+  createEnrichment,
+  createOption,
+  getEnrichment,
+  listing,
+  removeOption,
+  update,
+} from "./records";
 import { patch } from "./records";
 
 const mockResponse = () => {
@@ -46,6 +60,8 @@ describe("routes/records", () => {
     dbMock.MappingOption.findByPk.mockReset();
     dbMock.RecordMappingOption.create.mockReset();
     dbMock.RecordMappingOption.destroy.mockReset();
+    enrichmentMock.createEnrichmentJob.mockReset();
+    enrichmentMock.getEnrichmentJob.mockReset();
   });
 
   it("listing returns count + records with applied filters", async () => {
@@ -198,5 +214,83 @@ describe("routes/records", () => {
     const res = mockResponse();
 
     await expect(patch(req, res)).rejects.toBeInstanceOf(ApiError);
+  });
+
+  it("createEnrichment accepts record id list and returns created job", async () => {
+    enrichmentMock.createEnrichmentJob.mockReturnValue({
+      jobId: "job-1",
+      status: "queued",
+      total: 2,
+      processed: 0,
+      createdAt: "2026-03-09T00:00:00.000Z",
+      startedAt: null,
+      finishedAt: null,
+      results: [],
+      updatedRecords: [],
+    });
+
+    const req = {
+      body: { recordIds: [1, 2] },
+    } as unknown as Request;
+    const res = mockResponse();
+
+    await createEnrichment(req, res);
+
+    expect(enrichmentMock.createEnrichmentJob).toHaveBeenCalledWith([1, 2]);
+    expect(res.status).toHaveBeenCalledWith(202);
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jobId: "job-1",
+        status: "queued",
+      }),
+    );
+  });
+
+  it("createEnrichment rejects empty record id list", async () => {
+    const req = {
+      body: { recordIds: [] },
+    } as unknown as Request;
+    const res = mockResponse();
+
+    await expect(createEnrichment(req, res)).rejects.toBeInstanceOf(ApiError);
+    expect(enrichmentMock.createEnrichmentJob).not.toHaveBeenCalled();
+  });
+
+  it("getEnrichment returns existing job", async () => {
+    enrichmentMock.getEnrichmentJob.mockReturnValue({
+      jobId: "job-2",
+      status: "completed",
+      total: 1,
+      processed: 1,
+      createdAt: "2026-03-09T00:00:00.000Z",
+      startedAt: "2026-03-09T00:00:01.000Z",
+      finishedAt: "2026-03-09T00:00:02.000Z",
+      results: [{ recordId: 1, status: "enriched", doi: "10.1/abc" }],
+      updatedRecords: [{ id: 1 }],
+    });
+
+    const req = {
+      params: { jobId: "job-2" },
+    } as unknown as Request;
+    const res = mockResponse();
+
+    await getEnrichment(req, res);
+
+    expect(enrichmentMock.getEnrichmentJob).toHaveBeenCalledWith("job-2");
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jobId: "job-2",
+      }),
+    );
+  });
+
+  it("getEnrichment returns NOT_FOUND when job is missing", async () => {
+    enrichmentMock.getEnrichmentJob.mockReturnValue(null);
+    const req = {
+      params: { jobId: "missing" },
+    } as unknown as Request;
+    const res = mockResponse();
+
+    await expect(getEnrichment(req, res)).rejects.toBeInstanceOf(ApiError);
   });
 });
