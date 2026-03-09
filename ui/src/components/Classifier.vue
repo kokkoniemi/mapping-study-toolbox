@@ -18,11 +18,6 @@
                         currentItem.Publication.jufoLevel }}</span>
                 </p>
                 <div class="abstract-wrapper" :settings="{}" :style="{ paddingBottom: abstractPaddingBottom }">
-                    <div v-if="isLongContent" class="content-toggle-row">
-                        <button class="content-toggle" @click="toggleContentVisibility">
-                            {{ showFullContent ? "Show less" : "Show more" }}
-                        </button>
-                    </div>
                     <div class="text-content" :class="[
                         isLongContent && !showFullContent && 'text-content--collapsed',
                     ]">
@@ -40,6 +35,14 @@
                             <br />
                             <span class="description-text">{{ currentItem.description }}</span>
                         </p>
+                        <div v-if="isLongContent" :class="[
+                            'content-toggle-row',
+                            !showFullContent && 'content-toggle-row--collapsed',
+                        ]">
+                            <button class="content-toggle" @click="toggleContentVisibility">
+                                {{ showFullContent ? "Show less" : "Show more" }}
+                            </button>
+                        </div>
                     </div>
                 </div>
 
@@ -116,6 +119,11 @@ const isLongContent = computed(() => {
 
 const toggleContentVisibility = () => {
   showFullContent.value = !showFullContent.value;
+
+  const activeElement = document.activeElement as HTMLElement | null;
+  if (activeElement?.classList.contains("content-toggle")) {
+    activeElement.blur();
+  }
 };
 
 const createdFormatted = computed(() => {
@@ -373,33 +381,39 @@ h1 {
 .text-content--collapsed {
     overflow: hidden;
     max-height: clamp(220px, 36vh, 420px);
+    padding-bottom: 56px;
 }
 
-.text-content--collapsed::after {
-    content: "";
-    pointer-events: none;
+.content-toggle-row {
+    display: flex;
+    align-items: center;
+    margin-top: 6px;
+}
+
+.content-toggle-row--collapsed {
     position: absolute;
     left: 0;
     right: 0;
     bottom: 0;
-    height: 70px;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0) 0%, #ffffff 92%);
-}
-
-.content-toggle-row {
-    position: sticky;
-    top: 0;
+    align-items: flex-end;
+    min-height: 56px;
+    margin-top: 0;
+    padding: 24px 0 6px;
+    background: linear-gradient(
+        180deg,
+        rgba(255, 255, 255, 0) 0%,
+        rgba(255, 255, 255, 0.96) 55%,
+        #ffffff 100%
+    );
     z-index: 2;
-    background: #fff;
-    padding-bottom: 4px;
 }
 
 .content-toggle {
     align-self: flex-start;
-    margin-top: 0;
-    padding: 2px 0;
+    padding: 2px 6px;
     border: 0;
-    background: transparent;
+    background: #fff;
+    border-radius: 3px;
     color: #3750dc;
     font-size: 12px;
     font-weight: 600;
@@ -408,8 +422,7 @@ h1 {
 
     &:hover {
         color: #233496;
-        background: transparent;
-        text-decoration: underline;
+        background: #f7f7f7;
     }
 }
 
