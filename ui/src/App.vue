@@ -58,33 +58,45 @@ const updateTab = (value: "inc-exc" | "map" | "data") => {
 </template>
 
 <style lang="scss">
+:root {
+  --layout-gutter: clamp(12px, 2vw, 28px);
+  --layout-sidebar-width: clamp(220px, 18vw, 300px);
+}
+
 #app {
   font-family: Avenir, Helvetica, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   color: #2c3e50;
-  max-width: 1200px;
-  margin: auto;
+  width: 100%;
+  min-height: 100vh;
+  box-sizing: border-box;
+  padding: 0 var(--layout-gutter) var(--layout-gutter);
 }
 .main-container {
-  display: flex;
-  flex-direction: column;
-  position: relative;
-  padding-left: 220px;
-  padding-bottom: 100px;
+  display: grid;
+  grid-template-columns: var(--layout-sidebar-width) minmax(0, 1fr);
+  gap: var(--layout-gutter);
+  align-items: stretch;
+  width: 100%;
+  min-width: 0;
   min-height: 700px;
 }
 
 .data-container {
+  width: 100%;
+  min-width: 0;
   min-height: 700px;
 }
 .app-name {
   border-bottom: 1px solid #eaeaea;
   display: flex;
+  gap: var(--layout-gutter);
   justify-content: space-between;
   align-items: flex-end;
-  margin: 0 0 10px;
+  margin: 0 0 var(--layout-gutter);
   font-size: 22px;
+  min-width: 0;
 
   input {
     margin-bottom: 5px;
@@ -118,6 +130,7 @@ const updateTab = (value: "inc-exc" | "map" | "data") => {
   list-style: none;
   padding: 0;
   margin: 0;
+  min-width: 0;
 }
 
 .app-tab {
@@ -162,6 +175,26 @@ const updateTab = (value: "inc-exc" | "map" | "data") => {
 
 body {
   overflow-y: scroll;
+}
+
+@media (max-width: 768px) {
+  #app {
+    --layout-sidebar-width: 100%;
+  }
+
+  .main-container {
+    grid-template-columns: 1fr;
+  }
+
+  .app-name {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .app-name input {
+    width: 100%;
+    box-sizing: border-box;
+  }
 }
 
 button {

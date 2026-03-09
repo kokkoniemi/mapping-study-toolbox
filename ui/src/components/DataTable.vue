@@ -37,25 +37,27 @@
       <button :disabled="page >= maxPages" @click="movePage(maxPages)">Last</button>
     </div>
 
-    <hot-table
-      ref="hotTableRef"
-      :data="tableRows"
-      :columns="columns"
-      :colHeaders="columnHeaders"
-      :rowHeaders="true"
-      :autoWrapRow="true"
-      :autoWrapCol="true"
-      :copyPaste="true"
-      :fillHandle="true"
-      :manualColumnResize="true"
-      :stretchH="'all'"
-      :width="'100%'"
-      :height="700"
-      :licenseKey="'non-commercial-and-evaluation'"
-      :afterChange="onAfterChange"
-      :cells="cellMetaFactory"
-      :className="'ht-theme-main'"
-    />
+    <div class="data-grid-shell">
+      <hot-table
+        ref="hotTableRef"
+        :data="tableRows"
+        :columns="columns"
+        :colHeaders="columnHeaders"
+        :rowHeaders="true"
+        :autoWrapRow="true"
+        :autoWrapCol="true"
+        :copyPaste="true"
+        :fillHandle="true"
+        :manualColumnResize="true"
+        :stretchH="'all'"
+        :width="'100%'"
+        :height="700"
+        :licenseKey="'non-commercial-and-evaluation'"
+        :afterChange="onAfterChange"
+        :cells="cellMetaFactory"
+        :className="'ht-theme-main'"
+      />
+    </div>
   </section>
 </template>
 
@@ -415,16 +417,21 @@ onMounted(async () => {
 <style scoped lang="scss">
 .data-tab {
   position: relative;
+  width: 100%;
+  min-width: 0;
 }
 
 .data-toolbar {
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
   align-items: flex-end;
   border: 1px solid #eaeaea;
   padding: 10px;
   background: #fff;
   margin-bottom: 8px;
+  width: 100%;
+  box-sizing: border-box;
 
   &__group {
     display: flex;
@@ -452,8 +459,19 @@ onMounted(async () => {
 
 .data-pagination {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 8px;
+}
+
+.data-grid-shell {
+  width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+}
+
+:deep(.data-grid-shell .handsontable) {
+  min-width: 100%;
 }
 
 :deep(.cell-saving) {
@@ -467,5 +485,16 @@ onMounted(async () => {
 
 :deep(.ht_master .handsontable td) {
   vertical-align: top;
+}
+
+@media (max-width: 1024px) {
+  .data-toolbar__group--search {
+    min-width: 100%;
+  }
+
+  .data-toolbar__meta {
+    margin-left: 0;
+    width: 100%;
+  }
 }
 </style>

@@ -103,13 +103,15 @@ const onSelectItem = (item: RecordItem) => {
 </script>
 <style scoped lang="scss">
 #sidebar {
-    width: 200px;
+    width: 100%;
+    box-sizing: border-box;
     border: 1px solid #eaeaea;
     padding: 5px;
-    margin-right: 10px;
-    position: absolute;
-    top: 0;
-    left: 0;
+    align-self: start;
+    position: sticky;
+    top: var(--layout-gutter, 12px);
+    background: #fff;
+    z-index: 3;
 }
 
 h4 {
@@ -129,7 +131,8 @@ h4 {
 }
 
 .search-filter {
-    width: 192px;
+    width: 100%;
+    box-sizing: border-box;
     margin-top: 5px;
     margin-bottom: 5px;
 }
@@ -229,6 +232,12 @@ h4 {
             opacity: 0.5;
             cursor: not-allowed;
         }
+    }
+}
+
+@media (max-width: 768px) {
+    #sidebar {
+        position: static;
     }
 }
 </style>
