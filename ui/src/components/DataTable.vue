@@ -8,7 +8,6 @@
       :enrichmentProvider="enrichmentProvider"
       :enrichmentForceRefresh="enrichmentForceRefresh"
       :enrichmentRunning="enrichmentRunning"
-      :enrichmentStopping="enrichmentStopping"
       :selectedRecordCount="selectedRecordCount"
       :hasDataItems="dataItems.length > 0"
       @status-filter-change="onStatusFilterChange"
@@ -19,18 +18,19 @@
       @select-loaded="selectAllLoadedRecords"
       @clear="clearSelectedRecords"
       @enrich-selected="enrichSelectedRecords"
-      @stop="stopEnrichment"
     />
 
     <EnrichmentStatus
       :selectedRecordCount="selectedRecordCount"
       :enrichmentRunning="enrichmentRunning"
+      :enrichmentStopping="enrichmentStopping"
       :enrichmentMessage="enrichmentMessage"
       :enrichmentError="enrichmentError"
       :enrichmentProgressPercent="enrichmentProgressPercent"
       :enrichmentProcessed="enrichmentProcessed"
       :enrichmentTotal="enrichmentTotal"
       :enrichmentMetrics="enrichmentMetrics"
+      @stop="stopEnrichment"
     />
 
     <DataGrid

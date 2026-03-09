@@ -9,6 +9,14 @@
         <div class="data-enrichment-status__progress-fill" :style="{ width: `${enrichmentProgressPercent}%` }"></div>
       </div>
       <span class="data-enrichment-status__progress-text">{{ enrichmentProcessed }} / {{ enrichmentTotal }}</span>
+      <button
+        type="button"
+        class="data-enrichment-status__stop"
+        @click="$emit('stop')"
+        :disabled="enrichmentStopping"
+      >
+        {{ enrichmentStopping ? "Stopping..." : "Stop" }}
+      </button>
     </div>
     <span v-if="enrichmentMessage" class="data-enrichment-status__text">{{ enrichmentMessage }}</span>
     <span v-if="enrichmentError" class="data-enrichment-status__text data-enrichment-status__text--error">
@@ -32,12 +40,17 @@ import type { EnrichmentJob } from "../../helpers/api";
 defineProps<{
   selectedRecordCount: number;
   enrichmentRunning: boolean;
+  enrichmentStopping: boolean;
   enrichmentMessage: string;
   enrichmentError: string;
   enrichmentProgressPercent: number;
   enrichmentProcessed: number;
   enrichmentTotal: number;
   enrichmentMetrics: EnrichmentJob["metrics"];
+}>();
+
+defineEmits<{
+  stop: [];
 }>();
 </script>
 
@@ -85,6 +98,26 @@ defineProps<{
     min-width: 56px;
     text-align: right;
     white-space: nowrap;
+  }
+
+  &__stop {
+    height: 24px;
+    padding: 0 10px;
+    border: 1px solid #b85757;
+    background: #fff;
+    color: #8c2e2e;
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+
+    &:hover:not(:disabled) {
+      background: #f8f2f2;
+    }
+
+    &:disabled {
+      opacity: 0.65;
+      cursor: default;
+    }
   }
 
   &__text {

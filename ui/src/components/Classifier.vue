@@ -45,7 +45,7 @@
                         <div class="literature-list__header">
                             <h4>References ({{ referenceDisplayItems.length }})</h4>
                             <button class="literature-list__toggle" @click="toggleReferencesVisibility">
-                                {{ showReferences ? "See less" : "See more" }}
+                                {{ showReferences ? "Hide" : "Show" }}
                             </button>
                         </div>
                         <ul v-if="showReferences" class="literature-list__items">
@@ -69,7 +69,7 @@
                         <div class="literature-list__header">
                             <h4>Citations ({{ citationDisplayItems.length }})</h4>
                             <button class="literature-list__toggle" @click="toggleCitationsVisibility">
-                                {{ showCitations ? "See less" : "See more" }}
+                                {{ showCitations ? "Hide" : "Show" }}
                             </button>
                         </div>
                         <ul v-if="showCitations" class="literature-list__items">

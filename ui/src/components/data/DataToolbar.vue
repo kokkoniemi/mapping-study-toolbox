@@ -75,14 +75,6 @@
       >
         Enrich selected
       </button>
-      <button
-        type="button"
-        class="data-toolbar__danger"
-        @click="$emit('stop')"
-        :disabled="!enrichmentRunning || enrichmentStopping"
-      >
-        {{ enrichmentStopping ? "Stopping..." : "Stop" }}
-      </button>
     </div>
   </header>
 </template>
@@ -100,7 +92,6 @@ defineProps<{
   enrichmentProvider: EnrichmentProvider;
   enrichmentForceRefresh: boolean;
   enrichmentRunning: boolean;
-  enrichmentStopping: boolean;
   selectedRecordCount: number;
   hasDataItems: boolean;
 }>();
@@ -114,7 +105,6 @@ const emit = defineEmits<{
   "select-loaded": [];
   "clear": [];
   "enrich-selected": [];
-  "stop": [];
 }>();
 
 const emitStatusFilterChange = (event: Event) => {
@@ -292,12 +282,6 @@ const emitForceRefreshChange = (event: Event) => {
   &__primary {
     border-color: #3c67d8 !important;
     color: #2d4fc9 !important;
-    font-weight: 600;
-  }
-
-  &__danger {
-    border-color: #b85757 !important;
-    color: #8c2e2e !important;
     font-weight: 600;
   }
 }
