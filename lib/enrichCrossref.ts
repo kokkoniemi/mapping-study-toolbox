@@ -6,7 +6,7 @@ import {
   extractWorkYear,
   type CrossrefWork,
 } from "./crossref";
-import { normalizeDoiValue, toPlainObject } from "./enrichmentCommon";
+import { decodeHtmlEntities, normalizeDoiValue, toPlainObject } from "./enrichmentCommon";
 import { buildFieldProvenance, mergeProvenance } from "./enrichmentProvenance";
 import { enrichForumWithJufo, toForumSnapshot, updateForumFromWork } from "./enrichJufo";
 import type { EnrichRecordResult, EnrichmentJobOptions, JobContext } from "./enrichmentTypes";
@@ -78,7 +78,7 @@ const normalizeReferenceText = (value: string | null | undefined) => {
     return null;
   }
 
-  const normalized = value.replace(/\s+/g, " ").trim();
+  const normalized = decodeHtmlEntities(value).replace(/\s+/g, " ").trim();
   return normalized.length > 0 ? normalized : null;
 };
 

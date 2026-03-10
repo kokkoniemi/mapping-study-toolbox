@@ -3,6 +3,36 @@ export const sleep = async (ms: number) =>
     setTimeout(resolve, ms);
   });
 
+const HTML_ENTITY_MAP: Record<string, string> = {
+  amp: "&",
+  lt: "<",
+  gt: ">",
+  quot: "\"",
+  apos: "'",
+  nbsp: " ",
+};
+
+export const decodeHtmlEntities = (value: string) =>
+  value.replace(/&(#x?[0-9a-fA-F]+|[a-zA-Z][a-zA-Z0-9]+);/g, (match, entity) => {
+    const token = String(entity);
+    if (token.startsWith("#x") || token.startsWith("#X")) {
+      const codePoint = Number.parseInt(token.slice(2), 16);
+      if (!Number.isFinite(codePoint) || codePoint <= 0) {
+        return match;
+      }
+      return String.fromCodePoint(codePoint);
+    }
+    if (token.startsWith("#")) {
+      const codePoint = Number.parseInt(token.slice(1), 10);
+      if (!Number.isFinite(codePoint) || codePoint <= 0) {
+        return match;
+      }
+      return String.fromCodePoint(codePoint);
+    }
+
+    return HTML_ENTITY_MAP[token.toLocaleLowerCase()] ?? match;
+  });
+
 export const parseRetryAfterMs = (retryAfterHeader: string | null) => {
   if (!retryAfterHeader) {
     return null;

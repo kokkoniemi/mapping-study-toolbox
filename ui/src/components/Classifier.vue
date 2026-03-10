@@ -14,7 +14,7 @@
                 </p>
                 <p class="forum">
                     <a :href="currentItem.url">In publisher database</a> |&nbsp;
-                    <span v-if="currentItem.Forum">{{ currentItem.Forum.name }}, jufo-level: {{
+                    <span v-if="currentItem.Forum">{{ decodeHtmlEntities(currentItem.Forum.name ?? "") }}, jufo-level: {{
                         currentItem.Forum.jufoLevel }}</span>
                 </p>
                 <div v-if="enrichmentBadges.length > 0" class="enrichment-meta">
@@ -155,7 +155,7 @@ import { format as formatDate } from "date-fns";
 import type { EnrichmentFieldProvenance } from "@shared/contracts";
 
 import MappingActions from "./MappingActions.vue";
-import { debounce, keyCodes } from "../helpers/utils";
+import { decodeHtmlEntities, debounce, keyCodes } from "../helpers/utils";
 import { defaultStore } from "../stores/default";
 
 type LiteratureDisplayItem = {
@@ -239,9 +239,9 @@ const referenceDisplayItems = computed<LiteratureDisplayItem[]>(() => {
   const crossrefReferences = currentItem.value?.referenceItems ?? [];
   return crossrefReferences.map((item) => ({
     key: item.key ?? `${item.doi ?? item.articleTitle ?? item.unstructured ?? "ref"}`,
-    title: item.articleTitle ?? item.unstructured ?? null,
+    title: item.articleTitle ? decodeHtmlEntities(item.articleTitle) : (item.unstructured ? decodeHtmlEntities(item.unstructured) : null),
     year: item.year ?? null,
-    forum: item.journalTitle ?? null,
+    forum: item.journalTitle ? decodeHtmlEntities(item.journalTitle) : null,
     doi: normalizeDoi(item.doi),
     url: null,
   }));
@@ -251,9 +251,9 @@ const citationDisplayItems = computed<LiteratureDisplayItem[]>(() => {
   const citations = currentItem.value?.openAlexCitationItems ?? [];
   return citations.map((item) => ({
     key: item.openAlexId ?? `${item.doi ?? item.title ?? "citation"}`,
-    title: item.title ?? null,
+    title: item.title ? decodeHtmlEntities(item.title) : null,
     year: item.year ?? null,
-    forum: item.forum ?? null,
+    forum: item.forum ? decodeHtmlEntities(item.forum) : null,
     doi: normalizeDoi(item.doi) ?? extractDoiFromUrl(item.url),
     url: item.url ?? null,
   }));

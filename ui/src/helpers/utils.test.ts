@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { debounce, keyCodes } from "./utils";
+import { decodeHtmlEntities, debounce, keyCodes } from "./utils";
 
 describe("keyCodes", () => {
   it("keeps expected keyboard constants", () => {
@@ -42,5 +42,15 @@ describe("debounce", () => {
     vi.advanceTimersByTime(100);
 
     expect(values).toEqual(["ctx:value"]);
+  });
+});
+
+describe("decodeHtmlEntities", () => {
+  it("decodes named HTML entities", () => {
+    expect(decodeHtmlEntities("Behaviour &amp; Information Technology")).toBe("Behaviour & Information Technology");
+  });
+
+  it("decodes numeric HTML entities", () => {
+    expect(decodeHtmlEntities("A&#38;B &#x26; C")).toBe("A&B & C");
   });
 });

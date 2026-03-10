@@ -132,7 +132,7 @@
                 @click="selectForumGroup(group.key)"
               >
                 <span class="forum-tools__group-title">
-                  {{ group.normalizedName || group.issn || group.key }}
+                  {{ decodeHtmlEntities(group.normalizedName || group.issn || group.key) }}
                 </span>
                 <span class="forum-tools__group-meta">
                   {{ group.count }} forums, {{ sumRecordCounts(group.forums) }} records
@@ -177,7 +177,7 @@
                     <span>Source</span>
                   </label>
                   <div class="forum-tools__forum-meta">
-                    <strong>{{ forum.name || "(Unnamed forum)" }}</strong>
+                    <strong>{{ forum.name ? decodeHtmlEntities(forum.name) : "(Unnamed forum)" }}</strong>
                     <span>id {{ forum.id }}</span>
                     <span v-if="forum.issn">ISSN {{ forum.issn }}</span>
                     <span>{{ forum.recordCount }} records</span>
@@ -286,7 +286,7 @@ import { DEFAULT_MAPPING_OPTION_COLOR, getRandomMappingOptionColor, normalizeMap
 import { STATUS_FILTER_OPTIONS } from "../constants/status";
 import { useDataGrid, type DataGridExpose } from "../composables/useDataGrid";
 import { useEnrichmentJob } from "../composables/useEnrichmentJob";
-import { debounce } from "../helpers/utils";
+import { decodeHtmlEntities, debounce } from "../helpers/utils";
 import { defaultStore } from "../stores/default";
 import { forums, type MappingOption, type RecordItem, type RecordStatus } from "../helpers/api";
 import { getApiErrorMessage } from "../helpers/errors";
@@ -493,7 +493,7 @@ const tableRows = computed<GridRow[]>(() =>
       enrichment: "",
       author: record.author,
       forum: record.Forum
-        ? `${record.Forum.name ?? "-"} | issn: ${record.Forum.issn ?? "-"} | publisher: ${record.Forum.publisher ?? "-"} | jufo: ${record.Forum.jufoLevel ?? "-"}`
+        ? `${decodeHtmlEntities(record.Forum.name ?? "-")} | issn: ${record.Forum.issn ?? "-"} | publisher: ${decodeHtmlEntities(record.Forum.publisher ?? "-")} | jufo: ${record.Forum.jufoLevel ?? "-"}`
         : "-",
       url: record.url,
       databases: stringListToCell(record.databases),

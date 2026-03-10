@@ -2,6 +2,7 @@ import db from "../models";
 import { extractIssnFromWork, normalizeIssn, type CrossrefWork } from "./crossref";
 import type { ForumSnapshot, JobContext } from "./enrichmentTypes";
 import { buildFieldProvenance, mergeProvenance } from "./enrichmentProvenance";
+import { decodeHtmlEntities } from "./enrichmentCommon";
 import type { EnrichmentJobOptions, EnrichmentMode, EnrichmentProvenanceMap } from "../shared/contracts";
 
 const normalizeName = (value: string | null | undefined) =>
@@ -29,11 +30,11 @@ const uniqueNames = (values: string[]) => {
 const pickForumName = (work: CrossrefWork) => {
   const fromContainer = (work["container-title"] ?? []).find((item) => item?.trim().length > 0)?.trim();
   if (fromContainer) {
-    return fromContainer;
+    return decodeHtmlEntities(fromContainer);
   }
 
   const fromShort = (work["short-container-title"] ?? []).find((item) => item?.trim().length > 0)?.trim();
-  return fromShort || null;
+  return fromShort ? decodeHtmlEntities(fromShort) : null;
 };
 
 type ForumUpdateContext = {
@@ -113,7 +114,7 @@ export const updateForumFromWork = async (
   context?: ForumUpdateContext,
 ) => {
   const forumName = pickForumName(work);
-  const publisher = work.publisher?.trim() || null;
+  const publisher = work.publisher?.trim() ? decodeHtmlEntities(work.publisher.trim()) : null;
   const issn = extractIssnFromWork(work);
 
   if (!forumName && !publisher && !issn) {
