@@ -10,7 +10,15 @@
 
                 <h1>{{ currentItem.title }}</h1>
                 <p class="author">
-                    <small>{{ currentItem.author }}</small>
+                    <small>
+                        {{ authorDisplay }}
+                        <template v-if="currentItem.year !== null && currentItem.year !== undefined">
+                            ({{ currentItem.year }})
+                        </template>
+                    </small>
+                </p>
+                <p v-if="affiliationsDisplay.length > 0" class="affiliations">
+                    <small>Affiliations: {{ affiliationsDisplay }}</small>
                 </p>
                 <p class="forum">
                     <a :href="currentItem.url">In publisher database</a> |&nbsp;
@@ -257,6 +265,64 @@ const citationDisplayItems = computed<LiteratureDisplayItem[]>(() => {
     doi: normalizeDoi(item.doi) ?? extractDoiFromUrl(item.url),
     url: item.url ?? null,
   }));
+});
+
+const authorDisplay = computed(() => {
+  const details = currentItem.value?.authorDetails ?? [];
+  if (Array.isArray(details) && details.length > 0) {
+    const names = details
+      .map((author) => {
+        const family = author.family?.trim() ?? "";
+        const given = author.given?.trim() ?? "";
+        const name = author.name?.trim() ?? "";
+        if (family && given) {
+          return `${family}, ${given}`;
+        }
+        if (name) {
+          return name;
+        }
+        return [given, family].filter(Boolean).join(" ").trim();
+      })
+      .filter((item) => item.length > 0)
+      .map((item) => decodeHtmlEntities(item));
+
+    if (names.length > 0) {
+      return names.join("; ");
+    }
+  }
+
+  return decodeHtmlEntities(currentItem.value?.author ?? "");
+});
+
+const affiliationsDisplay = computed(() => {
+  const values: string[] = [];
+  const seen = new Set<string>();
+
+  const pushUnique = (value: string | null | undefined) => {
+    const normalized = value?.trim();
+    if (!normalized) {
+      return;
+    }
+    const decoded = decodeHtmlEntities(normalized);
+    const key = decoded.toLocaleLowerCase();
+    if (seen.has(key)) {
+      return;
+    }
+    seen.add(key);
+    values.push(decoded);
+  };
+
+  for (const author of currentItem.value?.authorDetails ?? []) {
+    for (const affiliation of author.affiliations ?? []) {
+      pushUnique(affiliation);
+    }
+  }
+
+  for (const affiliation of currentItem.value?.openAlexAuthorAffiliations ?? []) {
+    pushUnique(affiliation);
+  }
+
+  return values.join("; ");
 });
 
 const topicDisplayItems = computed<TopicDisplayItem[]>(() => {
@@ -781,6 +847,16 @@ h1 {
 
     small {
         font-size: 12px;
+    }
+}
+
+.affiliations {
+    margin: 0 0 6px;
+    line-height: 1.2;
+
+    small {
+        font-size: 12px;
+        color: #4a5865;
     }
 }
 
