@@ -93,6 +93,26 @@
                             </li>
                         </ul>
                     </div>
+
+                    <div class="literature-list">
+                        <div class="literature-list__header">
+                            <h4>Topics ({{ topicDisplayItems.length }})</h4>
+                            <button type="button" class="literature-list__toggle" @click="toggleTopicsVisibility">
+                                {{ showTopics ? "Hide" : "Show" }}
+                            </button>
+                        </div>
+                        <ul v-if="showTopics" class="literature-list__items">
+                            <li v-for="item in topicDisplayItems" :key="item.key" class="literature-list__item">
+                                <span>{{ item.displayName }}</span>
+                                <template v-if="item.score !== null"> (score: {{ item.score.toFixed(2) }})</template>
+                                <template v-if="item.field"> - {{ item.field }}</template>
+                                <template v-if="item.subfield"> / {{ item.subfield }}</template>
+                            </li>
+                            <li v-if="topicDisplayItems.length === 0" class="literature-list__muted">
+                                No topics available.
+                            </li>
+                        </ul>
+                    </div>
                 </section>
 
                 <section class="bottom-bar">
@@ -147,6 +167,14 @@ type LiteratureDisplayItem = {
   url: string | null;
 };
 
+type TopicDisplayItem = {
+  key: string;
+  displayName: string;
+  score: number | null;
+  field: string | null;
+  subfield: string | null;
+};
+
 type EnrichmentBadge = {
   label: string;
   level: "low" | "medium" | "high";
@@ -162,6 +190,7 @@ let sidebarHeightObserver: ResizeObserver | null = null;
 
 const showReferences = ref(false);
 const showCitations = ref(false);
+const showTopics = ref(false);
 const DOI_URL_PATTERN = /^https?:\/\/(?:dx\.)?doi\.org\/(.+)$/i;
 
 const normalizeDoi = (value: string | null | undefined): string | null => {
@@ -202,6 +231,10 @@ const toggleCitationsVisibility = () => {
   showCitations.value = !showCitations.value;
 };
 
+const toggleTopicsVisibility = () => {
+  showTopics.value = !showTopics.value;
+};
+
 const referenceDisplayItems = computed<LiteratureDisplayItem[]>(() => {
   const crossrefReferences = currentItem.value?.referenceItems ?? [];
   return crossrefReferences.map((item) => ({
@@ -224,6 +257,19 @@ const citationDisplayItems = computed<LiteratureDisplayItem[]>(() => {
     doi: normalizeDoi(item.doi) ?? extractDoiFromUrl(item.url),
     url: item.url ?? null,
   }));
+});
+
+const topicDisplayItems = computed<TopicDisplayItem[]>(() => {
+  const topics = currentItem.value?.openAlexTopicItems ?? [];
+  return topics
+    .filter((item) => item.displayName && item.displayName.trim().length > 0)
+    .map((item) => ({
+      key: item.id ?? `${item.displayName ?? "topic"}_${item.field ?? ""}_${item.subfield ?? ""}`,
+      displayName: item.displayName ?? "",
+      score: typeof item.score === "number" ? item.score : null,
+      field: item.field ?? null,
+      subfield: item.subfield ?? null,
+    }));
 });
 
 const enrichmentBadgeFromProvenance = (
@@ -368,6 +414,7 @@ watch(
   () => {
     showReferences.value = false;
     showCitations.value = false;
+    showTopics.value = false;
   },
 );
 

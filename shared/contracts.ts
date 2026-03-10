@@ -90,6 +90,15 @@ export type MappingOptionsIndexResponse<TOption> = {
   options: TOption[];
 };
 
+export type OpenAlexTopicPatchItem = {
+  id: string | null;
+  displayName: string;
+  score: number | null;
+  subfield: string | null;
+  field: string | null;
+  domain: string | null;
+};
+
 export type PatchRecordPayload = Partial<{
   title: string;
   author: string;
@@ -100,6 +109,7 @@ export type PatchRecordPayload = Partial<{
   abstract: string | null;
   databases: string[];
   alternateUrls: string[];
+  openAlexTopicItems: OpenAlexTopicPatchItem[] | null;
   editedBy: string;
 }>;
 

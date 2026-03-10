@@ -260,6 +260,59 @@ describe("routes/records", () => {
     expect(res.send).toHaveBeenCalledWith(record);
   });
 
+  it("patch updates openAlex topic items", async () => {
+    const record = { update: vi.fn().mockResolvedValue(undefined), id: 1 };
+    dbMock.Record.findByPk.mockResolvedValue(record);
+
+    const req = {
+      params: { id: "1" },
+      body: {
+        openAlexTopicItems: [
+          { displayName: "Team learning", score: 0.91 },
+          { displayName: "Project-based learning" },
+        ],
+      },
+    } as unknown as Request;
+    const res = mockResponse();
+
+    await patch(req, res);
+
+    expect(record.update).toHaveBeenCalledWith({
+      openAlexTopicItems: [
+        {
+          displayName: "Team learning",
+          id: null,
+          score: 0.91,
+          subfield: null,
+          field: null,
+          domain: null,
+        },
+        {
+          displayName: "Project-based learning",
+          id: null,
+          score: null,
+          subfield: null,
+          field: null,
+          domain: null,
+        },
+      ],
+    });
+    expect(res.send).toHaveBeenCalledWith(record);
+  });
+
+  it("patch rejects invalid openAlex topic score", async () => {
+    const req = {
+      params: { id: "1" },
+      body: {
+        openAlexTopicItems: [{ displayName: "Team learning", score: 2 }],
+      },
+    } as unknown as Request;
+    const res = mockResponse();
+
+    await expect(patch(req, res)).rejects.toBeInstanceOf(ApiError);
+    expect(dbMock.Record.findByPk).not.toHaveBeenCalled();
+  });
+
   it("patch rejects unsupported keys", async () => {
     const req = {
       params: { id: "1" },

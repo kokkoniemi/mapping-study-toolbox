@@ -13,6 +13,7 @@ import {
   type EnrichmentMode,
   type EnrichmentJobOptions,
   type EnrichmentProvider,
+  type OpenAlexTopicPatchItem,
   type PatchRecordPayload,
   type RecordStatus,
 } from "../shared/contracts";
@@ -53,8 +54,18 @@ const LIST_RECORD_ATTRIBUTES = [
   "openAlexId",
   "openAlexEnrichedAt",
   "openAlexLastError",
+  "openAlexTopicItems",
   "createdAt",
   "updatedAt",
+] as const;
+
+const TOPIC_PATCH_ALLOWED_KEYS = [
+  "id",
+  "displayName",
+  "score",
+  "subfield",
+  "field",
+  "domain",
 ] as const;
 
 const parseBooleanQuery = (value: unknown, key: string): boolean => {
@@ -122,6 +133,90 @@ const parseStatusRequired = (value: unknown): RecordStatus => {
   }
 
   throw badRequest(`status must be one of: ${VALID_STATUSES_TEXT.join(", ")}`);
+};
+
+const parseTopicScore = (value: unknown, fieldName: string): number | null => {
+  if (value === undefined || value === null) {
+    return null;
+  }
+  if (typeof value !== "number" || Number.isNaN(value) || !Number.isFinite(value)) {
+    throw badRequest(`${fieldName} must be a number or null`);
+  }
+  if (value < 0 || value > 1) {
+    throw badRequest(`${fieldName} must be between 0 and 1`);
+  }
+  return value;
+};
+
+const parseOpenAlexTopicItems = (value: unknown): OpenAlexTopicPatchItem[] | null => {
+  if (value === null) {
+    return null;
+  }
+  if (!Array.isArray(value)) {
+    throw badRequest("openAlexTopicItems must be an array or null");
+  }
+  if (value.length > 200) {
+    throw badRequest("openAlexTopicItems must have at most 200 items");
+  }
+
+  const topics: OpenAlexTopicPatchItem[] = [];
+  const seen = new Set<string>();
+
+  for (const [index, item] of value.entries()) {
+    const topic = parseObject(item, `openAlexTopicItems[${index}]`);
+    assertAllowedKeys(topic, TOPIC_PATCH_ALLOWED_KEYS, `openAlexTopicItems[${index}]`);
+
+    const displayName = parseString(topic.displayName, `openAlexTopicItems[${index}].displayName`, {
+      trim: true,
+      allowEmpty: false,
+      maxLength: 500,
+    });
+    if (displayName === undefined) {
+      throw badRequest(`openAlexTopicItems[${index}].displayName is required`);
+    }
+    const key = displayName.toLocaleLowerCase();
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+
+    const id = parseString(topic.id, `openAlexTopicItems[${index}].id`, {
+      optional: true,
+      trim: true,
+      allowEmpty: false,
+      maxLength: 300,
+    });
+    const score = parseTopicScore(topic.score, `openAlexTopicItems[${index}].score`);
+    const subfield = parseString(topic.subfield, `openAlexTopicItems[${index}].subfield`, {
+      optional: true,
+      trim: true,
+      allowEmpty: false,
+      maxLength: 300,
+    });
+    const field = parseString(topic.field, `openAlexTopicItems[${index}].field`, {
+      optional: true,
+      trim: true,
+      allowEmpty: false,
+      maxLength: 300,
+    });
+    const domain = parseString(topic.domain, `openAlexTopicItems[${index}].domain`, {
+      optional: true,
+      trim: true,
+      allowEmpty: false,
+      maxLength: 300,
+    });
+
+    topics.push({
+      displayName,
+      id: id ?? null,
+      score,
+      subfield: subfield ?? null,
+      field: field ?? null,
+      domain: domain ?? null,
+    });
+  }
+
+  return topics;
 };
 
 export const listing = async (req: Request, res: Response) => {
@@ -271,6 +366,7 @@ export const patch = async (req: Request, res: Response) => {
       "abstract",
       "databases",
       "alternateUrls",
+      "openAlexTopicItems",
       "editedBy",
     ],
     "record patch body",
@@ -344,6 +440,10 @@ export const patch = async (req: Request, res: Response) => {
       maxItemLength: 2000,
       maxItems: 200,
     });
+  }
+
+  if ("openAlexTopicItems" in body) {
+    updates.openAlexTopicItems = parseOpenAlexTopicItems(body.openAlexTopicItems);
   }
 
   if ("editedBy" in body) {

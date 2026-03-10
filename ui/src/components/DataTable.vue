@@ -471,8 +471,13 @@ const recordMappingCellValue = (record: RecordItem, questionId: number) =>
 
 const tableRows = computed<GridRow[]>(() =>
   dataItems.value.map((record) => {
-    const topicNames = record.openAlexTopicItems?.map((topic) => topic.displayName ?? "").filter((item) => item.length > 0) ?? [];
-    const topicsCellValue = topicNames.length > 0
+    const hasTopicDetails = Array.isArray(record.openAlexTopicItems);
+    const topicNames = hasTopicDetails
+      ? (record.openAlexTopicItems ?? [])
+        .map((topic) => topic.displayName ?? "")
+        .filter((item) => item.length > 0)
+      : [];
+    const topicsCellValue = hasTopicDetails
       ? topicNames.join(", ")
       : String(record.topicCount ?? 0);
 
@@ -682,7 +687,7 @@ function mappingChipRenderer(
   return td;
 }
 
-const priorityColumns: Array<{ header: string; settings: ColumnSettings }> = [
+const leadingColumns: Array<{ header: string; settings: ColumnSettings }> = [
   { header: "", settings: { data: "__selected", readOnly: true, renderer: selectionRenderer, width: 42 } },
   { header: "id", settings: { data: "id", readOnly: true, width: 64 } },
   { header: "title", settings: { data: "title", type: "text", renderer: truncatedTextRenderer, width: 320 } },
@@ -700,24 +705,24 @@ const priorityColumns: Array<{ header: string; settings: ColumnSettings }> = [
     },
   },
   { header: "comment", settings: { data: "comment", type: "text", renderer: truncatedTextRenderer, width: 280 } },
-  {
-    header: "enrichment confidence",
-    settings: { data: "enrichment", readOnly: true, renderer: enrichmentRenderer, width: 300 },
-  },
 ];
 
 const trailingColumns: Array<{ header: string; settings: ColumnSettings }> = [
   { header: "author", settings: { data: "author", type: "text", renderer: truncatedTextRenderer, width: 220 } },
-  { header: "doi", settings: { data: "doi", type: "text", renderer: truncatedTextRenderer, width: 210 } },
   { header: "forum", settings: { data: "forum", readOnly: true, renderer: truncatedTextRenderer, width: 240 } },
   { header: "references", settings: { data: "references", readOnly: true, width: 100 } },
   { header: "citations", settings: { data: "citations", readOnly: true, width: 100 } },
-  { header: "topics", settings: { data: "topics", readOnly: true, renderer: truncatedTextRenderer, width: 220 } },
+  { header: "topics", settings: { data: "topics", type: "text", renderer: truncatedTextRenderer, width: 260 } },
+  { header: "doi", settings: { data: "doi", type: "text", renderer: truncatedTextRenderer, width: 210 } },
   { header: "url", settings: { data: "url", type: "text", renderer: truncatedTextRenderer, width: 260 } },
-  { header: "databases", settings: { data: "databases", type: "text", renderer: truncatedTextRenderer, width: 220 } },
   {
     header: "alternateUrls",
     settings: { data: "alternateUrls", type: "text", renderer: truncatedTextRenderer, width: 240 },
+  },
+  { header: "databases", settings: { data: "databases", type: "text", renderer: truncatedTextRenderer, width: 220 } },
+  {
+    header: "enrichment confidence",
+    settings: { data: "enrichment", readOnly: true, renderer: enrichmentRenderer, width: 300 },
   },
   { header: "created", settings: { data: "createdAt", readOnly: true, width: 170 } },
   { header: "updated", settings: { data: "updatedAt", readOnly: true, width: 170 } },
@@ -736,7 +741,7 @@ const mappingColumns = computed<Array<{ header: string; settings: ColumnSettings
 );
 
 const orderedColumns = computed(() => [
-  ...priorityColumns,
+  ...leadingColumns,
   ...mappingColumns.value,
   ...trailingColumns,
 ]);
@@ -1012,6 +1017,31 @@ const handleCellChange = async (recordId: number, prop: string, nextValue: strin
 
   if (prop === "databases" || prop === "alternateUrls") {
     await store.setRecordArrayField(recordId, prop, parseListCellValue(nextValue));
+    return;
+  }
+
+  if (prop === "topics") {
+    const topicNames = parseListCellValue(nextValue);
+    const current = getRecordById(recordId);
+    const currentByName = new Map(
+      (current?.openAlexTopicItems ?? [])
+        .filter((item): item is NonNullable<typeof item> => Boolean(item?.displayName))
+        .map((item) => [String(item.displayName).toLocaleLowerCase(), item]),
+    );
+
+    await store.patchRecord(recordId, {
+      openAlexTopicItems: topicNames.map((displayName) => {
+        const existing = currentByName.get(displayName.toLocaleLowerCase());
+        return {
+          displayName,
+          id: existing?.id ?? null,
+          score: existing?.score ?? null,
+          subfield: existing?.subfield ?? null,
+          field: existing?.field ?? null,
+          domain: existing?.domain ?? null,
+        };
+      }),
+    });
     return;
   }
 
