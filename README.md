@@ -119,6 +119,7 @@ UI dev server runs on http://localhost:8080 and calls backend API at http://loca
 - `PATCH /api/records/:id` for partial record updates used by the Data tab.
 - `POST /api/records/enrichment-jobs` to start bulk Crossref enrichment for selected record IDs.
 - `GET /api/records/enrichment-jobs/:jobId` to poll job progress/results.
+  - compact polling supported via `compact=1&resultCursor=<n>&updatedCursor=<n>` (delta payloads)
 - `POST /api/records/enrichment-jobs/:jobId/cancel` to stop queued/running enrichment jobs.
 
 ### Crossref + OpenAlex enrichment
@@ -137,6 +138,9 @@ UI dev server runs on http://localhost:8080 and calls backend API at http://loca
 - During processing, the status panel shows per-API counters:
   - records processed via Crossref/OpenAlex/JUFO
   - request counts sent to Crossref/OpenAlex/JUFO
+- Queue controls:
+  - queue size limit (`ENRICHMENT_MAX_QUEUED_JOBS`, default `20`)
+  - per-job record limit (`ENRICHMENT_MAX_RECORDS_PER_JOB`, default `500`)
 - DOI detection order:
   1. try extracting DOI from `url` / `alternateUrls`
   2. fallback to Crossref title + author search
@@ -164,6 +168,9 @@ UI dev server runs on http://localhost:8080 and calls backend API at http://loca
   - `REQUEST_BODY_LIMIT` (default `1mb`)
   - `ENRICHMENT_RATE_LIMIT_MAX_REQUESTS` (default `20`)
   - `ENRICHMENT_RATE_LIMIT_WINDOW_MS` (default `60000`)
+  - `ENRICHMENT_MAX_QUEUED_JOBS` (default `20`)
+  - `ENRICHMENT_MAX_RECORDS_PER_JOB` (default `500`)
+  - `RECORD_LIST_LIMIT_MAX` (default `250`)
 
 ### Where to put `OPENALEX_API_KEY`
 - Docker: add `OPENALEX_API_KEY` under `services.backend.environment` in `docker-compose.yml` (or use `${OPENALEX_API_KEY}` with a local `.env` file).

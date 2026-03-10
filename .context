@@ -26,6 +26,7 @@
 
 ## Contract-critical behavior
 - `GET /api/records` -> `{ count, records }`.
+- `GET /api/records` is list-optimized by default: heavy enrichment arrays are omitted unless `withDetails=1`.
 - `GET /api/mapping-questions` -> `{ count, questions }`.
 - Record payload include aliases expected by UI: `Forum`, `MappingOptions`.
 - Record status domain: `null | uncertain | excluded | included`.
@@ -33,7 +34,7 @@
 - Data tab partial updates use `PATCH /api/records/:id`.
 - Enrichment jobs:
   - `POST /api/records/enrichment-jobs`
-  - `GET /api/records/enrichment-jobs/:jobId`
+  - `GET /api/records/enrichment-jobs/:jobId` (supports compact polling via `compact=1&resultCursor=&updatedCursor=`)
   - `POST /api/records/enrichment-jobs/:jobId/cancel`
 
 ## Operational notes

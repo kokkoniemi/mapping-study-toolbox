@@ -1,13 +1,12 @@
-name: CI
+name: Dependency Audit
 
 on:
-  push:
-    branches:
-      - "**"
-  pull_request:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
 
 jobs:
-  checks:
+  audit:
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -30,23 +29,8 @@ jobs:
       - name: Install frontend dependencies
         run: npm --prefix ui ci
 
-      - name: Lint backend
-        run: npm run lint:backend
+      - name: Audit backend dependencies
+        run: npm audit --audit-level=high
 
-      - name: Lint frontend
-        run: npm run ui:lint
-
-      - name: Typecheck backend
-        run: npm run typecheck
-
-      - name: Test backend
-        run: npm test
-
-      - name: Typecheck frontend
-        run: npm run ui:typecheck
-
-      - name: Test frontend
-        run: npm run ui:test
-
-      - name: Build frontend
-        run: npm run ui:build
+      - name: Audit frontend dependencies
+        run: npm --prefix ui audit --audit-level=high

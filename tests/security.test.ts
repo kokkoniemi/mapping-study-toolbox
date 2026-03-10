@@ -76,6 +76,25 @@ describe("lib/security", () => {
     expect(next).not.toHaveBeenCalled();
   });
 
+  it("CORS middleware handles OPTIONS even for disallowed origins without setting allow-origin", () => {
+    const cors = createCorsMiddleware(new Set(["http://allowed.local"]));
+    const req = createRequest({
+      method: "OPTIONS",
+      headers: {
+        origin: "http://blocked.local",
+      },
+    });
+    const res = createMockResponse();
+    const next = vi.fn() as unknown as NextFunction;
+
+    cors(req, res, next);
+
+    expect(res.statusCodeSet).toBe(204);
+    expect(res.headers["access-control-allow-origin"]).toBeUndefined();
+    expect(res.headers["access-control-allow-methods"]).toContain("OPTIONS");
+    expect(next).not.toHaveBeenCalled();
+  });
+
   it("rate limiter returns RATE_LIMITED error after limit is exceeded", () => {
     const limiter = createRateLimitMiddleware({
       windowMs: 60_000,

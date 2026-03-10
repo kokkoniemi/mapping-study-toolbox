@@ -244,6 +244,8 @@ export interface RecordItem {
   crossrefLastError?: string | null;
   openAlexId?: string | null;
   citationCount?: number | null;
+  referenceCount?: number | null;
+  topicCount?: number | null;
   openAlexReferenceItems?: OpenAlexReferenceItem[] | null;
   openAlexCitationItems?: OpenAlexReferenceItem[] | null;
   openAlexTopicItems?: OpenAlexTopicItem[] | null;

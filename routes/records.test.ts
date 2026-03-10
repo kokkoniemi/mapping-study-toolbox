@@ -8,6 +8,8 @@ const dbMock = vi.hoisted(() => ({
       or: Symbol("or"),
       substring: Symbol("substring"),
     },
+    fn: vi.fn((name: string, ...args: unknown[]) => ({ fn: name, args })),
+    col: vi.fn((name: string) => ({ col: name })),
   },
   Record: {
     count: vi.fn(),
@@ -33,6 +35,7 @@ const enrichmentMock = vi.hoisted(() => ({
   createEnrichmentJob: vi.fn(),
   getEnrichmentJob: vi.fn(),
   cancelEnrichmentJob: vi.fn(),
+  getEnrichmentQueueStatus: vi.fn(),
 }));
 
 vi.mock("../lib/recordEnrichment", () => enrichmentMock);
@@ -71,6 +74,12 @@ describe("routes/records", () => {
     enrichmentMock.createEnrichmentJob.mockReset();
     enrichmentMock.getEnrichmentJob.mockReset();
     enrichmentMock.cancelEnrichmentJob.mockReset();
+    enrichmentMock.getEnrichmentQueueStatus.mockReset();
+    enrichmentMock.getEnrichmentQueueStatus.mockReturnValue({
+      queuedJobs: 0,
+      runningJobs: 0,
+      maxQueuedJobs: 20,
+    });
   });
 
   it("listing returns count + records with applied filters", async () => {
@@ -92,7 +101,14 @@ describe("routes/records", () => {
     expect((where[symbolKeys[0] as symbol] as unknown[]).length).toBe(4);
 
     expect(dbMock.Record.findAll).toHaveBeenCalledWith(
-      expect.objectContaining({ offset: 5, limit: 10, include: ["Forum", "MappingOptions"] }),
+      expect.objectContaining({
+        offset: 5,
+        limit: 10,
+        include: expect.arrayContaining([
+          expect.objectContaining({ association: "Forum" }),
+          expect.objectContaining({ association: "MappingOptions" }),
+        ]),
+      }),
     );
     expect(res.send).toHaveBeenCalledWith({ count: 2, records: [{ id: 1 }, { id: 2 }] });
   });
@@ -155,6 +171,21 @@ describe("routes/records", () => {
     dbMock.Record.findByPk.mockResolvedValue({ id: 42 });
     dbMock.MappingQuestion.findByPk.mockResolvedValue({ id: 9 });
     dbMock.MappingOption.findByPk.mockResolvedValue({ id: 55, title: "Tag", mappingQuestionId: 100 });
+
+    const req = {
+      params: { recordId: "42" },
+      body: { mappingOptionId: "55", mappingQuestionId: "9" },
+    } as unknown as Request;
+    const res = mockResponse();
+
+    await expect(createOption(req, res)).rejects.toBeInstanceOf(ApiError);
+    expect(dbMock.RecordMappingOption.create).not.toHaveBeenCalled();
+  });
+
+  it("createOption rejects when mapping question is missing", async () => {
+    dbMock.Record.findByPk.mockResolvedValue({ id: 42 });
+    dbMock.MappingQuestion.findByPk.mockResolvedValue(null);
+    dbMock.MappingOption.findByPk.mockResolvedValue({ id: 55, title: "Tag", mappingQuestionId: 9 });
 
     const req = {
       params: { recordId: "42" },
@@ -315,6 +346,22 @@ describe("routes/records", () => {
     expect(enrichmentMock.createEnrichmentJob).not.toHaveBeenCalled();
   });
 
+  it("createEnrichment rejects when queue is full", async () => {
+    enrichmentMock.getEnrichmentQueueStatus.mockReturnValue({
+      queuedJobs: 20,
+      runningJobs: 1,
+      maxQueuedJobs: 20,
+    });
+
+    const req = {
+      body: { recordIds: [1] },
+    } as unknown as Request;
+    const res = mockResponse();
+
+    await expect(createEnrichment(req, res)).rejects.toBeInstanceOf(ApiError);
+    expect(enrichmentMock.createEnrichmentJob).not.toHaveBeenCalled();
+  });
+
   it("getEnrichment returns existing job", async () => {
     enrichmentMock.getEnrichmentJob.mockReturnValue({
       jobId: "job-2",
@@ -330,12 +377,17 @@ describe("routes/records", () => {
 
     const req = {
       params: { jobId: "job-2" },
+      query: {},
     } as unknown as Request;
     const res = mockResponse();
 
     await getEnrichment(req, res);
 
-    expect(enrichmentMock.getEnrichmentJob).toHaveBeenCalledWith("job-2");
+    expect(enrichmentMock.getEnrichmentJob).toHaveBeenCalledWith("job-2", {
+      compact: false,
+      resultCursor: 0,
+      updatedCursor: 0,
+    });
     expect(res.send).toHaveBeenCalledWith(
       expect.objectContaining({
         jobId: "job-2",
@@ -343,10 +395,49 @@ describe("routes/records", () => {
     );
   });
 
+  it("getEnrichment supports compact polling cursors", async () => {
+    enrichmentMock.getEnrichmentJob.mockReturnValue({
+      jobId: "job-compact",
+      status: "running",
+      cancelRequested: false,
+      cancelRequestedAt: null,
+      total: 10,
+      processed: 3,
+      resultCursor: 3,
+      updatedCursor: 1,
+      resultCounts: { enriched: 1, skipped: 1, failed: 1 },
+      createdAt: "2026-03-10T00:00:00.000Z",
+      startedAt: "2026-03-10T00:00:01.000Z",
+      finishedAt: null,
+      results: [],
+      updatedRecords: [],
+      metrics: {
+        crossref: { records: 3, requests: 3 },
+        openalex: { records: 3, requests: 3 },
+        jufo: { records: 3, requests: 3 },
+      },
+    });
+
+    const req = {
+      params: { jobId: "job-compact" },
+      query: { compact: "1", resultCursor: "2", updatedCursor: "1" },
+    } as unknown as Request;
+    const res = mockResponse();
+
+    await getEnrichment(req, res);
+
+    expect(enrichmentMock.getEnrichmentJob).toHaveBeenCalledWith("job-compact", {
+      compact: true,
+      resultCursor: 2,
+      updatedCursor: 1,
+    });
+  });
+
   it("getEnrichment returns NOT_FOUND when job is missing", async () => {
     enrichmentMock.getEnrichmentJob.mockReturnValue(null);
     const req = {
       params: { jobId: "missing" },
+      query: {},
     } as unknown as Request;
     const res = mockResponse();
 

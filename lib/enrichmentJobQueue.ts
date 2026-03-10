@@ -10,15 +10,38 @@ import type {
   EnrichmentJobSnapshot,
   InternalJob,
   JobContext,
+  JobResultCounts,
   ResultStatus,
 } from "./enrichmentTypes";
 import { JufoClient, type JufoLookupResult } from "./jufo";
 import { OpenAlexClient } from "./openalex";
 
+type QueueSnapshot = {
+  queuedJobs: number;
+  runningJobs: number;
+  maxQueuedJobs: number;
+};
+
+type JobSnapshotOptions = {
+  compact?: boolean;
+  resultCursor?: number;
+  updatedCursor?: number;
+};
+
 const jobs = new Map<string, InternalJob>();
 const queue: InternalJob[] = [];
 let queueActive = false;
-const MAX_STORED_JOBS = 100;
+
+const parsePositiveInteger = (value: string | undefined, fallback: number) => {
+  const parsed = Number.parseInt(value ?? "", 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallback;
+  }
+  return parsed;
+};
+
+const MAX_STORED_JOBS = parsePositiveInteger(process.env.ENRICHMENT_MAX_STORED_JOBS, 100);
+const MAX_QUEUED_JOBS = parsePositiveInteger(process.env.ENRICHMENT_MAX_QUEUED_JOBS, 20);
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 const openAlexDefaultMaxCitationsRaw = Number.parseInt(process.env.OPENALEX_MAX_CITATIONS ?? "", 10);
@@ -26,6 +49,12 @@ const OPENALEX_DEFAULT_MAX_CITATIONS =
   process.env.OPENALEX_MAX_CITATIONS === undefined || !Number.isFinite(openAlexDefaultMaxCitationsRaw)
     ? 5000
     : clamp(openAlexDefaultMaxCitationsRaw, 0, 50_000);
+
+const createEmptyResultCounts = (): JobResultCounts => ({
+  enriched: 0,
+  skipped: 0,
+  failed: 0,
+});
 
 const normalizeJobOptions = (options: EnrichmentJobOptions = {}): Required<EnrichmentJobOptions> => {
   const provider = options.provider ?? "all";
@@ -49,6 +78,12 @@ const syncRequestMetrics = (context: JobContext) => {
   context.metrics.crossref.requests = context.crossrefClient.requestCount;
   context.metrics.openalex.requests = context.openAlexClient.requestCount;
   context.metrics.jufo.requests = context.jufoClient.requestCount;
+};
+
+const pushResult = (job: InternalJob, result: EnrichmentJobResult) => {
+  job.results.push(result);
+  const key = result.status;
+  job.resultCounts[key] += 1;
 };
 
 const mergeResults = (results: EnrichmentJobResult[]): EnrichmentJobResult => {
@@ -115,22 +150,43 @@ const enrichRecord = async (
   };
 };
 
-const snapshot = (job: InternalJob): EnrichmentJobSnapshot => ({
-  jobId: job.jobId,
-  status: job.status,
-  total: job.total,
-  processed: job.processed,
-  createdAt: job.createdAt,
-  startedAt: job.startedAt,
-  finishedAt: job.finishedAt,
-  results: [...job.results],
-  updatedRecords: [...job.updatedRecords],
-  metrics: {
-    crossref: { ...job.metrics.crossref },
-    openalex: { ...job.metrics.openalex },
-    jufo: { ...job.metrics.jufo },
-  },
-});
+const buildSnapshot = (
+  job: InternalJob,
+  { compact = false, resultCursor = 0, updatedCursor = 0 }: JobSnapshotOptions = {},
+): EnrichmentJobSnapshot => {
+  const totalResults = job.results.length;
+  const totalUpdated = job.updatedRecords.length;
+  const normalizedResultCursor = clamp(resultCursor, 0, totalResults);
+  const normalizedUpdatedCursor = clamp(updatedCursor, 0, totalUpdated);
+
+  return {
+    jobId: job.jobId,
+    status: job.status,
+    cancelRequested: job.cancelRequested,
+    cancelRequestedAt: job.cancelRequestedAt,
+    total: job.total,
+    processed: job.processed,
+    resultCursor: totalResults,
+    updatedCursor: totalUpdated,
+    resultCounts: { ...job.resultCounts },
+    createdAt: job.createdAt,
+    startedAt: job.startedAt,
+    finishedAt: job.finishedAt,
+    results: compact ? job.results.slice(normalizedResultCursor) : [...job.results],
+    updatedRecords: compact ? job.updatedRecords.slice(normalizedUpdatedCursor) : [...job.updatedRecords],
+    metrics: {
+      crossref: { ...job.metrics.crossref },
+      openalex: { ...job.metrics.openalex },
+      jufo: { ...job.metrics.jufo },
+    },
+  };
+};
+
+const getQueuedJobsCount = () =>
+  queue.filter((job) => !job.cancelRequested && job.status === "queued").length;
+
+const getRunningJobsCount = () =>
+  [...jobs.values()].filter((job) => job.status === "running" || job.status === "cancelling").length;
 
 const pruneJobs = () => {
   if (jobs.size <= MAX_STORED_JOBS) {
@@ -193,13 +249,13 @@ const runQueuedJobs = async () => {
 
           try {
             const { result, updatedRecord } = await enrichRecord(recordId, context, job.options);
-            job.results.push(result);
+            pushResult(job, result);
             if (updatedRecord) {
               job.updatedRecords.push(updatedRecord);
             }
           } catch (error) {
             const message = error instanceof Error ? error.message : "Unexpected enrichment error";
-            job.results.push({
+            pushResult(job, {
               recordId,
               status: "failed",
               doi: null,
@@ -219,6 +275,9 @@ const runQueuedJobs = async () => {
         job.status = "failed";
       } finally {
         syncRequestMetrics(context);
+        if (job.cancelRequested && job.status !== "failed") {
+          job.status = "cancelled";
+        }
         job.finishedAt = new Date().toISOString();
       }
     }
@@ -227,10 +286,20 @@ const runQueuedJobs = async () => {
   }
 };
 
+export const getEnrichmentQueueStatus = (): QueueSnapshot => ({
+  queuedJobs: getQueuedJobsCount(),
+  runningJobs: getRunningJobsCount(),
+  maxQueuedJobs: MAX_QUEUED_JOBS,
+});
+
 export const createEnrichmentJob = (
   recordIds: number[],
   options: EnrichmentJobOptions = {},
 ): EnrichmentJobSnapshot => {
+  if (getQueuedJobsCount() >= MAX_QUEUED_JOBS) {
+    throw new Error("Enrichment queue is full");
+  }
+
   const dedupedRecordIds = [...new Set(recordIds)];
   const now = new Date().toISOString();
   const normalizedOptions = normalizeJobOptions(options);
@@ -238,8 +307,13 @@ export const createEnrichmentJob = (
   const job: InternalJob = {
     jobId: randomUUID(),
     status: "queued",
+    cancelRequested: false,
+    cancelRequestedAt: null,
     total: dedupedRecordIds.length,
     processed: 0,
+    resultCursor: 0,
+    updatedCursor: 0,
+    resultCounts: createEmptyResultCounts(),
     createdAt: now,
     startedAt: null,
     finishedAt: null,
@@ -252,22 +326,24 @@ export const createEnrichmentJob = (
     },
     recordIds: dedupedRecordIds,
     options: normalizedOptions,
-    cancelRequested: false,
   };
 
   jobs.set(job.jobId, job);
   queue.push(job);
   pruneJobs();
   void runQueuedJobs();
-  return snapshot(job);
+  return buildSnapshot(job);
 };
 
-export const getEnrichmentJob = (jobId: string): EnrichmentJobSnapshot | null => {
+export const getEnrichmentJob = (
+  jobId: string,
+  options: JobSnapshotOptions = {},
+): EnrichmentJobSnapshot | null => {
   const job = jobs.get(jobId);
   if (!job) {
     return null;
   }
-  return snapshot(job);
+  return buildSnapshot(job, options);
 };
 
 export const cancelEnrichmentJob = (jobId: string): EnrichmentJobSnapshot | null => {
@@ -277,16 +353,25 @@ export const cancelEnrichmentJob = (jobId: string): EnrichmentJobSnapshot | null
   }
 
   if (job.status === "completed" || job.status === "failed" || job.status === "cancelled") {
-    return snapshot(job);
+    return buildSnapshot(job);
   }
 
   job.cancelRequested = true;
+  job.cancelRequestedAt = new Date().toISOString();
   job.latestError = "Cancelled by user";
 
   if (job.status === "queued") {
     job.status = "cancelled";
     job.finishedAt = new Date().toISOString();
+  } else if (job.status === "running") {
+    job.status = "cancelling";
   }
 
-  return snapshot(job);
+  return buildSnapshot(job);
+};
+
+export const __resetEnrichmentJobsForTests = () => {
+  jobs.clear();
+  queue.splice(0, queue.length);
+  queueActive = false;
 };

@@ -12,7 +12,7 @@ export const STATUS_FILTER_OPTIONS: Array<{ label: string; value: StatusFilter }
 ];
 
 export type EnrichmentProvider = "crossref" | "openalex" | "all";
-export type EnrichmentJobStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
+export type EnrichmentJobStatus = "queued" | "running" | "cancelling" | "completed" | "failed" | "cancelled";
 export type EnrichmentResultStatus = "enriched" | "skipped" | "failed";
 
 export type EnrichmentJobMetrics = {
@@ -37,11 +37,22 @@ export type EnrichmentJobResult = {
   message?: string;
 };
 
+export type EnrichmentResultCounts = {
+  enriched: number;
+  skipped: number;
+  failed: number;
+};
+
 export type EnrichmentJobSnapshot<TRecord = Record<string, unknown>> = {
   jobId: string;
   status: EnrichmentJobStatus;
+  cancelRequested: boolean;
+  cancelRequestedAt: string | null;
   total: number;
   processed: number;
+  resultCursor: number;
+  updatedCursor: number;
+  resultCounts: EnrichmentResultCounts;
   createdAt: string;
   startedAt: string | null;
   finishedAt: string | null;

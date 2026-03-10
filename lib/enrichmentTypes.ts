@@ -1,4 +1,5 @@
 import type {
+  EnrichmentResultCounts,
   EnrichmentJobMetrics as SharedEnrichmentJobMetrics,
   EnrichmentJobOptions as SharedEnrichmentJobOptions,
   EnrichmentJobResult as SharedEnrichmentJobResult,
@@ -17,11 +18,11 @@ export type EnrichmentJobMetrics = SharedEnrichmentJobMetrics;
 export type EnrichmentJobOptions = SharedEnrichmentJobOptions;
 export type EnrichmentJobResult = SharedEnrichmentJobResult;
 export type EnrichmentJobSnapshot = SharedEnrichmentJobSnapshot<Record<string, unknown>>;
+export type JobResultCounts = EnrichmentResultCounts;
 
 export type InternalJob = EnrichmentJobSnapshot & {
   recordIds: number[];
   options: Required<EnrichmentJobOptions>;
-  cancelRequested: boolean;
   latestError?: string;
 };
 

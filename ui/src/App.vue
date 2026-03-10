@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, defineAsyncComponent } from "vue";
 import { storeToRefs } from "pinia";
 
 import { defaultStore } from "./stores/default";
 import Sidebar from "./components/Sidebar.vue";
 import Classifier from "./components/Classifier.vue";
-import DataTable from "./components/DataTable.vue";
+
+const DataTable = defineAsyncComponent(() => import("./components/DataTable.vue"));
 
 const store = defaultStore();
 const { nick, tab } = storeToRefs(store);

@@ -1,8 +1,13 @@
 import type { Request, Response } from "express";
 import { Op } from "sequelize";
 
-import { badRequest, notFound } from "../lib/http";
-import { cancelEnrichmentJob, createEnrichmentJob, getEnrichmentJob } from "../lib/recordEnrichment";
+import { badRequest, notFound, tooManyRequests } from "../lib/http";
+import {
+  cancelEnrichmentJob,
+  createEnrichmentJob,
+  getEnrichmentJob,
+  getEnrichmentQueueStatus,
+} from "../lib/recordEnrichment";
 import {
   RECORD_STATUS_VALUES,
   type EnrichmentJobOptions,
@@ -23,6 +28,44 @@ import db from "../models";
 
 const VALID_STATUSES: readonly RecordStatus[] = RECORD_STATUS_VALUES;
 const VALID_STATUSES_TEXT = ["null", "uncertain", "excluded", "included"] as const;
+const RECORD_LIST_DEFAULT_MAX = Number.parseInt(process.env.RECORD_LIST_LIMIT_MAX ?? "", 10) || 250;
+const ENRICHMENT_MAX_RECORDS_PER_JOB = Number.parseInt(process.env.ENRICHMENT_MAX_RECORDS_PER_JOB ?? "", 10) || 500;
+const LIST_RECORD_ATTRIBUTES = [
+  "id",
+  "title",
+  "url",
+  "author",
+  "status",
+  "abstract",
+  "databases",
+  "alternateUrls",
+  "forumId",
+  "doi",
+  "citationCount",
+  "editedBy",
+  "comment",
+  "crossrefEnrichedAt",
+  "crossrefLastError",
+  "openAlexId",
+  "openAlexEnrichedAt",
+  "openAlexLastError",
+  "createdAt",
+  "updatedAt",
+] as const;
+
+const parseBooleanQuery = (value: unknown, key: string): boolean => {
+  const raw = parseString(value, key, { optional: true, trim: true });
+  if (raw === undefined || raw.length === 0) {
+    return false;
+  }
+  if (raw === "1" || raw.toLocaleLowerCase() === "true") {
+    return true;
+  }
+  if (raw === "0" || raw.toLocaleLowerCase() === "false") {
+    return false;
+  }
+  throw badRequest(`${key} must be one of: 1, 0, true, false`);
+};
 
 const parseStatusQuery = (value: unknown): RecordStatus | undefined => {
   const status = parseString(value, "status", { optional: true, trim: true });
@@ -79,8 +122,13 @@ const parseStatusRequired = (value: unknown): RecordStatus => {
 
 export const listing = async (req: Request, res: Response) => {
   const offset = parseInteger(req.query.offset, "offset", { defaultValue: 0, min: 0 });
-  const limit = parseInteger(req.query.limit, "limit", { defaultValue: 25, min: 1, max: 250 });
+  const limit = parseInteger(req.query.limit, "limit", {
+    defaultValue: 25,
+    min: 1,
+    max: RECORD_LIST_DEFAULT_MAX,
+  });
   const status = parseStatusQuery(req.query.status);
+  const withDetails = parseBooleanQuery(req.query.withDetails, "withDetails");
   const search = parseString(req.query.search, "search", {
     optional: true,
     trim: true,
@@ -108,7 +156,42 @@ export const listing = async (req: Request, res: Response) => {
       offset,
       limit,
       where,
-      include: ["Forum", "MappingOptions"],
+      attributes: withDetails
+        ? undefined
+        : [
+          ...LIST_RECORD_ATTRIBUTES,
+          [
+            db.Sequelize.fn(
+              "COALESCE",
+              db.Sequelize.fn("json_array_length", db.Sequelize.col("referenceItems")),
+              0,
+            ),
+            "referenceCount",
+          ],
+          [
+            db.Sequelize.fn(
+              "COALESCE",
+              db.Sequelize.fn("json_array_length", db.Sequelize.col("openAlexTopicItems")),
+              0,
+            ),
+            "topicCount",
+          ],
+        ],
+      include: [
+        {
+          association: "Forum",
+          attributes: withDetails
+            ? undefined
+            : ["id", "name", "jufoLevel", "issn", "publisher", "jufoFetchedAt", "jufoLastError"],
+        },
+        {
+          association: "MappingOptions",
+          attributes: withDetails
+            ? undefined
+            : ["id", "title", "color", "mappingQuestionId"],
+          through: { attributes: [] },
+        },
+      ],
     }),
   ]);
 
@@ -321,6 +404,11 @@ export const removeOption = async (req: Request, res: Response) => {
 };
 
 export const createEnrichment = async (req: Request, res: Response) => {
+  const queue = getEnrichmentQueueStatus();
+  if (queue.queuedJobs >= queue.maxQueuedJobs) {
+    throw tooManyRequests("Enrichment queue is full. Please wait for existing jobs to complete.", queue);
+  }
+
   const body = parseObject(req.body, "body");
   assertAllowedKeys(
     body,
@@ -331,7 +419,7 @@ export const createEnrichment = async (req: Request, res: Response) => {
   const recordIds = parseIntegerArray(body.recordIds, "recordIds", {
     min: 1,
     minItems: 1,
-    maxItems: 500,
+    maxItems: ENRICHMENT_MAX_RECORDS_PER_JOB,
   });
   if (!recordIds) {
     throw badRequest("recordIds are required");
@@ -381,7 +469,21 @@ export const getEnrichment = async (req: Request, res: Response) => {
     throw badRequest("jobId is required");
   }
 
-  const job = getEnrichmentJob(jobId);
+  const compact = parseBooleanQuery(req.query.compact, "compact");
+  const resultCursor = parseInteger(req.query.resultCursor, "resultCursor", {
+    defaultValue: 0,
+    min: 0,
+  });
+  const updatedCursor = parseInteger(req.query.updatedCursor, "updatedCursor", {
+    defaultValue: 0,
+    min: 0,
+  });
+
+  const job = getEnrichmentJob(jobId, {
+    compact,
+    resultCursor,
+    updatedCursor,
+  });
   if (!job) {
     throw notFound(`Enrichment job ${jobId} not found`);
   }

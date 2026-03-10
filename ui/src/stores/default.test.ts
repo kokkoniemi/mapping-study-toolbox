@@ -6,6 +6,7 @@ import { defaultStore } from "./default";
 
 const apiMocks = vi.hoisted(() => ({
   recordsIndex: vi.fn(),
+  recordsGet: vi.fn(),
   recordsUpdate: vi.fn(),
   recordsPatch: vi.fn(),
   recordsMappingSave: vi.fn(),
@@ -20,6 +21,7 @@ const apiMocks = vi.hoisted(() => ({
 vi.mock("../helpers/api", () => ({
   records: {
     index: apiMocks.recordsIndex,
+    get: apiMocks.recordsGet,
     update: apiMocks.recordsUpdate,
     patch: apiMocks.recordsPatch,
     mappingOptions: {
@@ -74,6 +76,7 @@ const makeRecord = (overrides: Partial<RecordItem> = {}): RecordItem => ({
 
 const resetApiMocks = () => {
   apiMocks.recordsIndex.mockReset();
+  apiMocks.recordsGet.mockReset();
   apiMocks.recordsUpdate.mockReset();
   apiMocks.recordsPatch.mockReset();
   apiMocks.recordsMappingSave.mockReset();
@@ -83,6 +86,11 @@ const resetApiMocks = () => {
   apiMocks.mappingQuestionsDelete.mockReset();
   apiMocks.mappingQuestionsUpdate.mockReset();
   apiMocks.mappingQuestionsOptionSave.mockReset();
+
+  apiMocks.recordsGet.mockImplementation(async (id: number) => ({
+    status: 200,
+    data: makeRecord({ id, status: "included" }),
+  }));
 };
 
 describe("defaultStore", () => {

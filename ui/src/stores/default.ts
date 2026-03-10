@@ -61,6 +61,7 @@ interface DefaultState {
   loading: boolean;
   mappingQuestions: MappingQuestion[];
   moveLock: boolean;
+  detailLoadingIds: number[];
   cellStates: CellStates;
 }
 
@@ -113,6 +114,7 @@ export const defaultStore = defineStore("default", {
     loading: false,
     mappingQuestions: [],
     moveLock: false,
+    detailLoadingIds: [],
     cellStates: {},
   }),
   getters: {
@@ -215,6 +217,41 @@ export const defaultStore = defineStore("default", {
 
     setCurrentItem(payload: RecordItem | null | undefined) {
       this.currentItemId = payload?.id ?? null;
+      if (payload?.id) {
+        void this.hydrateRecordDetails(payload.id);
+      }
+    },
+
+    async hydrateRecordDetails(recordId: number) {
+      if (this.detailLoadingIds.includes(recordId)) {
+        return;
+      }
+
+      const listItem = this.pageItems.find((item) => item.id === recordId);
+      if (!listItem) {
+        return;
+      }
+
+      const hasDetailedPayload =
+        listItem.referenceItems !== undefined
+        || listItem.openAlexCitationItems !== undefined
+        || listItem.openAlexTopicItems !== undefined
+        || listItem.authorDetails !== undefined;
+
+      if (hasDetailedPayload) {
+        return;
+      }
+
+      this.detailLoadingIds = [...this.detailLoadingIds, recordId];
+
+      try {
+        const detail = await records.get(recordId);
+        this.updateRecordInPage(recordId, normalizeRecordItem(detail.data));
+      } catch (error) {
+        console.error(error);
+      } finally {
+        this.detailLoadingIds = this.detailLoadingIds.filter((id) => id !== recordId);
+      }
     },
 
     async setStatusFilter(payload: StatusFilter) {
@@ -294,6 +331,8 @@ export const defaultStore = defineStore("default", {
       const currentId = currentItem?.id;
       if (currentId === undefined || !this.pageItems.some((item) => item.id === currentId)) {
         this.setCurrentItem(this.pageItems[0] ?? null);
+      } else {
+        void this.hydrateRecordDetails(currentId);
       }
     },
 

@@ -47,16 +47,16 @@ export const useEnrichmentJob = ({
     return Math.max(0, Math.min(100, Math.round((enrichmentProcessed.value / enrichmentTotal.value) * 100)));
   });
 
-  const updateStoreFromEnrichmentJob = (job: EnrichmentJob) => {
-    for (const updatedRecord of job.updatedRecords as RecordItem[]) {
+  const updateStoreFromEnrichmentDelta = (updatedRecords: RecordItem[]) => {
+    for (const updatedRecord of updatedRecords) {
       store.updateRecordInPage(updatedRecord.id, updatedRecord);
     }
   };
 
   const summarizeJob = (job: EnrichmentJob) => {
-    const enrichedCount = job.results.filter((result) => result.status === "enriched").length;
-    const failedCount = job.results.filter((result) => result.status === "failed").length;
-    const skippedCount = job.results.filter((result) => result.status === "skipped").length;
+    const enrichedCount = job.resultCounts?.enriched ?? 0;
+    const failedCount = job.resultCounts?.failed ?? 0;
+    const skippedCount = job.resultCounts?.skipped ?? 0;
     const base = `Enriched ${enrichedCount}, failed ${failedCount}, skipped ${skippedCount}`;
     if (job.status === "cancelled") {
       return `Cancelled at ${job.processed} / ${job.total}. ${base}`;
@@ -66,21 +66,35 @@ export const useEnrichmentJob = ({
 
   const waitForJobCompletion = async (jobId: string) => {
     const pollIntervalMs = 1200;
+    let resultCursor = 0;
+    let updatedCursor = 0;
 
     while (true) {
       if (isUnmounted.value) {
         return;
       }
 
-      const response = await records.enrichment.getJob(jobId);
+      const response = await records.enrichment.getJob(jobId, {
+        compact: 1,
+        resultCursor,
+        updatedCursor,
+      });
       const job = response.data;
+      const updatedRecordsDelta = (job.updatedRecords ?? []) as RecordItem[];
+      if (updatedRecordsDelta.length > 0) {
+        updateStoreFromEnrichmentDelta(updatedRecordsDelta);
+      }
+
+      resultCursor = job.resultCursor ?? resultCursor;
+      updatedCursor = job.updatedCursor ?? updatedCursor;
       enrichmentProcessed.value = job.processed;
       enrichmentTotal.value = job.total;
       enrichmentMetrics.value = job.metrics ?? createEmptyMetrics();
-      enrichmentMessage.value = `Enrichment ${job.processed} / ${job.total}`;
+      enrichmentMessage.value = job.status === "cancelling"
+        ? `Cancelling... ${job.processed} / ${job.total}`
+        : `Enrichment ${job.processed} / ${job.total}`;
 
       if (job.status === "completed" || job.status === "failed" || job.status === "cancelled") {
-        updateStoreFromEnrichmentJob(job);
         enrichmentMessage.value = summarizeJob(job);
         return;
       }

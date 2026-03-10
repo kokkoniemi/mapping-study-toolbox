@@ -1,6 +1,8 @@
 export {
+  __resetEnrichmentJobsForTests,
   cancelEnrichmentJob,
   createEnrichmentJob,
+  getEnrichmentQueueStatus,
   getEnrichmentJob,
 } from "./enrichmentJobQueue";
 

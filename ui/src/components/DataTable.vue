@@ -184,6 +184,11 @@ const recordMappingCellValue = (record: RecordItem, questionId: number) =>
 
 const tableRows = computed<GridRow[]>(() =>
   dataItems.value.map((record) => {
+    const topicNames = record.openAlexTopicItems?.map((topic) => topic.displayName ?? "").filter((item) => item.length > 0) ?? [];
+    const topicsCellValue = topicNames.length > 0
+      ? topicNames.join(", ")
+      : String(record.topicCount ?? 0);
+
     const row: GridRow = {
       __recordId: record.id,
       __selected: selectedRecordIdSet.value.has(record.id),
@@ -200,9 +205,9 @@ const tableRows = computed<GridRow[]>(() =>
       databases: stringListToCell(record.databases),
       alternateUrls: stringListToCell(record.alternateUrls),
       doi: record.doi ?? "",
-      references: String(record.referenceItems?.length ?? 0),
+      references: String(record.referenceCount ?? record.referenceItems?.length ?? 0),
       citations: String(record.openAlexCitationItems?.length ?? record.citationCount ?? 0),
-      topics: stringListToCell(record.openAlexTopicItems?.map((topic) => topic.displayName ?? "") ?? []),
+      topics: topicsCellValue,
       createdAt: formatTimestamp(record.createdAt),
       updatedAt: formatTimestamp(record.updatedAt),
     };

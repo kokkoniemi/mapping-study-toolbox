@@ -3,6 +3,10 @@ import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const dbMock = vi.hoisted(() => ({
+  Sequelize: {
+    fn: vi.fn((name: string, ...args: unknown[]) => ({ fn: name, args })),
+    col: vi.fn((name: string) => ({ col: name })),
+  },
   Record: {
     count: vi.fn(),
     findAll: vi.fn(),
@@ -31,6 +35,7 @@ const enrichmentMock = vi.hoisted(() => ({
   createEnrichmentJob: vi.fn(),
   getEnrichmentJob: vi.fn(),
   cancelEnrichmentJob: vi.fn(),
+  getEnrichmentQueueStatus: vi.fn(),
 }));
 
 vi.mock("../models", () => ({
@@ -72,6 +77,12 @@ describeWhenSocketAllowed("API integration", () => {
     enrichmentMock.createEnrichmentJob.mockReset();
     enrichmentMock.getEnrichmentJob.mockReset();
     enrichmentMock.cancelEnrichmentJob.mockReset();
+    enrichmentMock.getEnrichmentQueueStatus.mockReset();
+    enrichmentMock.getEnrichmentQueueStatus.mockReturnValue({
+      queuedJobs: 0,
+      runningJobs: 0,
+      maxQueuedJobs: 20,
+    });
   });
 
   it("GET /api/health returns ok", async () => {
