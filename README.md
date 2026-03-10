@@ -83,6 +83,7 @@ npm run ui:dev
 
 ### Quality checks (recommended before commit)
 ```shell
+npm run lint
 npm run typecheck
 npm test
 npm run ui:typecheck
@@ -95,11 +96,6 @@ npm run ui:build
 This is safe and does not affect the existing data in the database.
 ```
 npm run migrate
-```
-
-### Run search
-```
-node scrapers/[scraper-name].js
 ```
 
 ## Api and GUI
@@ -189,3 +185,13 @@ This outputs static files to `ui/dist`.
 npm run ui:typecheck
 npm run ui:test
 ```
+
+## CI
+- GitHub Actions workflow: `.github/workflows/ci.yml`
+- Runs backend and frontend checks on pushes and pull requests:
+  - `npm run lint`
+  - `npm run typecheck`
+  - `npm test`
+  - `npm run ui:typecheck`
+  - `npm run ui:test`
+  - `npm run ui:build`

@@ -4,8 +4,7 @@
 This repository contains a mapping-study backend API and a separate frontend app in the same monorepo.
 
 ## Repositories in scope
-- `mapping-study-toolbox` (this repo): Express API, Sequelize models/migrations, and UI source in `ui/`.
-- `scrapers/`: git submodule (`mapping-study-scrapers`) used for importing search results.
+- `mapping-study-toolbox` (this repo): Express API, Sequelize models/migrations, shared contracts, and UI source in `ui/`.
 
 ## Local setup checklist
 1. Preferred dev mode: `docker compose up` (backend + ui hot reload).
@@ -34,12 +33,12 @@ This repository contains a mapping-study backend API and a separate frontend app
 - Backend and frontend are intentionally separate services/ports.
 - `npm run ui:build` outputs static files to `ui/dist` for external/static hosting.
 
-## Scraper and data operations
-- Initialize scrapers submodule when needed: `git submodule update --init --recursive`.
-- Scrapers populate/augment the sqlite DB used by this backend.
-- Run migrations before scraper/import runs on a new DB.
+## Data operations
+- Use `config/config.json` (from `config/config.example.json`) for runtime + migrations.
+- Run migrations before first startup against a new sqlite DB.
+- Keep schema changes additive via new migration files.
 
 ## Project-local skills
 - `skills/mapping-backend-api`: backend API + Sequelize contract maintenance.
 - `skills/mapping-ui-sync`: GUI build and sync workflow inside this monorepo.
-- `skills/mapping-data-operations`: sqlite setup, migrations, and scraper/import operations.
+- `skills/mapping-data-operations`: sqlite setup and migration workflow.

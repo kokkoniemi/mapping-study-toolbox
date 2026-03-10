@@ -15,6 +15,7 @@
     "ui:build": "npm --prefix ui run build",
     "ui:preview": "npm --prefix ui run preview",
     "ui:lint": "npm --prefix ui run lint",
+    "lint": "npm run ui:lint",
     "ui:typecheck": "npm --prefix ui run typecheck",
     "ui:test": "npm --prefix ui run test:run",
     "typecheck": "tsc --noEmit",

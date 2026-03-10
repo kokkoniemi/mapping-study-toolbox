@@ -229,14 +229,6 @@ const parseMappingQuestionId = (prop: unknown) => {
   return questionId;
 };
 
-const escapeHtml = (value: string) =>
-  value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-
 const textIndicatorThreshold = 90;
 
 function selectionRenderer(
@@ -250,7 +242,20 @@ function selectionRenderer(
   td.classList.remove("data-text-cell", "mapping-cell");
   td.classList.add("selection-cell");
   const checked = Boolean(value);
-  td.innerHTML = `<div class="selection-cell__inner"><input class="selection-cell__checkbox" type="checkbox" tabindex="-1" aria-label="Select row" ${checked ? "checked" : ""} /></div>`;
+  td.textContent = "";
+
+  const wrapper = document.createElement("div");
+  wrapper.className = "selection-cell__inner";
+
+  const checkbox = document.createElement("input");
+  checkbox.className = "selection-cell__checkbox";
+  checkbox.type = "checkbox";
+  checkbox.tabIndex = -1;
+  checkbox.setAttribute("aria-label", "Select row");
+  checkbox.checked = checked;
+
+  wrapper.appendChild(checkbox);
+  td.appendChild(wrapper);
   return td;
 }
 
@@ -310,6 +315,7 @@ function mappingChipRenderer(
 ) {
   td.classList.remove("data-text-cell");
   td.classList.add("mapping-cell");
+  td.textContent = "";
   const shouldTruncate = dataCellsTruncated.value;
 
   const questionId = parseMappingQuestionId(prop);
@@ -320,17 +326,26 @@ function mappingChipRenderer(
 
   const titles = parseListCellValue(value === null || value === undefined ? "" : String(value));
   if (titles.length === 0) {
-    td.innerHTML = '<span class="mapping-cell-placeholder">Double-click to edit</span>';
+    const placeholder = document.createElement("span");
+    placeholder.className = "mapping-cell-placeholder";
+    placeholder.textContent = "Double-click to edit";
+    td.appendChild(placeholder);
     return td;
   }
 
-  const chipsClass = shouldTruncate ? "mapping-cell-chips mapping-cell-chips--truncated" : "mapping-cell-chips";
-  td.innerHTML = `<div class="${chipsClass}">${titles
-    .map((title) => {
-      const color = colorByTitle.get(title.toLocaleLowerCase()) ?? DEFAULT_MAPPING_OPTION_COLOR;
-      return `<span class="mapping-cell-chip" style="background-color:${color}">${escapeHtml(title)}</span>`;
-    })
-    .join("")}</div>`;
+  const chipsContainer = document.createElement("div");
+  chipsContainer.className = shouldTruncate ? "mapping-cell-chips mapping-cell-chips--truncated" : "mapping-cell-chips";
+
+  for (const title of titles) {
+    const color = colorByTitle.get(title.toLocaleLowerCase()) ?? DEFAULT_MAPPING_OPTION_COLOR;
+    const chip = document.createElement("span");
+    chip.className = "mapping-cell-chip";
+    chip.style.backgroundColor = color;
+    chip.textContent = title;
+    chipsContainer.appendChild(chip);
+  }
+
+  td.appendChild(chipsContainer);
   return td;
 }
 

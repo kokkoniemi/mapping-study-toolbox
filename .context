@@ -1,49 +1,53 @@
 # Mapping Study Toolbox Context
 
 ## High-level architecture
-- Runtime stack: Node.js + Express + Sequelize + sqlite3.
-- API entrypoint: `server.js` (API-only service mounted under `/api`).
-- UI source code lives in `ui/` (Vue 3 + Vite).
+- Runtime stack: Node.js + Express + Sequelize + sqlite3 + TypeScript.
+- API entrypoint: `server.ts` (API-only service mounted under `/api`).
+- API router: `routes/api.ts` with handlers in:
+  - `routes/records.ts`
+  - `routes/mappingQuestions.ts`
+- UI source code lives in `ui/` (Vue 3 + Vite + Pinia + Handsontable).
+- Shared API contract types live in `shared/contracts.ts`.
 - Default dev runtime is docker-compose (`docker-compose.yml`) with backend + frontend watch mode.
-- API routers: `routes/api.js` with handlers in:
-  - `routes/records.js`
-  - `routes/mappingQuestions.js`
-- Data layer: Sequelize models in `models/`, schema history in `migrations/`.
 
-## UI integration
-- Backend contract used by UI is defined in `ui/src/helpers/api.js`.
-- API base in UI is hardcoded to `http://localhost:3000/api/`.
-- UI dev server runs on `http://localhost:8080`.
-- UI production build output is `ui/dist`.
+## Runtime topology
+- Backend API: `http://localhost:3000/api`
+- Frontend dev server: `http://localhost:8080`
+- Backend does not serve UI assets in development.
+- UI production build output: `ui/dist`.
 
 ## Data model snapshot
-- `Record`: title/url/author/abstract/status/comment, JSON fields (`databases`, `alternateUrls`), `editedBy`, soft delete.
-- `Publication`: venue metadata (`name`, `alternateNames`, `jufoLevel`, `database`), soft delete.
-- `MappingQuestion`: mapping metadata (`title`, `type`, `position`), soft delete.
-- `MappingOption`: option value (`title`, `position`, `color`, `mappingQuestionId`), soft delete.
-- `RecordMappingOption`: join table (`recordId`, `mappingQuestionId`, `mappingOptionId`), no paranoid delete.
-- `Import`: scraper run metadata (`database`, `total`, `dublicates`, `namesakes`, `query`), soft delete.
+- `Record`: bibliographic and classification fields (`title`, `author`, `url`, `abstract`, `status`, `comment`, `databases`, `alternateUrls`, `editedBy`) plus enrichment fields (DOI, references, citations, topics, affiliations).
+- `Forum`: venue metadata (`name`, `publisher`, `issn`, `jufoLevel`, aliases).
+- `MappingQuestion`: mapping metadata (`title`, `type`, `position`).
+- `MappingOption`: option value (`title`, `position`, `color`, `mappingQuestionId`).
+- `RecordMappingOption`: join table (`recordId`, `mappingQuestionId`, `mappingOptionId`).
+- `Import`: import metadata table retained for compatibility.
 
-## API contracts used by UI
-- `GET /api/records` supports `offset`, `limit`, `status`, `search`, and returns `{ count, records }`.
-- `PUT /api/records/:id` updates status/comment/editedBy and optionally mapping options.
-- `POST /api/records/:recordId/mapping-options` links an option to a record.
-- `DELETE /api/records/:recordId/mapping-options/:mappingOptionId` unlinks option.
-- `GET /api/mapping-questions` returns `{ count, questions }` ordered by question and option position.
-- CRUD routes exist for mapping questions and mapping options.
-
-## Important invariants
+## Contract-critical behavior
+- `GET /api/records` -> `{ count, records }`.
+- `GET /api/mapping-questions` -> `{ count, questions }`.
+- Record payload include aliases expected by UI: `Forum`, `MappingOptions`.
 - Record status domain: `null | uncertain | excluded | included`.
-- Include aliases expected by UI in record payloads: `Publication` and `MappingOptions`.
-- Question and option ordering is position-driven.
-- Existing migrations represent production history; add new migrations instead of modifying old ones.
+- Mapping question/option ordering is position-driven.
+- Data tab partial updates use `PATCH /api/records/:id`.
+- Enrichment jobs:
+  - `POST /api/records/enrichment-jobs`
+  - `GET /api/records/enrichment-jobs/:jobId`
+  - `POST /api/records/enrichment-jobs/:jobId/cancel`
 
 ## Operational notes
-- `config/config.json` is used by sequelize-cli migrations and runtime model loading.
-- `db-config.json` remains a legacy fallback path for runtime compatibility.
-- `config/config.example.json` is the default template for new environments.
-- `scrapers/` is a git submodule and may be uninitialized in fresh clones.
+- Configuration template: `config/config.example.json`.
+- Local runtime config: `config/config.json`.
+- Migrations are authoritative history; never rewrite old migration files.
+- Add new migration files for schema changes.
 
-## Current known constraints
-- No automated test suite is defined in this repo.
-- Backend does not serve the frontend app.
+## Quality and automation
+- Backend checks:
+  - `npm run typecheck`
+  - `npm test`
+- Frontend checks:
+  - `npm run ui:typecheck`
+  - `npm run ui:test`
+  - `npm run ui:lint`
+  - `npm run ui:build`
