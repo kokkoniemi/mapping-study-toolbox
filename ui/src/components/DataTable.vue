@@ -305,6 +305,12 @@ type AnchorRect = {
   height: number;
 };
 type DataToolsTab = "enrichment" | "forums";
+type ConfidenceChip = {
+  label: string;
+  score: number;
+  level: "high" | "medium" | "low";
+  tooltip: string;
+};
 
 const statusOptions = STATUS_FILTER_OPTIONS;
 const editableSources = new Set<string>([
@@ -413,17 +419,17 @@ const formatTimestamp = (value: string) => {
   return formatDate(date, "dd.MM.yyyy HH:mm:ss");
 };
 const stringListToCell = (items: string[] | null | undefined) => (Array.isArray(items) ? items.join(", ") : "");
-const formatConfidenceBadge = (score: number) => {
+const confidenceLevel = (score: number): ConfidenceChip["level"] => {
   if (score >= 90) {
-    return `H${score}`;
+    return "high";
   }
   if (score >= 70) {
-    return `M${score}`;
+    return "medium";
   }
-  return `L${score}`;
+  return "low";
 };
 
-const recordEnrichmentDisplay = (record: RecordItem) => {
+const recordEnrichmentChips = (record: RecordItem) => {
   const recordMap = record.enrichmentProvenance ?? {};
   const forumMap = record.Forum?.enrichmentProvenance ?? {};
   const fields: Array<{ key: string; label: string }> = [
@@ -436,8 +442,7 @@ const recordEnrichmentDisplay = (record: RecordItem) => {
     { key: "openAlexTopicItems", label: "Topics" },
   ];
 
-  const summary: string[] = [];
-  const details: string[] = [];
+  const chips: ConfidenceChip[] = [];
 
   for (const field of fields) {
     const provenance = recordMap[field.key] ?? forumMap[field.key];
@@ -445,16 +450,15 @@ const recordEnrichmentDisplay = (record: RecordItem) => {
       continue;
     }
 
-    summary.push(`${field.label} ${formatConfidenceBadge(provenance.confidenceScore)}`);
-    details.push(
-      `${field.label}: ${provenance.provider} ${provenance.confidenceLevel} ${provenance.confidenceScore} - ${provenance.reason} (${formatTimestamp(provenance.enrichedAt)})`,
-    );
+    chips.push({
+      label: field.label,
+      score: provenance.confidenceScore,
+      level: confidenceLevel(provenance.confidenceScore),
+      tooltip: `${field.label}: ${provenance.provider} ${provenance.confidenceLevel} ${provenance.confidenceScore} - ${provenance.reason} (${formatTimestamp(provenance.enrichedAt)})`,
+    });
   }
 
-  return {
-    summary: summary.join(" | "),
-    details: details.join("\n"),
-  };
+  return chips;
 };
 
 const sumRecordCounts = (forumsList: ForumDuplicateItem[]) =>
@@ -471,7 +475,6 @@ const tableRows = computed<GridRow[]>(() =>
     const topicsCellValue = topicNames.length > 0
       ? topicNames.join(", ")
       : String(record.topicCount ?? 0);
-    const enrichment = recordEnrichmentDisplay(record);
 
     const row: GridRow = {
       __recordId: record.id,
@@ -482,8 +485,7 @@ const tableRows = computed<GridRow[]>(() =>
       abstract: record.abstract ?? "",
       status: record.status ?? "null",
       comment: record.comment ?? "",
-      enrichment: enrichment.summary || "-",
-      enrichmentDetails: enrichment.details,
+      enrichment: "",
       author: record.author,
       forum: record.Forum
         ? `${record.Forum.name ?? "-"} | issn: ${record.Forum.issn ?? "-"} | publisher: ${record.Forum.publisher ?? "-"} | jufo: ${record.Forum.jufoLevel ?? "-"}`
@@ -598,19 +600,42 @@ function truncatedTextRenderer(
 }
 
 function enrichmentRenderer(
-  _instance: unknown,
+  instance: unknown,
   td: HTMLTableCellElement,
   row: number,
-  _col: number,
-  _prop: string | number,
-  value: unknown,
 ) {
+  void instance;
+  td.classList.remove("data-text-cell", "mapping-cell");
+  td.classList.add("confidence-cell");
+  td.textContent = "";
+  const shouldTruncate = dataCellsTruncated.value;
+
   const record = dataItems.value[row];
-  const display = record ? recordEnrichmentDisplay(record) : { summary: "", details: "" };
-  const summary = String(value ?? display.summary ?? "").trim();
-  const details = display.details.trim();
-  td.title = details.length > 0 ? details : summary;
-  return truncatedTextRenderer(_instance, td, row, _col, _prop, summary);
+  const chips = record ? recordEnrichmentChips(record) : [];
+  if (chips.length === 0) {
+    const placeholder = document.createElement("span");
+    placeholder.className = "mapping-cell-placeholder";
+    placeholder.textContent = "-";
+    td.appendChild(placeholder);
+    return td;
+  }
+
+  const chipsContainer = document.createElement("div");
+  chipsContainer.className = shouldTruncate
+    ? "confidence-cell-chips confidence-cell-chips--truncated"
+    : "confidence-cell-chips";
+
+  for (const chip of chips) {
+    const element = document.createElement("span");
+    element.className = `confidence-cell-chip confidence-cell-chip--${chip.level}`;
+    element.textContent = `${chip.label} ${chip.score}`;
+    element.title = chip.tooltip;
+    chipsContainer.appendChild(element);
+  }
+
+  td.title = chips.map((chip) => chip.tooltip).join("\n");
+  td.appendChild(chipsContainer);
+  return td;
 }
 
 function mappingChipRenderer(
@@ -675,7 +700,10 @@ const priorityColumns: Array<{ header: string; settings: ColumnSettings }> = [
     },
   },
   { header: "comment", settings: { data: "comment", type: "text", renderer: truncatedTextRenderer, width: 280 } },
-  { header: "enrichment", settings: { data: "enrichment", readOnly: true, renderer: enrichmentRenderer, width: 260 } },
+  {
+    header: "enrichment confidence",
+    settings: { data: "enrichment", readOnly: true, renderer: enrichmentRenderer, width: 300 },
+  },
 ];
 
 const trailingColumns: Array<{ header: string; settings: ColumnSettings }> = [

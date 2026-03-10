@@ -170,6 +170,11 @@ defineExpose({
   padding-right: 2px !important;
 }
 
+:deep(td.confidence-cell) {
+  padding-left: 2px !important;
+  padding-right: 2px !important;
+}
+
 :deep(td.selection-cell) {
   padding: 0 !important;
   cursor: pointer;
@@ -213,5 +218,49 @@ defineExpose({
 :deep(.mapping-cell-placeholder) {
   font-size: 11px;
   color: #a0a0a0;
+}
+
+:deep(.confidence-cell-chips) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: flex-start;
+  margin: 0;
+}
+
+:deep(.confidence-cell-chips--truncated) {
+  max-height: calc(3 * 1.35em);
+  overflow: hidden;
+}
+
+:deep(.confidence-cell-chip) {
+  display: inline-flex;
+  align-items: center;
+  font-size: 10px;
+  font-weight: 600;
+  border-radius: 3px;
+  padding: 3px 5px;
+  border: 1px solid #d8d8d8;
+  background: #fafafa;
+  color: #4e4e4e;
+  line-height: 1.2;
+}
+
+:deep(.confidence-cell-chip--high) {
+  border-color: #9fc7a0;
+  background: #edf8ee;
+  color: #2f6a32;
+}
+
+:deep(.confidence-cell-chip--medium) {
+  border-color: #d4cd98;
+  background: #fcf8e5;
+  color: #6f6518;
+}
+
+:deep(.confidence-cell-chip--low) {
+  border-color: #d7b0b0;
+  background: #fff1f1;
+  color: #7a3131;
 }
 </style>
