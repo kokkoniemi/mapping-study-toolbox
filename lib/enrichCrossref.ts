@@ -1,14 +1,17 @@
 import db from "../models";
 import type { CrossrefAuthorDetail, CrossrefReferenceItem } from "../models/types";
-import { extractDoiFromRecordUrls, extractDoiFromText, type CrossrefWork } from "./crossref";
-import { normalizeDoiValue, toDateOrNull, toPlainObject } from "./enrichmentCommon";
+import {
+  extractDoiFromRecordUrls,
+  extractDoiFromText,
+  extractWorkYear,
+  type CrossrefWork,
+} from "./crossref";
+import { normalizeDoiValue, toPlainObject } from "./enrichmentCommon";
+import { buildFieldProvenance, mergeProvenance } from "./enrichmentProvenance";
 import { enrichForumWithJufo, toForumSnapshot, updateForumFromWork } from "./enrichJufo";
 import type { EnrichRecordResult, EnrichmentJobOptions, JobContext } from "./enrichmentTypes";
+import type { EnrichmentMode, EnrichmentProvenanceMap } from "../shared/contracts";
 
-const CROSSREF_REFRESH_MS = Number.parseInt(
-  process.env.CROSSREF_REFRESH_MS ?? String(1000 * 60 * 60 * 24 * 30),
-  10,
-);
 const crossrefReferenceTitleLookupLimitRaw = Number.parseInt(
   process.env.CROSSREF_REFERENCE_TITLE_LOOKUP_MAX ?? "12",
   10,
@@ -31,19 +34,8 @@ const sanitizeDoi = (value: string | null | undefined) => {
   return normalizeDoiValue(value);
 };
 
-const shouldRefreshCrossref = (enrichedAt: unknown, forceRefresh: boolean) => {
-  if (forceRefresh) {
-    return true;
-  }
-
-  const enrichedDate = toDateOrNull(enrichedAt);
-  if (!enrichedDate) {
-    return true;
-  }
-
-  const age = Date.now() - enrichedDate.getTime();
-  return age > CROSSREF_REFRESH_MS;
-};
+const getEffectiveMode = (options: Required<EnrichmentJobOptions>): EnrichmentMode =>
+  options.forceRefresh ? "full" : options.mode;
 
 const normalizeAuthorDetails = (authors: CrossrefWork["author"]): CrossrefAuthorDetail[] => {
   if (!Array.isArray(authors)) {
@@ -172,25 +164,6 @@ const normalizeReferenceItems = (references: CrossrefWork["reference"]): Crossre
 const pickFirstNonEmpty = (values: Array<string | null | undefined>) =>
   values.find((value) => typeof value === "string" && value.trim().length > 0)?.trim() ?? null;
 
-const extractWorkYear = (work: CrossrefWork): string | null => {
-  const workWithDates = work as CrossrefWork & {
-    issued?: { "date-parts"?: Array<Array<number>> };
-    "published-print"?: { "date-parts"?: Array<Array<number>> };
-    "published-online"?: { "date-parts"?: Array<Array<number>> };
-    created?: { "date-parts"?: Array<Array<number>> };
-  };
-
-  const candidates = [
-    workWithDates.issued?.["date-parts"]?.[0]?.[0],
-    workWithDates["published-print"]?.["date-parts"]?.[0]?.[0],
-    workWithDates["published-online"]?.["date-parts"]?.[0]?.[0],
-    workWithDates.created?.["date-parts"]?.[0]?.[0],
-  ];
-
-  const year = candidates.find((value) => Number.isInteger(value) && Number(value) > 0);
-  return year ? String(year) : null;
-};
-
 const lookupReferenceMetadataByDoi = async (
   doi: string,
   context: JobContext,
@@ -211,13 +184,14 @@ const lookupReferenceMetadataByDoi = async (
     return null;
   }
 
+  const workYear = extractWorkYear(work);
   const metadata = {
     articleTitle: pickFirstNonEmpty(work.title ?? []),
     journalTitle: pickFirstNonEmpty([
       ...(work["container-title"] ?? []),
       ...(work["short-container-title"] ?? []),
     ]),
-    year: extractWorkYear(work),
+    year: workYear ? String(workYear) : null,
   };
 
   context.referenceMetadataByDoi.set(normalizedDoi, metadata);
@@ -265,6 +239,48 @@ const enrichReferenceTitlesByDoi = async (
   return enriched;
 };
 
+const getMissingCrossrefTargets = (record: {
+  doi?: string | null;
+  url?: string | null;
+  year?: number | null;
+  forumId?: number | null;
+  authorDetails?: unknown[] | null;
+  referenceItems?: unknown[] | null;
+  Forum?: {
+    name?: string | null;
+    publisher?: string | null;
+    issn?: string | null;
+  } | null;
+}): string[] => {
+  const missing: string[] = [];
+
+  if (!sanitizeDoi(record.doi)) {
+    missing.push("doi");
+  }
+  if (!record.url || record.url.trim().length === 0) {
+    missing.push("url");
+  }
+  if (!record.year) {
+    missing.push("year");
+  }
+  if (!Array.isArray(record.authorDetails) || record.authorDetails.length === 0) {
+    missing.push("authorDetails");
+  }
+  if (!Array.isArray(record.referenceItems) || record.referenceItems.length === 0) {
+    missing.push("referenceItems");
+  }
+  if (!record.forumId) {
+    missing.push("forumId");
+  }
+
+  const forum = record.Forum;
+  if (!forum?.name || !forum.publisher || !forum.issn) {
+    missing.push("forumDetails");
+  }
+
+  return missing;
+};
+
 export const enrichRecordWithCrossref = async (
   recordId: number,
   context: JobContext,
@@ -282,14 +298,16 @@ export const enrichRecordWithCrossref = async (
     };
   }
 
-  if (!shouldRefreshCrossref(record.crossrefEnrichedAt, options.forceRefresh)) {
+  const mode = getEffectiveMode(options);
+  const missingTargets = getMissingCrossrefTargets(record as typeof record & { Forum?: Record<string, unknown> | null });
+  if (mode === "missing" && missingTargets.length === 0) {
     const refreshed = await db.Record.findByPk(record.id, { include: ["Forum", "MappingOptions"] });
     return {
       result: {
         recordId,
         status: "skipped",
         doi: sanitizeDoi(record.doi),
-        message: "Crossref enrichment is fresh",
+        message: "Crossref missing-only mode: no missing targets",
       },
       ...(refreshed ? { updatedRecord: toPlainObject(refreshed) } : {}),
     };
@@ -300,14 +318,25 @@ export const enrichRecordWithCrossref = async (
   const doiCandidate = doiFromUrls ?? doiFromRecord;
   let work: CrossrefWork | null = null;
   let doiUsed: string | null = doiCandidate;
+  let resolvedBy: "doi" | "search" | null = null;
 
   if (doiCandidate) {
     work = await context.crossrefClient.fetchWorkByDoi(doiCandidate);
+    if (work) {
+      resolvedBy = "doi";
+    }
   }
 
   if (!work && record.title?.trim()) {
-    work = await context.crossrefClient.searchWorkByTitleAndAuthor(record.title, record.author);
+    work = await context.crossrefClient.searchWorkByTitleAndAuthor(
+      record.title,
+      record.author,
+      typeof record.year === "number" ? record.year : null,
+    );
     doiUsed = sanitizeDoi(work?.DOI) ?? doiUsed;
+    if (work) {
+      resolvedBy = "search";
+    }
   }
 
   if (!work) {
@@ -318,7 +347,7 @@ export const enrichRecordWithCrossref = async (
     const fallbackForum = toForumSnapshot((record as unknown as { Forum?: unknown }).Forum);
     let jufoMessage: string | null = null;
     try {
-      jufoMessage = (await enrichForumWithJufo(fallbackForum, context)).message;
+      jufoMessage = (await enrichForumWithJufo(fallbackForum, context, options)).message;
     } catch (error) {
       jufoMessage = error instanceof Error ? error.message : "JUFO lookup failed";
       if (fallbackForum) {
@@ -348,32 +377,126 @@ export const enrichRecordWithCrossref = async (
   const displayAuthor = formatAuthorDisplay(authorDetails);
   const normalizedReferenceItems = normalizeReferenceItems(work.reference);
   const referenceItems = await enrichReferenceTitlesByDoi(normalizedReferenceItems, context);
+  const workYear = extractWorkYear(work);
+  const source = normalizedDoi ?? work.URL?.trim() ?? null;
+  const matchScore = resolvedBy === "doi"
+    ? 98
+    : workYear && record.year && Math.abs(workYear - record.year) <= 1
+      ? 90
+      : 84;
+  const reason =
+    resolvedBy === "doi"
+      ? "Crossref metadata resolved by DOI"
+      : "Crossref metadata resolved by title/author search";
   const forum = await updateForumFromWork(
     record as typeof record & { Forum?: Record<string, unknown> | null },
     work,
+    {
+      mode,
+      confidenceScore: matchScore,
+      reason,
+      source,
+    },
   );
+  const provenanceUpdates: EnrichmentProvenanceMap = {};
 
   const updatePayload: Record<string, unknown> = {
-    doi: normalizedDoi,
-    authorDetails: authorDetails.length > 0 ? authorDetails : null,
-    referenceItems: referenceItems.length > 0 ? referenceItems : null,
     crossrefEnrichedAt: new Date(),
     crossrefLastError: null,
   };
 
-  if (displayAuthor && displayAuthor.trim().length > 0) {
-    updatePayload.author = displayAuthor;
+  if ((mode === "full" || missingTargets.includes("doi")) && normalizedDoi) {
+    updatePayload.doi = normalizedDoi;
+    provenanceUpdates.doi = buildFieldProvenance({
+      provider: "crossref",
+      confidenceScore: matchScore,
+      reason,
+      source,
+      mode,
+    });
   }
 
-  if (forum && record.forumId !== forum.id) {
+  if (mode === "full" || missingTargets.includes("url")) {
+    const resolvedUrl = work.URL?.trim() || (normalizedDoi ? `https://doi.org/${normalizedDoi}` : null);
+    if (resolvedUrl) {
+      updatePayload.url = resolvedUrl;
+      provenanceUpdates.url = buildFieldProvenance({
+        provider: "crossref",
+        confidenceScore: Math.max(72, matchScore - 5),
+        reason: work.URL?.trim() ? "Crossref canonical URL" : "URL inferred from DOI",
+        source: resolvedUrl,
+        mode,
+      });
+    }
+  }
+
+  if ((mode === "full" || missingTargets.includes("year")) && workYear) {
+    updatePayload.year = workYear;
+    provenanceUpdates.year = buildFieldProvenance({
+      provider: "crossref",
+      confidenceScore: matchScore,
+      reason,
+      source,
+      mode,
+    });
+  }
+
+  if (mode === "full" || missingTargets.includes("authorDetails")) {
+    updatePayload.authorDetails = authorDetails.length > 0 ? authorDetails : null;
+    provenanceUpdates.authorDetails = buildFieldProvenance({
+      provider: "crossref",
+      confidenceScore: matchScore,
+      reason,
+      source,
+      mode,
+    });
+
+    if (displayAuthor && displayAuthor.trim().length > 0) {
+      updatePayload.author = displayAuthor;
+      provenanceUpdates.author = buildFieldProvenance({
+        provider: "crossref",
+        confidenceScore: Math.max(70, matchScore - 8),
+        reason: "Author display value normalized from Crossref author metadata",
+        source,
+        mode,
+      });
+    }
+  }
+
+  if (mode === "full" || missingTargets.includes("referenceItems")) {
+    updatePayload.referenceItems = referenceItems.length > 0 ? referenceItems : null;
+    provenanceUpdates.referenceItems = buildFieldProvenance({
+      provider: "crossref",
+      confidenceScore: Math.max(75, matchScore - 4),
+      reason: "Crossref references normalized from work metadata",
+      source,
+      mode,
+    });
+  }
+
+  if (forum && (mode === "full" || missingTargets.includes("forumId")) && record.forumId !== forum.id) {
     updatePayload.forumId = forum.id;
+    provenanceUpdates.forumId = buildFieldProvenance({
+      provider: "crossref",
+      confidenceScore: Math.max(74, matchScore - 6),
+      reason: "Forum resolved from Crossref container metadata",
+      source: forum.name ?? source,
+      mode,
+    });
+  }
+
+  if (Object.keys(provenanceUpdates).length > 0) {
+    updatePayload.enrichmentProvenance = mergeProvenance(
+      (record.enrichmentProvenance as EnrichmentProvenanceMap | null | undefined) ?? null,
+      provenanceUpdates,
+    );
   }
 
   await record.update(updatePayload);
 
   let jufoResult: { message: string | null } = { message: null };
   try {
-    jufoResult = await enrichForumWithJufo(forum, context);
+    jufoResult = await enrichForumWithJufo(forum, context, options);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "JUFO lookup failed";
     if (forum) {

@@ -12,8 +12,22 @@ export const STATUS_FILTER_OPTIONS: Array<{ label: string; value: StatusFilter }
 ];
 
 export type EnrichmentProvider = "crossref" | "openalex" | "all";
+export type EnrichmentMode = "missing" | "full";
 export type EnrichmentJobStatus = "queued" | "running" | "cancelling" | "completed" | "failed" | "cancelled";
 export type EnrichmentResultStatus = "enriched" | "skipped" | "failed";
+export type EnrichmentConfidenceLevel = "low" | "medium" | "high";
+
+export type EnrichmentFieldProvenance = {
+  provider: "crossref" | "openalex" | "jufo";
+  confidenceLevel: EnrichmentConfidenceLevel;
+  confidenceScore: number;
+  reason: string;
+  source: string | null;
+  enrichedAt: string;
+  mode: EnrichmentMode;
+};
+
+export type EnrichmentProvenanceMap = Partial<Record<string, EnrichmentFieldProvenance>>;
 
 export type EnrichmentJobMetrics = {
   crossref: {
@@ -80,6 +94,7 @@ export type PatchRecordPayload = Partial<{
   title: string;
   author: string;
   url: string;
+  year: number | null;
   status: RecordStatus;
   comment: string | null;
   abstract: string | null;
@@ -91,8 +106,47 @@ export type PatchRecordPayload = Partial<{
 export type CreateEnrichmentJobPayload = {
   recordIds: number[];
   provider?: EnrichmentProvider;
+  mode?: EnrichmentMode;
   maxCitations?: number | null;
   forceRefresh?: boolean;
 };
 
 export type EnrichmentJobOptions = Omit<CreateEnrichmentJobPayload, "recordIds">;
+
+export type ForumDuplicateItem = {
+  id: number;
+  name: string | null;
+  alternateNames: string[] | null;
+  issn: string | null;
+  publisher: string | null;
+  jufoLevel: number | null;
+  recordCount: number;
+};
+
+export type ForumDuplicateGroup = {
+  key: string;
+  normalizedName: string | null;
+  issn: string | null;
+  count: number;
+  forums: ForumDuplicateItem[];
+};
+
+export type ForumDuplicatesIndexResponse = {
+  count: number;
+  groups: ForumDuplicateGroup[];
+};
+
+export type ForumMergePayload = {
+  targetForumId: number;
+  sourceForumIds: number[];
+  dryRun?: boolean;
+};
+
+export type ForumMergeResponse = {
+  dryRun: boolean;
+  targetForumId: number;
+  sourceForumIds: number[];
+  movedRecordCount: number;
+  updatedRecordIds: number[];
+  mergedAliases: string[];
+};

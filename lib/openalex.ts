@@ -181,6 +181,7 @@ const scoreAuthorSimilarity = (queryAuthor: string | null | undefined, work: Ope
 export const pickBestOpenAlexSearchWork = (
   title: string,
   author: string | null | undefined,
+  queryYear: number | null | undefined,
   items: OpenAlexWorkRaw[],
 ): OpenAlexWorkRaw | null => {
   if (items.length === 0) {
@@ -192,7 +193,24 @@ export const pickBestOpenAlexSearchWork = (
       const candidateTitle = item.title ?? "";
       const titleScore = scoreTitleSimilarity(title, candidateTitle);
       const authorScore = scoreAuthorSimilarity(author, item);
-      return { item, titleScore, authorScore, score: titleScore * 100 + authorScore * 8 };
+      const workYear = typeof item.publication_year === "number" ? item.publication_year : null;
+      const yearScore =
+        queryYear === null || queryYear === undefined
+          ? 0.5
+          : workYear === null
+            ? 0.3
+            : Math.abs(workYear - queryYear) <= 1
+              ? 1
+              : 0;
+
+      return {
+        item,
+        titleScore,
+        authorScore,
+        yearScore,
+        workYear,
+        score: titleScore * 100 + authorScore * 10 + yearScore * 12,
+      };
     })
     .sort((left, right) => right.score - left.score);
 
@@ -203,6 +221,12 @@ export const pickBestOpenAlexSearchWork = (
 
   if (best.titleScore < OPENALEX_SEARCH_MIN_TITLE_SCORE) {
     return null;
+  }
+
+  if (queryYear !== null && queryYear !== undefined && best.workYear !== null) {
+    if (Math.abs(best.workYear - queryYear) > 1) {
+      return null;
+    }
   }
 
   const second = scored[1];
@@ -406,7 +430,11 @@ export class OpenAlexClient {
     return workToResolved(work);
   }
 
-  async searchWorkByTitleAndAuthor(title: string, author?: string | null): Promise<OpenAlexResolvedWork | null> {
+  async searchWorkByTitleAndAuthor(
+    title: string,
+    author?: string | null,
+    year?: number | null,
+  ): Promise<OpenAlexResolvedWork | null> {
     const trimmedTitle = title.trim();
     if (!trimmedTitle) {
       return null;
@@ -418,7 +446,7 @@ export class OpenAlexClient {
       select: this.defaultSelect,
     });
 
-    const work = pickBestOpenAlexSearchWork(trimmedTitle, author, payload?.results ?? []);
+    const work = pickBestOpenAlexSearchWork(trimmedTitle, author, year, payload?.results ?? []);
     if (!work) {
       return null;
     }

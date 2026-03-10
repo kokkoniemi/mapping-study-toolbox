@@ -58,6 +58,7 @@ const createEmptyResultCounts = (): JobResultCounts => ({
 
 const normalizeJobOptions = (options: EnrichmentJobOptions = {}): Required<EnrichmentJobOptions> => {
   const provider = options.provider ?? "all";
+  const mode = options.mode ?? "missing";
   const maxCitationsRaw = options.maxCitations;
   const parsedMaxCitations = Number(maxCitationsRaw);
   const maxCitations =
@@ -69,6 +70,7 @@ const normalizeJobOptions = (options: EnrichmentJobOptions = {}): Required<Enric
 
   return {
     provider: provider === "openalex" || provider === "all" ? provider : "crossref",
+    mode: mode === "full" ? "full" : "missing",
     maxCitations,
     forceRefresh: Boolean(options.forceRefresh),
   };

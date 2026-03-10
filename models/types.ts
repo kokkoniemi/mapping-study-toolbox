@@ -1,6 +1,6 @@
 import type { Model, ModelStatic, Sequelize } from "sequelize";
 import type * as SequelizeModule from "sequelize";
-import type { RecordStatus } from "../shared/contracts";
+import type { EnrichmentProvenanceMap, RecordStatus } from "../shared/contracts";
 
 export type DataTypesInstance = typeof import("sequelize").DataTypes;
 
@@ -15,6 +15,7 @@ export interface ForumAttributes {
   id: number;
   name: string | null;
   alternateNames: string[] | null;
+  enrichmentProvenance: EnrichmentProvenanceMap | null;
   jufoLevel: number | null;
   jufoId: number | null;
   jufoFetchedAt: Date | null;
@@ -124,10 +125,12 @@ export interface RecordAttributes {
   title: string | null;
   url: string | null;
   author: string | null;
+  year: number | null;
   status: RecordStatus;
   abstract: string | null;
   databases: string[] | null;
   alternateUrls: string[] | null;
+  enrichmentProvenance: EnrichmentProvenanceMap | null;
   doi: string | null;
   authorDetails: CrossrefAuthorDetail[] | null;
   referenceItems: CrossrefReferenceItem[] | null;

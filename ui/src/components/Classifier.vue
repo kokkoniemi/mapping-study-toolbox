@@ -17,10 +17,19 @@
                     <span v-if="currentItem.Forum">{{ currentItem.Forum.name }}, jufo-level: {{
                         currentItem.Forum.jufoLevel }}</span>
                 </p>
-                <div class="abstract-wrapper" :settings="{}" :style="{ paddingBottom: abstractPaddingBottom }">
-                    <div class="text-content" :class="[
-                        isLongContent && !showFullContent && 'text-content--collapsed',
-                    ]">
+                <div v-if="enrichmentBadges.length > 0" class="enrichment-meta">
+                    <span class="enrichment-meta__label">Confidence:</span>
+                    <span
+                        v-for="badge in enrichmentBadges"
+                        :key="badge.label"
+                        :class="['enrichment-meta__badge', `enrichment-meta__badge--${badge.level}`]"
+                        :title="badge.tooltip"
+                    >
+                        {{ badge.label }} {{ badge.score }}
+                    </span>
+                </div>
+                <div class="abstract-wrapper" :settings="{}">
+                    <div class="text-content">
                         <p class="abstract">
                             <small>
                                 <b>Abstract:</b>
@@ -29,14 +38,6 @@
                             <span v-if="currentItem.abstract" class="abstract__text">{{ sanitizeAbstract(currentItem.abstract) }}</span>
                             <span v-else>No abstract available.</span>
                         </p>
-                        <div v-if="isLongContent" :class="[
-                            'content-toggle-row',
-                            !showFullContent && 'content-toggle-row--collapsed',
-                        ]">
-                            <button class="content-toggle" @click="toggleContentVisibility">
-                                {{ showFullContent ? "Show less" : "Show more" }}
-                            </button>
-                        </div>
                     </div>
                 </div>
 
@@ -44,12 +45,12 @@
                     <div class="literature-list">
                         <div class="literature-list__header">
                             <h4>References ({{ referenceDisplayItems.length }})</h4>
-                            <button class="literature-list__toggle" @click="toggleReferencesVisibility">
+                            <button type="button" class="literature-list__toggle" @click="toggleReferencesVisibility">
                                 {{ showReferences ? "Hide" : "Show" }}
                             </button>
                         </div>
                         <ul v-if="showReferences" class="literature-list__items">
-                            <li v-for="(item, index) in referenceDisplayItems" :key="`ref-${item.key}-${index}`">
+                            <li v-for="item in referenceDisplayItems" :key="item.key" class="literature-list__item">
                                 <span v-if="item.title">{{ item.title }}</span>
                                 <span v-else class="literature-list__muted">Untitled reference</span>
                                 <template v-if="item.year"> ({{ item.year }})</template>
@@ -57,23 +58,25 @@
                                 <template v-if="item.doi">
                                     - <a :href="`https://doi.org/${item.doi}`" target="_blank" rel="noopener noreferrer">doi:{{ item.doi }}</a>
                                 </template>
-                                <template v-if="item.url && !item.doi">
-                                    - <a :href="item.url" target="_blank" rel="noopener noreferrer">link</a>
+                                <template v-else-if="item.url">
+                                    - <a :href="item.url" target="_blank" rel="noopener noreferrer">open</a>
                                 </template>
                             </li>
-                            <li v-if="referenceDisplayItems.length === 0" class="literature-list__muted">No references available.</li>
+                            <li v-if="referenceDisplayItems.length === 0" class="literature-list__muted">
+                                No references available.
+                            </li>
                         </ul>
                     </div>
 
                     <div class="literature-list">
                         <div class="literature-list__header">
                             <h4>Citations ({{ citationDisplayItems.length }})</h4>
-                            <button class="literature-list__toggle" @click="toggleCitationsVisibility">
+                            <button type="button" class="literature-list__toggle" @click="toggleCitationsVisibility">
                                 {{ showCitations ? "Hide" : "Show" }}
                             </button>
                         </div>
                         <ul v-if="showCitations" class="literature-list__items">
-                            <li v-for="(item, index) in citationDisplayItems" :key="`cit-${item.key}-${index}`">
+                            <li v-for="item in citationDisplayItems" :key="item.key" class="literature-list__item">
                                 <span v-if="item.title">{{ item.title }}</span>
                                 <span v-else class="literature-list__muted">Untitled citation</span>
                                 <template v-if="item.year"> ({{ item.year }})</template>
@@ -81,11 +84,13 @@
                                 <template v-if="item.doi">
                                     - <a :href="`https://doi.org/${item.doi}`" target="_blank" rel="noopener noreferrer">doi:{{ item.doi }}</a>
                                 </template>
-                                <template v-if="item.url && !item.doi">
-                                    - <a :href="item.url" target="_blank" rel="noopener noreferrer">link</a>
+                                <template v-else-if="item.url">
+                                    - <a :href="item.url" target="_blank" rel="noopener noreferrer">open</a>
                                 </template>
                             </li>
-                            <li v-if="citationDisplayItems.length === 0" class="literature-list__muted">No citations available.</li>
+                            <li v-if="citationDisplayItems.length === 0" class="literature-list__muted">
+                                No citations available.
+                            </li>
                         </ul>
                     </div>
                 </section>
@@ -127,6 +132,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { storeToRefs } from "pinia";
 import { format as formatDate } from "date-fns";
+import type { EnrichmentFieldProvenance } from "@shared/contracts";
 
 import MappingActions from "./MappingActions.vue";
 import { debounce, keyCodes } from "../helpers/utils";
@@ -141,19 +147,19 @@ type LiteratureDisplayItem = {
   url: string | null;
 };
 
+type EnrichmentBadge = {
+  label: string;
+  level: "low" | "medium" | "high";
+  score: number;
+  tooltip: string;
+};
+
 const store = defaultStore();
-const { pageItems, pageLength, page, statusFilter, tab, moveLock, mappingQuestions, currentItem } =
+const { pageItems, pageLength, page, statusFilter, tab, moveLock, currentItem } =
   storeToRefs(store);
 const classifierRef = ref<HTMLElement | null>(null);
 let sidebarHeightObserver: ResizeObserver | null = null;
 
-const abstractPaddingBottom = computed(() =>
-  tab.value === "map" ? `${mappingQuestions.value.length * 35}px` : 0,
-);
-const COLLAPSED_CONTENT_MAX_CHARS = 1400;
-const COLLAPSED_CONTENT_MAX_LINES = 18;
-
-const showFullContent = ref(false);
 const showReferences = ref(false);
 const showCitations = ref(false);
 const DOI_URL_PATTERN = /^https?:\/\/(?:dx\.)?doi\.org\/(.+)$/i;
@@ -188,28 +194,12 @@ const extractDoiFromUrl = (value: string | null | undefined): string | null => {
   }
 };
 
-const normalizedCenterText = computed(() => {
-  const raw = currentItem.value?.abstract ?? "";
-  return raw.replace("Abstract:\n", "").replace("Abstract\n", "");
-});
+const toggleReferencesVisibility = () => {
+  showReferences.value = !showReferences.value;
+};
 
-const isLongContent = computed(() => {
-  const text = normalizedCenterText.value;
-  if (!text) {
-    return false;
-  }
-
-  const lineCount = text.split(/\r\n|\r|\n/).length;
-  return text.length > COLLAPSED_CONTENT_MAX_CHARS || lineCount > COLLAPSED_CONTENT_MAX_LINES;
-});
-
-const toggleContentVisibility = () => {
-  showFullContent.value = !showFullContent.value;
-
-  const activeElement = document.activeElement as HTMLElement | null;
-  if (activeElement?.classList.contains("content-toggle")) {
-    activeElement.blur();
-  }
+const toggleCitationsVisibility = () => {
+  showCitations.value = !showCitations.value;
 };
 
 const referenceDisplayItems = computed<LiteratureDisplayItem[]>(() => {
@@ -236,22 +226,40 @@ const citationDisplayItems = computed<LiteratureDisplayItem[]>(() => {
   }));
 });
 
-const blurToggleIfNeeded = () => {
-  const activeElement = document.activeElement as HTMLElement | null;
-  if (activeElement?.classList.contains("literature-list__toggle")) {
-    activeElement.blur();
+const enrichmentBadgeFromProvenance = (
+  label: string,
+  item: EnrichmentFieldProvenance | undefined,
+): EnrichmentBadge | null => {
+  if (!item) {
+    return null;
   }
+
+  const source = item.source ? `Source: ${item.source}` : "Source: n/a";
+  const tooltip = `${item.provider.toUpperCase()} ${item.confidenceLevel} ${item.confidenceScore} - ${item.reason} (${item.enrichedAt})\n${source}`;
+  return {
+    label,
+    level: item.confidenceLevel,
+    score: item.confidenceScore,
+    tooltip,
+  };
 };
 
-const toggleReferencesVisibility = () => {
-  showReferences.value = !showReferences.value;
-  blurToggleIfNeeded();
-};
+const enrichmentBadges = computed<EnrichmentBadge[]>(() => {
+  const recordProvenance = currentItem.value?.enrichmentProvenance ?? {};
+  const forumProvenance = currentItem.value?.Forum?.enrichmentProvenance ?? {};
 
-const toggleCitationsVisibility = () => {
-  showCitations.value = !showCitations.value;
-  blurToggleIfNeeded();
-};
+  const badges = [
+    enrichmentBadgeFromProvenance("DOI", recordProvenance.doi),
+    enrichmentBadgeFromProvenance("URL", recordProvenance.url),
+    enrichmentBadgeFromProvenance("Forum", recordProvenance.forumId ?? forumProvenance.name),
+    enrichmentBadgeFromProvenance("Jufo", forumProvenance.jufoLevel),
+    enrichmentBadgeFromProvenance("Refs", recordProvenance.referenceItems),
+    enrichmentBadgeFromProvenance("Citations", recordProvenance.openAlexCitationItems),
+    enrichmentBadgeFromProvenance("Topics", recordProvenance.openAlexTopicItems),
+  ];
+
+  return badges.filter((item): item is EnrichmentBadge => item !== null);
+});
 
 const createdFormatted = computed(() => {
   const createdAt = currentItem.value?.createdAt;
@@ -358,7 +366,6 @@ const isInteractiveTarget = (target: EventTarget | null) => {
 watch(
   () => currentItem.value?.id,
   () => {
-    showFullContent.value = false;
     showReferences.value = false;
     showCitations.value = false;
   },
@@ -487,75 +494,28 @@ h1 {
 }
 
 .abstract-wrapper {
-    flex: 1;
-    position: relative;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-    overflow: auto;
+    flex: 1 1 auto;
+    min-height: 140px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    border-bottom: 1px solid #eaeaea;
+    padding-bottom: 4px;
 }
 
 .text-content {
-    min-height: 0;
     position: relative;
 }
 
-.text-content--collapsed {
-    overflow: hidden;
-    max-height: clamp(220px, 36vh, 420px);
-    padding-bottom: 56px;
-}
-
-.content-toggle-row {
-    display: flex;
-    align-items: center;
-    margin-top: 6px;
-}
-
-.content-toggle-row--collapsed {
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    align-items: flex-end;
-    min-height: 56px;
-    margin-top: 0;
-    padding: 24px 0 6px;
-    background: linear-gradient(
-        180deg,
-        rgba(255, 255, 255, 0) 0%,
-        rgba(255, 255, 255, 0.96) 55%,
-        #ffffff 100%
-    );
-    z-index: 2;
-}
-
-.content-toggle {
-    align-self: flex-start;
-    padding: 2px 6px;
-    border: 0;
-    background: #fff;
-    border-radius: 3px;
-    color: #3750dc;
-    font-size: 12px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.02em;
-
-    &:hover {
-        color: #233496;
-        background: #f7f7f7;
-    }
-}
-
 .literature-lists {
-    border-top: 1px solid #eaeaea;
+    flex: 0 0 auto;
     margin-top: 8px;
     padding-top: 8px;
 }
 
 .literature-list {
-    +.literature-list {
+    min-height: 0;
+
+    + .literature-list {
         margin-top: 8px;
     }
 
@@ -564,12 +524,12 @@ h1 {
         align-items: center;
         justify-content: space-between;
         gap: 8px;
+    }
 
-        h4 {
-            margin: 0;
-            font-size: 14px;
-            color: #3b4c5d;
-        }
+    h4 {
+        margin: 0;
+        font-size: 14px;
+        color: #3b4c5d;
     }
 
     &__toggle {
@@ -592,16 +552,69 @@ h1 {
     &__items {
         margin: 6px 0 0;
         padding-left: 18px;
+        padding-right: 6px;
         line-height: 1.35;
         font-size: 12px;
         color: #3a3a3a;
-        max-height: 220px;
-        overflow: auto;
+        max-height: clamp(140px, 28vh, 320px);
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        border: 1px solid #eaeaea;
+        background: #fff;
+    }
+
+    &__item {
+        margin-bottom: 2px;
     }
 
     &__muted {
         color: #8a8a8a;
         font-style: italic;
+    }
+}
+
+.enrichment-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 0 0 8px;
+
+    &__label {
+        font-size: 12px;
+        font-weight: 600;
+        color: #586572;
+        align-self: center;
+        margin-right: 2px;
+    }
+
+    &__badge {
+        display: inline-flex;
+        align-items: center;
+        font-size: 11px;
+        font-weight: 600;
+        border-radius: 3px;
+        padding: 2px 6px;
+        border: 1px solid #d8d8d8;
+        background: #fafafa;
+        color: #4e4e4e;
+
+        &--high {
+            border-color: #9fc7a0;
+            background: #edf8ee;
+            color: #2f6a32;
+        }
+
+        &--medium {
+            border-color: #d4cd98;
+            background: #fcf8e5;
+            color: #6f6518;
+        }
+
+        &--low {
+            border-color: #d7b0b0;
+            background: #fff1f1;
+            color: #7a3131;
+        }
     }
 }
 

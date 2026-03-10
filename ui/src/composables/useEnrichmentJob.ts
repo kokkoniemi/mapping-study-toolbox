@@ -1,5 +1,6 @@
 import { computed, ref, type Ref } from "vue";
 import type { EnrichmentProvider } from "@shared/contracts";
+import { storeToRefs } from "pinia";
 
 import { records, type EnrichmentJob, type RecordItem } from "../helpers/api";
 import { getApiErrorMessage } from "../helpers/errors";
@@ -39,6 +40,7 @@ export const useEnrichmentJob = ({
   const enrichmentMetrics = ref<EnrichmentMetrics>(createEmptyMetrics());
   const enrichmentProvider = ref<EnrichmentProvider>("all");
   const enrichmentForceRefresh = ref(false);
+  const { enrichmentMode } = storeToRefs(store);
 
   const enrichmentProgressPercent = computed(() => {
     if (enrichmentTotal.value <= 0) {
@@ -128,6 +130,7 @@ export const useEnrichmentJob = ({
       const response = await records.enrichment.createJob({
         recordIds: selectedRecordIds.value,
         provider: enrichmentProvider.value,
+        mode: enrichmentMode.value,
         forceRefresh: enrichmentForceRefresh.value,
       });
       activeEnrichmentJobId.value = response.data.jobId;
@@ -165,6 +168,7 @@ export const useEnrichmentJob = ({
     enrichmentTotal,
     enrichmentMetrics,
     enrichmentProvider,
+    enrichmentMode,
     enrichmentForceRefresh,
     enrichmentProgressPercent,
     enrichSelectedRecords,

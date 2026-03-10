@@ -5,20 +5,210 @@
       :statusOptions="statusOptions"
       :searchInput="searchInput"
       :showFullText="!dataCellsTruncated"
-      :enrichmentProvider="enrichmentProvider"
-      :enrichmentForceRefresh="enrichmentForceRefresh"
-      :enrichmentRunning="enrichmentRunning"
-      :selectedRecordCount="selectedRecordCount"
-      :hasDataItems="dataItems.length > 0"
       @status-filter-change="onStatusFilterChange"
       @search-input="onSearchInput"
       @show-full-text-change="onShowFullTextChange"
-      @provider-change="onProviderChange"
-      @force-refresh-change="onForceRefreshChange"
-      @select-loaded="selectAllLoadedRecords"
-      @clear="clearSelectedRecords"
-      @enrich-selected="enrichSelectedRecords"
     />
+
+    <section class="data-tools">
+      <div class="data-tools__tabs">
+        <button
+          type="button"
+          class="data-tools__tab"
+          :class="{ 'data-tools__tab--active': toolsTab === 'enrichment' }"
+          @click="toolsTab = 'enrichment'"
+        >
+          Enrichment
+        </button>
+        <button
+          type="button"
+          class="data-tools__tab"
+          :class="{ 'data-tools__tab--active': toolsTab === 'forums' }"
+          @click="onForumsTabOpen"
+        >
+          Forums
+        </button>
+      </div>
+
+      <div v-if="toolsTab === 'enrichment'" class="data-tools__panel">
+        <div class="data-tools__group">
+          <label class="data-tools__label">
+            <span>Service</span>
+            <span class="data-tools__info" tabindex="0" role="img" aria-label="Service info">
+              i
+              <span class="data-tools__popover">
+                Crossref enriches DOI, references, forum details and authors. OpenAlex enriches citations, topics, and affiliations.
+              </span>
+            </span>
+          </label>
+          <select :value="enrichmentProvider" :disabled="enrichmentRunning" @change="onProviderChange">
+            <option value="crossref">Crossref</option>
+            <option value="openalex">OpenAlex</option>
+            <option value="all">Crossref + OpenAlex</option>
+          </select>
+        </div>
+
+        <div class="data-tools__group">
+          <label class="data-tools__label">
+            <span>Mode</span>
+            <span class="data-tools__info" tabindex="0" role="img" aria-label="Mode info">
+              i
+              <span class="data-tools__popover">
+                Missing only updates empty fields. Full refresh re-fetches and can overwrite existing enrichment values.
+              </span>
+            </span>
+          </label>
+          <select :value="enrichmentMode" :disabled="enrichmentRunning" @change="onModeChange">
+            <option value="missing">Missing only</option>
+            <option value="full">Full</option>
+          </select>
+        </div>
+
+        <div class="data-tools__group">
+          <label class="data-tools__label">
+            <span>Refresh</span>
+            <span class="data-tools__info" tabindex="0" role="img" aria-label="Refresh info">
+              i
+              <span class="data-tools__popover">
+                Force refresh bypasses freshness windows and executes as full provider fetch.
+              </span>
+            </span>
+          </label>
+          <label class="data-tools__toggle">
+            <input
+              :checked="enrichmentForceRefresh"
+              type="checkbox"
+              :disabled="enrichmentRunning"
+              @change="onForceRefreshChange"
+            />
+            <span>Force refresh</span>
+          </label>
+        </div>
+
+        <div class="data-tools__actions">
+          <button type="button" @click="selectAllLoadedRecords" :disabled="!dataItems.length || enrichmentRunning">
+            Select loaded
+          </button>
+          <button type="button" @click="clearSelectedRecords" :disabled="selectedRecordCount === 0 || enrichmentRunning">
+            Clear
+          </button>
+          <button
+            type="button"
+            class="data-tools__primary"
+            @click="enrichSelectedRecords"
+            :disabled="selectedRecordCount === 0 || enrichmentRunning"
+          >
+            Enrich selected
+          </button>
+        </div>
+      </div>
+
+      <div v-else class="data-tools__panel data-tools__panel--forums">
+        <div class="forum-tools__top">
+          <label class="forum-tools__label">
+            <span>Search duplicates</span>
+            <input
+              :value="forumSearchInput"
+              type="text"
+              placeholder="Search by forum name or ISSN"
+              @input="onForumSearchInput"
+            />
+          </label>
+          <button type="button" :disabled="forumLoading" @click="reloadForumDuplicates">
+            {{ forumLoading ? "Loading..." : "Reload" }}
+          </button>
+          <span class="forum-tools__count">{{ forumGroupsTotal }} groups</span>
+        </div>
+
+        <p v-if="forumError" class="forum-tools__error">{{ forumError }}</p>
+
+        <div class="forum-tools__content">
+          <ul class="forum-tools__groups">
+            <li v-for="group in forumGroups" :key="group.key" class="forum-tools__group">
+              <button
+                type="button"
+                class="forum-tools__group-button"
+                :class="{ 'forum-tools__group-button--active': selectedForumGroup?.key === group.key }"
+                @click="selectForumGroup(group.key)"
+              >
+                <span class="forum-tools__group-title">
+                  {{ group.normalizedName || group.issn || group.key }}
+                </span>
+                <span class="forum-tools__group-meta">
+                  {{ group.count }} forums, {{ sumRecordCounts(group.forums) }} records
+                </span>
+              </button>
+            </li>
+            <li v-if="forumGroups.length === 0 && !forumLoading" class="forum-tools__empty">No duplicate groups</li>
+          </ul>
+          <button
+            v-if="forumHasMore"
+            type="button"
+            class="forum-tools__load-more"
+            :disabled="forumLoading"
+            @click="loadMoreForumDuplicates"
+          >
+            {{ forumLoading ? "Loading..." : "Load more groups" }}
+          </button>
+
+          <div class="forum-tools__merge">
+            <template v-if="selectedForumGroup">
+              <h4>Merge {{ selectedForumGroup.count }} forums</h4>
+              <p class="forum-tools__hint">Choose one target forum and one or more source forums to merge.</p>
+
+              <ul class="forum-tools__forums">
+                <li v-for="forum in selectedForumGroup.forums" :key="forum.id" class="forum-tools__forum">
+                  <label class="forum-tools__target">
+                    <input
+                      type="radio"
+                      name="forum-target"
+                      :checked="selectedTargetForumId === forum.id"
+                      @change="setTargetForum(forum.id)"
+                    />
+                    <span>Target</span>
+                  </label>
+                  <label class="forum-tools__source">
+                    <input
+                      type="checkbox"
+                      :checked="selectedSourceForumIds.includes(forum.id)"
+                      :disabled="selectedTargetForumId === forum.id"
+                      @change="onSourceForumChange(forum.id, $event)"
+                    />
+                    <span>Source</span>
+                  </label>
+                  <div class="forum-tools__forum-meta">
+                    <strong>{{ forum.name || "(Unnamed forum)" }}</strong>
+                    <span>id {{ forum.id }}</span>
+                    <span v-if="forum.issn">ISSN {{ forum.issn }}</span>
+                    <span>{{ forum.recordCount }} records</span>
+                  </div>
+                </li>
+              </ul>
+
+              <div class="forum-tools__merge-actions">
+                <button type="button" :disabled="!canPreviewForumMerge || forumMergeLoading" @click="previewForumMerge">
+                  Preview merge
+                </button>
+                <button
+                  type="button"
+                  class="data-tools__primary"
+                  :disabled="!canApplyForumMerge || forumMergeLoading"
+                  @click="applyForumMerge"
+                >
+                  {{ forumMergeLoading ? "Applying..." : "Apply merge" }}
+                </button>
+              </div>
+
+              <p v-if="forumMergeError" class="forum-tools__error">{{ forumMergeError }}</p>
+              <p v-if="forumMergePreview" class="forum-tools__preview">
+                Preview: move {{ forumMergePreview.movedRecordCount }} records and merge {{ forumMergePreview.mergedAliases.length }} aliases.
+              </p>
+            </template>
+            <p v-else class="forum-tools__empty">Select a duplicate group to merge forums.</p>
+          </div>
+        </div>
+      </div>
+    </section>
 
     <EnrichmentStatus
       :selectedRecordCount="selectedRecordCount"
@@ -77,7 +267,14 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { storeToRefs } from "pinia";
 import { format as formatDate } from "date-fns";
-import type { EnrichmentProvider, StatusFilter } from "@shared/contracts";
+import type {
+  EnrichmentMode,
+  EnrichmentProvider,
+  ForumDuplicateGroup,
+  ForumDuplicateItem,
+  ForumMergeResponse,
+  StatusFilter,
+} from "@shared/contracts";
 import type { CellChange } from "handsontable/common";
 import type { CellProperties, ColumnSettings, GridSettings } from "handsontable/settings";
 
@@ -91,7 +288,8 @@ import { useDataGrid, type DataGridExpose } from "../composables/useDataGrid";
 import { useEnrichmentJob } from "../composables/useEnrichmentJob";
 import { debounce } from "../helpers/utils";
 import { defaultStore } from "../stores/default";
-import { type MappingOption, type RecordItem, type RecordStatus } from "../helpers/api";
+import { forums, type MappingOption, type RecordItem, type RecordStatus } from "../helpers/api";
+import { getApiErrorMessage } from "../helpers/errors";
 
 type GridRow = Record<string, string | number | boolean> & { __recordId: number };
 type MappingEditorState = {
@@ -106,6 +304,7 @@ type AnchorRect = {
   width: number;
   height: number;
 };
+type DataToolsTab = "enrichment" | "forums";
 
 const statusOptions = STATUS_FILTER_OPTIONS;
 const editableSources = new Set<string>([
@@ -133,6 +332,20 @@ const dataGridRef = ref<DataGridExpose | null>(null);
 const searchInput = ref(searchFilter.value);
 const selectedRecordIds = ref<number[]>([]);
 const isUnmounted = ref(false);
+const toolsTab = ref<DataToolsTab>("enrichment");
+
+const forumGroups = ref<ForumDuplicateGroup[]>([]);
+const forumGroupsTotal = ref(0);
+const forumLimit = ref(50);
+const forumLoading = ref(false);
+const forumError = ref("");
+const forumSearchInput = ref("");
+const selectedForumGroupKey = ref<string | null>(null);
+const selectedTargetForumId = ref<number | null>(null);
+const selectedSourceForumIds = ref<number[]>([]);
+const forumMergePreview = ref<ForumMergeResponse | null>(null);
+const forumMergeLoading = ref(false);
+const forumMergeError = ref("");
 
 const {
   enrichmentRunning,
@@ -144,6 +357,7 @@ const {
   enrichmentMetrics,
   enrichmentProgressPercent,
   enrichmentProvider,
+  enrichmentMode,
   enrichmentForceRefresh,
   enrichSelectedRecords,
   stopEnrichment,
@@ -167,6 +381,23 @@ const viewportSize = ref({
 const loadedCount = computed(() => dataItems.value.length);
 const selectedRecordCount = computed(() => selectedRecordIds.value.length);
 const selectedRecordIdSet = computed(() => new Set(selectedRecordIds.value));
+const selectedForumGroup = computed(
+  () => forumGroups.value.find((group) => group.key === selectedForumGroupKey.value) ?? null,
+);
+const canPreviewForumMerge = computed(
+  () => selectedTargetForumId.value !== null && selectedSourceForumIds.value.length > 0,
+);
+const canApplyForumMerge = computed(
+  () =>
+    canPreviewForumMerge.value
+    && forumMergePreview.value !== null
+    && forumMergePreview.value.targetForumId === selectedTargetForumId.value
+    && JSON.stringify([...forumMergePreview.value.sourceForumIds].sort((a, b) => a - b))
+      === JSON.stringify([...selectedSourceForumIds.value].sort((a, b) => a - b)),
+);
+const forumHasMore = computed(
+  () => forumGroups.value.length < forumGroupsTotal.value,
+);
 const totalCountLabel = computed(() => {
   if (dataLoading.value && dataTotal.value <= 0) {
     return "...";
@@ -174,8 +405,60 @@ const totalCountLabel = computed(() => {
   return String(dataTotal.value);
 });
 
-const formatTimestamp = (value: string) => formatDate(new Date(value), "dd.MM.yyyy HH:mm:ss");
+const formatTimestamp = (value: string) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return formatDate(date, "dd.MM.yyyy HH:mm:ss");
+};
 const stringListToCell = (items: string[] | null | undefined) => (Array.isArray(items) ? items.join(", ") : "");
+const formatConfidenceBadge = (score: number) => {
+  if (score >= 90) {
+    return `H${score}`;
+  }
+  if (score >= 70) {
+    return `M${score}`;
+  }
+  return `L${score}`;
+};
+
+const recordEnrichmentDisplay = (record: RecordItem) => {
+  const recordMap = record.enrichmentProvenance ?? {};
+  const forumMap = record.Forum?.enrichmentProvenance ?? {};
+  const fields: Array<{ key: string; label: string }> = [
+    { key: "doi", label: "DOI" },
+    { key: "url", label: "URL" },
+    { key: "forumId", label: "Forum" },
+    { key: "jufoLevel", label: "Jufo" },
+    { key: "referenceItems", label: "Refs" },
+    { key: "openAlexCitationItems", label: "Citations" },
+    { key: "openAlexTopicItems", label: "Topics" },
+  ];
+
+  const summary: string[] = [];
+  const details: string[] = [];
+
+  for (const field of fields) {
+    const provenance = recordMap[field.key] ?? forumMap[field.key];
+    if (!provenance) {
+      continue;
+    }
+
+    summary.push(`${field.label} ${formatConfidenceBadge(provenance.confidenceScore)}`);
+    details.push(
+      `${field.label}: ${provenance.provider} ${provenance.confidenceLevel} ${provenance.confidenceScore} - ${provenance.reason} (${formatTimestamp(provenance.enrichedAt)})`,
+    );
+  }
+
+  return {
+    summary: summary.join(" | "),
+    details: details.join("\n"),
+  };
+};
+
+const sumRecordCounts = (forumsList: ForumDuplicateItem[]) =>
+  forumsList.reduce((sum, forum) => sum + forum.recordCount, 0);
 
 const recordMappingCellValue = (record: RecordItem, questionId: number) =>
   record.MappingOptions.filter((option) => option.mappingQuestionId === questionId)
@@ -188,15 +471,19 @@ const tableRows = computed<GridRow[]>(() =>
     const topicsCellValue = topicNames.length > 0
       ? topicNames.join(", ")
       : String(record.topicCount ?? 0);
+    const enrichment = recordEnrichmentDisplay(record);
 
     const row: GridRow = {
       __recordId: record.id,
       __selected: selectedRecordIdSet.value.has(record.id),
       id: record.id,
       title: record.title,
+      year: record.year ?? "",
       abstract: record.abstract ?? "",
       status: record.status ?? "null",
       comment: record.comment ?? "",
+      enrichment: enrichment.summary || "-",
+      enrichmentDetails: enrichment.details,
       author: record.author,
       forum: record.Forum
         ? `${record.Forum.name ?? "-"} | issn: ${record.Forum.issn ?? "-"} | publisher: ${record.Forum.publisher ?? "-"} | jufo: ${record.Forum.jufoLevel ?? "-"}`
@@ -310,6 +597,22 @@ function truncatedTextRenderer(
   return td;
 }
 
+function enrichmentRenderer(
+  _instance: unknown,
+  td: HTMLTableCellElement,
+  row: number,
+  _col: number,
+  _prop: string | number,
+  value: unknown,
+) {
+  const record = dataItems.value[row];
+  const display = record ? recordEnrichmentDisplay(record) : { summary: "", details: "" };
+  const summary = String(value ?? display.summary ?? "").trim();
+  const details = display.details.trim();
+  td.title = details.length > 0 ? details : summary;
+  return truncatedTextRenderer(_instance, td, row, _col, _prop, summary);
+}
+
 function mappingChipRenderer(
   _instance: unknown,
   td: HTMLTableCellElement,
@@ -358,6 +661,7 @@ const priorityColumns: Array<{ header: string; settings: ColumnSettings }> = [
   { header: "", settings: { data: "__selected", readOnly: true, renderer: selectionRenderer, width: 42 } },
   { header: "id", settings: { data: "id", readOnly: true, width: 64 } },
   { header: "title", settings: { data: "title", type: "text", renderer: truncatedTextRenderer, width: 320 } },
+  { header: "year", settings: { data: "year", type: "numeric", width: 86 } },
   { header: "abstract", settings: { data: "abstract", type: "text", renderer: truncatedTextRenderer, width: 420 } },
   {
     header: "status",
@@ -371,6 +675,7 @@ const priorityColumns: Array<{ header: string; settings: ColumnSettings }> = [
     },
   },
   { header: "comment", settings: { data: "comment", type: "text", renderer: truncatedTextRenderer, width: 280 } },
+  { header: "enrichment", settings: { data: "enrichment", readOnly: true, renderer: enrichmentRenderer, width: 260 } },
 ];
 
 const trailingColumns: Array<{ header: string; settings: ColumnSettings }> = [
@@ -654,6 +959,22 @@ const handleCellChange = async (recordId: number, prop: string, nextValue: strin
     return;
   }
 
+  if (prop === "year") {
+    const trimmed = nextValue.trim();
+    if (trimmed.length === 0) {
+      await store.patchRecord(recordId, { year: null });
+      return;
+    }
+
+    const parsed = Number.parseInt(trimmed, 10);
+    if (!Number.isInteger(parsed)) {
+      throw new Error("Year must be a valid integer");
+    }
+
+    await store.patchRecord(recordId, { year: parsed });
+    return;
+  }
+
   if (prop === "status") {
     const normalizedStatus: RecordStatus =
       nextValue === "" || nextValue === "null" ? null : (nextValue as RecordStatus);
@@ -782,6 +1103,55 @@ const onWindowKeyDown = (event: KeyboardEvent) => {
 const debouncedSearch = debounce((value: string) => {
   void store.setSearchFilter(value);
 }, 350);
+const debouncedForumSearch = debounce(() => {
+  void loadForumDuplicates(true);
+}, 350);
+
+const resetForumMergeSelection = () => {
+  selectedForumGroupKey.value = null;
+  selectedTargetForumId.value = null;
+  selectedSourceForumIds.value = [];
+  forumMergePreview.value = null;
+  forumMergeError.value = "";
+};
+
+const loadForumDuplicates = async (reset: boolean) => {
+  if (forumLoading.value) {
+    return;
+  }
+
+  forumLoading.value = true;
+  forumError.value = "";
+
+  const nextOffset = reset ? 0 : forumGroups.value.length;
+  try {
+    const response = await forums.duplicates({
+      offset: nextOffset,
+      limit: forumLimit.value,
+      ...(forumSearchInput.value.trim().length > 0 ? { search: forumSearchInput.value.trim() } : {}),
+    });
+
+    forumGroupsTotal.value = response.data.count;
+    if (reset) {
+      forumGroups.value = response.data.groups;
+    } else {
+      const existingKeys = new Set(forumGroups.value.map((group) => group.key));
+      const appended = response.data.groups.filter((group) => !existingKeys.has(group.key));
+      forumGroups.value = [...forumGroups.value, ...appended];
+    }
+
+    if (
+      selectedForumGroupKey.value
+      && !forumGroups.value.some((group) => group.key === selectedForumGroupKey.value)
+    ) {
+      resetForumMergeSelection();
+    }
+  } catch (error) {
+    forumError.value = getApiErrorMessage(error);
+  } finally {
+    forumLoading.value = false;
+  }
+};
 
 const onSearchInput = (value: string) => {
   searchInput.value = value;
@@ -799,12 +1169,129 @@ const onShowFullTextChange = (showFullText: boolean) => {
   store.setDataCellsTruncated(!showFullText);
 };
 
-const onProviderChange = (value: EnrichmentProvider) => {
-  enrichmentProvider.value = value;
+const onProviderChange = (event: Event) => {
+  enrichmentProvider.value = (event.target as HTMLSelectElement).value as EnrichmentProvider;
 };
 
-const onForceRefreshChange = (value: boolean) => {
-  enrichmentForceRefresh.value = value;
+const onModeChange = (event: Event) => {
+  const nextMode = (event.target as HTMLSelectElement).value as EnrichmentMode;
+  store.setEnrichmentMode(nextMode);
+};
+
+const onForceRefreshChange = (event: Event) => {
+  enrichmentForceRefresh.value = (event.target as HTMLInputElement).checked;
+};
+
+const onForumsTabOpen = () => {
+  toolsTab.value = "forums";
+  if (forumGroups.value.length === 0) {
+    void loadForumDuplicates(true);
+  }
+};
+
+const onForumSearchInput = (event: Event) => {
+  forumSearchInput.value = (event.target as HTMLInputElement).value;
+  debouncedForumSearch();
+};
+
+const reloadForumDuplicates = () => {
+  resetForumMergeSelection();
+  void loadForumDuplicates(true);
+};
+
+const loadMoreForumDuplicates = () => {
+  void loadForumDuplicates(false);
+};
+
+const selectForumGroup = (groupKey: string) => {
+  selectedForumGroupKey.value = groupKey;
+  const group = forumGroups.value.find((item) => item.key === groupKey);
+  if (!group || group.forums.length === 0) {
+    selectedTargetForumId.value = null;
+    selectedSourceForumIds.value = [];
+    forumMergePreview.value = null;
+    return;
+  }
+
+  const sorted = [...group.forums].sort((left, right) => right.recordCount - left.recordCount || left.id - right.id);
+  const [target, ...sources] = sorted;
+  selectedTargetForumId.value = target?.id ?? null;
+  selectedSourceForumIds.value = sources.map((item) => item.id);
+  forumMergePreview.value = null;
+  forumMergeError.value = "";
+};
+
+const setTargetForum = (forumId: number) => {
+  selectedTargetForumId.value = forumId;
+  selectedSourceForumIds.value = selectedSourceForumIds.value.filter((id) => id !== forumId);
+  forumMergePreview.value = null;
+  forumMergeError.value = "";
+};
+
+const toggleSourceForum = (forumId: number, checked: boolean) => {
+  if (selectedTargetForumId.value === forumId) {
+    return;
+  }
+
+  if (checked) {
+    if (!selectedSourceForumIds.value.includes(forumId)) {
+      selectedSourceForumIds.value = [...selectedSourceForumIds.value, forumId];
+    }
+  } else {
+    selectedSourceForumIds.value = selectedSourceForumIds.value.filter((id) => id !== forumId);
+  }
+
+  forumMergePreview.value = null;
+  forumMergeError.value = "";
+};
+
+const onSourceForumChange = (forumId: number, event: Event) => {
+  toggleSourceForum(forumId, (event.target as HTMLInputElement).checked);
+};
+
+const previewForumMerge = async () => {
+  if (!canPreviewForumMerge.value || selectedTargetForumId.value === null) {
+    return;
+  }
+
+  forumMergeLoading.value = true;
+  forumMergeError.value = "";
+  try {
+    const response = await forums.merge({
+      targetForumId: selectedTargetForumId.value,
+      sourceForumIds: selectedSourceForumIds.value,
+      dryRun: true,
+    });
+    forumMergePreview.value = response.data;
+  } catch (error) {
+    forumMergeError.value = getApiErrorMessage(error);
+  } finally {
+    forumMergeLoading.value = false;
+  }
+};
+
+const applyForumMerge = async () => {
+  if (!canApplyForumMerge.value || selectedTargetForumId.value === null) {
+    return;
+  }
+
+  forumMergeLoading.value = true;
+  forumMergeError.value = "";
+
+  try {
+    await forums.merge({
+      targetForumId: selectedTargetForumId.value,
+      sourceForumIds: selectedSourceForumIds.value,
+      dryRun: false,
+    });
+
+    resetForumMergeSelection();
+    await Promise.all([loadForumDuplicates(true), store.loadInitialData(), store.fetchPageItems()]);
+  } catch (error) {
+    forumMergeError.value = getApiErrorMessage(error);
+  } finally {
+    forumMergeLoading.value = false;
+  }
 };
 
 watch(
@@ -881,6 +1368,322 @@ onUnmounted(() => {
   flex-direction: column;
 }
 
+.data-tools {
+  border: 1px solid #eaeaea;
+  background: #fff;
+  margin-top: -2px;
+  margin-bottom: 8px;
+
+  &__tabs {
+    display: flex;
+    gap: 4px;
+    padding: 8px 10px 0;
+  }
+
+  &__tab {
+    height: 28px;
+    padding: 0 10px;
+    border: 1px solid #d7d7d7;
+    border-bottom: 0;
+    background: #f8f8f8;
+    color: #5b5858;
+    font-size: 12px;
+    font-weight: 600;
+
+    &--active {
+      background: #fff;
+      color: #2f4fc6;
+    }
+  }
+
+  &__panel {
+    border-top: 1px solid #eaeaea;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 10px;
+    padding: 10px;
+  }
+
+  &__group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 150px;
+  }
+
+  &__label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: #5b5858;
+    text-transform: uppercase;
+    line-height: 1.2;
+  }
+
+  &__toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 30px;
+    font-size: 12px;
+    color: #5b5858;
+
+    input {
+      margin: 0;
+    }
+  }
+
+  &__info {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    border: 1px solid #bdbdbd;
+    border-radius: 50%;
+    font-size: 10px;
+    font-weight: 600;
+    color: #7a7a7a;
+    cursor: help;
+    position: relative;
+    background: #fff;
+  }
+
+  &__popover {
+    display: none;
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    width: 260px;
+    padding: 8px 10px;
+    border: 1px solid #d8d8d8;
+    border-radius: 4px;
+    background: #fff;
+    color: #444;
+    font-size: 11px;
+    font-weight: 400;
+    line-height: 1.35;
+    text-transform: none;
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+    z-index: 300;
+    pointer-events: none;
+  }
+
+  &__info:hover &__popover,
+  &__info:focus &__popover,
+  &__info:focus-visible &__popover {
+    display: block;
+  }
+
+  &__actions {
+    margin-left: auto;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+  }
+
+  &__primary {
+    border-color: #3c67d8 !important;
+    color: #2d4fc9 !important;
+    font-weight: 600;
+  }
+
+  select,
+  input[type="text"] {
+    height: 30px;
+    box-sizing: border-box;
+  }
+
+  button {
+    height: 30px;
+    padding: 0 10px;
+    border: 1px solid #dedede;
+    background: #ffffff;
+    color: #5b5858;
+    font-size: 12px;
+
+    &:hover:not(:disabled) {
+      background: #f6f6f6;
+    }
+
+    &:disabled {
+      opacity: 0.6;
+      cursor: default;
+    }
+  }
+}
+
+.forum-tools {
+  &__top {
+    width: 100%;
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+  }
+
+  &__label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: min(320px, 100%);
+    flex: 1;
+    font-size: 12px;
+    color: #5b5858;
+    text-transform: uppercase;
+  }
+
+  &__count {
+    font-size: 12px;
+    color: #6a6a6a;
+    white-space: nowrap;
+  }
+
+  &__error {
+    margin: 0;
+    color: #8f2a2a;
+    font-size: 12px;
+  }
+
+  &__content {
+    width: 100%;
+    display: grid;
+    grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
+    gap: 10px;
+    min-height: 0;
+  }
+
+  &__groups {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-height: 240px;
+    overflow: auto;
+    border: 1px solid #ededed;
+    background: #fafafa;
+  }
+
+  &__group + &__group {
+    border-top: 1px solid #ebebeb;
+  }
+
+  &__group-button {
+    width: 100%;
+    height: auto !important;
+    text-align: left;
+    padding: 8px;
+    border: 0 !important;
+    background: transparent !important;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    color: #4a4a4a !important;
+
+    &--active {
+      background: #eef3ff !important;
+    }
+  }
+
+  &__group-title {
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  &__group-meta {
+    font-size: 11px;
+    color: #767676;
+  }
+
+  &__load-more {
+    margin-top: 8px;
+  }
+
+  &__merge {
+    border: 1px solid #ededed;
+    background: #fff;
+    padding: 8px;
+    min-height: 240px;
+
+    h4 {
+      margin: 0 0 4px;
+      font-size: 14px;
+      color: #425a6a;
+    }
+  }
+
+  &__hint {
+    margin: 0 0 8px;
+    font-size: 12px;
+    color: #737373;
+  }
+
+  &__forums {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-height: 180px;
+    overflow: auto;
+  }
+
+  &__forum {
+    display: grid;
+    grid-template-columns: auto auto minmax(0, 1fr);
+    gap: 8px;
+    align-items: center;
+    padding: 6px 0;
+    border-top: 1px solid #f0f0f0;
+  }
+
+  &__forum:first-child {
+    border-top: 0;
+  }
+
+  &__target,
+  &__source {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    color: #5b5858;
+  }
+
+  &__forum-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    font-size: 12px;
+    min-width: 0;
+
+    strong {
+      font-weight: 600;
+      color: #374a58;
+    }
+  }
+
+  &__merge-actions {
+    margin-top: 8px;
+    display: flex;
+    gap: 6px;
+  }
+
+  &__preview {
+    margin: 8px 0 0;
+    font-size: 12px;
+    color: #4f5d69;
+  }
+
+  &__empty {
+    margin: 0;
+    padding: 8px;
+    font-size: 12px;
+    color: #8b8b8b;
+  }
+}
+
 .data-footer {
   margin-top: 6px;
   font-size: 12px;
@@ -891,6 +1694,22 @@ onUnmounted(() => {
 
   &__loaded {
     white-space: nowrap;
+  }
+}
+
+@media (max-width: 1200px) {
+  .data-tools__actions {
+    margin-left: 0;
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .forum-tools__content {
+    grid-template-columns: 1fr;
+  }
+
+  .forum-tools__merge {
+    min-height: 0;
   }
 }
 </style>

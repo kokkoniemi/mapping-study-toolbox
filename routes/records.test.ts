@@ -239,6 +239,7 @@ describe("routes/records", () => {
       params: { id: "1" },
       body: {
         title: "Updated title",
+        year: 2024,
         status: "uncertain",
         databases: ["scopus", "wos"],
         alternateUrls: ["https://example.com/a"],
@@ -251,6 +252,7 @@ describe("routes/records", () => {
     expect(dbMock.Record.findByPk).toHaveBeenCalledWith(1, { include: ["Forum", "MappingOptions"] });
     expect(record.update).toHaveBeenCalledWith({
       title: "Updated title",
+      year: 2024,
       status: "uncertain",
       databases: ["scopus", "wos"],
       alternateUrls: ["https://example.com/a"],
@@ -339,6 +341,16 @@ describe("routes/records", () => {
   it("createEnrichment rejects unsupported provider", async () => {
     const req = {
       body: { recordIds: [1], provider: "bad-provider" },
+    } as unknown as Request;
+    const res = mockResponse();
+
+    await expect(createEnrichment(req, res)).rejects.toBeInstanceOf(ApiError);
+    expect(enrichmentMock.createEnrichmentJob).not.toHaveBeenCalled();
+  });
+
+  it("createEnrichment rejects unsupported mode", async () => {
+    const req = {
+      body: { recordIds: [1], mode: "partial" },
     } as unknown as Request;
     const res = mockResponse();
 

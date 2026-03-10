@@ -8,6 +8,7 @@ const defineForum: ModelFactory<ForumModelStatic> = (sequelize: Sequelize, DataT
     {
       name: DataTypes.STRING,
       alternateNames: DataTypes.JSON,
+      enrichmentProvenance: DataTypes.JSON,
       jufoLevel: DataTypes.INTEGER,
       jufoId: DataTypes.INTEGER,
       jufoFetchedAt: DataTypes.DATE,

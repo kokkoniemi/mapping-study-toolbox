@@ -1,5 +1,5 @@
 import { defineStore } from "pinia";
-import type { PatchRecordPayload, RecordStatus, StatusFilter } from "@shared/contracts";
+import type { EnrichmentMode, PatchRecordPayload, RecordStatus, StatusFilter } from "@shared/contracts";
 
 import {
   mappingQuestions,
@@ -61,6 +61,7 @@ interface DefaultState {
   loading: boolean;
   mappingQuestions: MappingQuestion[];
   moveLock: boolean;
+  enrichmentMode: EnrichmentMode;
   detailLoadingIds: number[];
   cellStates: CellStates;
 }
@@ -91,6 +92,7 @@ export const defaultStore = defineStore("default", {
       "pageLength",
       "statusFilter",
       "searchFilter",
+      "enrichmentMode",
       "nick",
     ],
   },
@@ -114,6 +116,7 @@ export const defaultStore = defineStore("default", {
     loading: false,
     mappingQuestions: [],
     moveLock: false,
+    enrichmentMode: "missing",
     detailLoadingIds: [],
     cellStates: {},
   }),
@@ -632,6 +635,10 @@ export const defaultStore = defineStore("default", {
 
     unsetMoveLock() {
       this.moveLock = false;
+    },
+
+    setEnrichmentMode(payload: EnrichmentMode) {
+      this.enrichmentMode = payload;
     },
   },
 });

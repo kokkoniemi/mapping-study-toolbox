@@ -7,11 +7,13 @@ describe("openalex fallback search ranking", () => {
     const selected = pickBestOpenAlexSearchWork(
       "Toward an Improvement of Engineering Teaming Skills through an In-House Professionalism Course",
       "Doe, Alex",
+      2024,
       [
         {
           id: "https://openalex.org/W1",
           title: "A completely different article about climate policy outcomes",
           authorships: [{ author: { display_name: "Alex Doe" } }],
+          publication_year: 2024,
         },
       ],
     );
@@ -23,20 +25,41 @@ describe("openalex fallback search ranking", () => {
     const selected = pickBestOpenAlexSearchWork(
       "Predicting teamwork group assessment using log data-based learning analytics",
       "Smith, Jordan",
+      2024,
       [
         {
           id: "https://openalex.org/W2",
           title: "Predicting teamwork group assessment using log data-based learning analytics",
           authorships: [{ author: { display_name: "Jordan Smith" } }],
+          publication_year: 2024,
         },
         {
           id: "https://openalex.org/W3",
           title: "Teaching methods and teamwork perceptions in virtual settings",
           authorships: [{ author: { display_name: "Jordan Smith" } }],
+          publication_year: 2021,
         },
       ],
     );
 
     expect(selected?.id).toBe("https://openalex.org/W2");
+  });
+
+  it("rejects strong title match when publication year differs too much", () => {
+    const selected = pickBestOpenAlexSearchWork(
+      "Predicting teamwork group assessment using log data-based learning analytics",
+      "Smith, Jordan",
+      2024,
+      [
+        {
+          id: "https://openalex.org/W2",
+          title: "Predicting teamwork group assessment using log data-based learning analytics",
+          authorships: [{ author: { display_name: "Jordan Smith" } }],
+          publication_year: 2016,
+        },
+      ],
+    );
+
+    expect(selected).toBeNull();
   });
 });

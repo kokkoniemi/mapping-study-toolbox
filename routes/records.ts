@@ -10,6 +10,7 @@ import {
 } from "../lib/recordEnrichment";
 import {
   RECORD_STATUS_VALUES,
+  type EnrichmentMode,
   type EnrichmentJobOptions,
   type EnrichmentProvider,
   type PatchRecordPayload,
@@ -28,6 +29,7 @@ import db from "../models";
 
 const VALID_STATUSES: readonly RecordStatus[] = RECORD_STATUS_VALUES;
 const VALID_STATUSES_TEXT = ["null", "uncertain", "excluded", "included"] as const;
+const VALID_ENRICHMENT_MODES = ["missing", "full"] as const;
 const RECORD_LIST_DEFAULT_MAX = Number.parseInt(process.env.RECORD_LIST_LIMIT_MAX ?? "", 10) || 250;
 const ENRICHMENT_MAX_RECORDS_PER_JOB = Number.parseInt(process.env.ENRICHMENT_MAX_RECORDS_PER_JOB ?? "", 10) || 500;
 const LIST_RECORD_ATTRIBUTES = [
@@ -35,10 +37,12 @@ const LIST_RECORD_ATTRIBUTES = [
   "title",
   "url",
   "author",
+  "year",
   "status",
   "abstract",
   "databases",
   "alternateUrls",
+  "enrichmentProvenance",
   "forumId",
   "doi",
   "citationCount",
@@ -182,7 +186,16 @@ export const listing = async (req: Request, res: Response) => {
           association: "Forum",
           attributes: withDetails
             ? undefined
-            : ["id", "name", "jufoLevel", "issn", "publisher", "jufoFetchedAt", "jufoLastError"],
+            : [
+              "id",
+              "name",
+              "jufoLevel",
+              "issn",
+              "publisher",
+              "jufoFetchedAt",
+              "jufoLastError",
+              "enrichmentProvenance",
+            ],
         },
         {
           association: "MappingOptions",
@@ -252,6 +265,7 @@ export const patch = async (req: Request, res: Response) => {
       "title",
       "author",
       "url",
+      "year",
       "status",
       "comment",
       "abstract",
@@ -278,6 +292,14 @@ export const patch = async (req: Request, res: Response) => {
 
   if ("url" in body) {
     updates.url = parseString(body.url, "url", { trim: true, allowEmpty: false, maxLength: 2000 });
+  }
+
+  if ("year" in body) {
+    if (body.year === null) {
+      updates.year = null;
+    } else {
+      updates.year = parseInteger(body.year, "year", { min: 1000, max: 3000 });
+    }
   }
 
   if ("status" in body) {
@@ -412,7 +434,7 @@ export const createEnrichment = async (req: Request, res: Response) => {
   const body = parseObject(req.body, "body");
   assertAllowedKeys(
     body,
-    ["recordIds", "provider", "maxCitations", "forceRefresh"],
+    ["recordIds", "provider", "mode", "maxCitations", "forceRefresh"],
     "enrichment job body",
   );
 
@@ -436,6 +458,16 @@ export const createEnrichment = async (req: Request, res: Response) => {
     throw badRequest("provider must be one of: crossref, openalex, all");
   }
 
+  const mode = parseString(body.mode, "mode", {
+    optional: true,
+    trim: true,
+    allowEmpty: false,
+    maxLength: 20,
+  });
+  if (mode !== undefined && !VALID_ENRICHMENT_MODES.includes(mode as EnrichmentMode)) {
+    throw badRequest("mode must be one of: missing, full");
+  }
+
   const maxCitations = body.maxCitations === undefined
     ? undefined
     : parseInteger(body.maxCitations, "maxCitations", {
@@ -451,6 +483,7 @@ export const createEnrichment = async (req: Request, res: Response) => {
 
   const jobPayload: EnrichmentJobOptions = {
     ...(provider !== undefined ? { provider: provider as EnrichmentProvider } : {}),
+    ...(mode !== undefined ? { mode: mode as EnrichmentMode } : {}),
     ...(maxCitations !== undefined ? { maxCitations } : {}),
     forceRefresh,
   };

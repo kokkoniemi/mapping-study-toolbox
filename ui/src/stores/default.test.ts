@@ -62,6 +62,7 @@ const makeRecord = (overrides: Partial<RecordItem> = {}): RecordItem => ({
   id: 1,
   title: "Title",
   author: "Author",
+  year: null,
   url: "https://example.com",
   databases: ["db"],
   alternateUrls: [],

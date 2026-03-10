@@ -30,7 +30,9 @@ export type ForumSnapshot = {
   id: number;
   name: string | null;
   issn: string | null;
+  enrichmentProvenance: Record<string, unknown> | null;
   jufoLevel: number | null;
+  jufoId?: number | null;
   jufoFetchedAt: Date | null;
   jufoLastError: string | null;
   update: (values: Record<string, unknown>) => Promise<unknown>;

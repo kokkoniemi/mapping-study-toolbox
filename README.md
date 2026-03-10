@@ -117,17 +117,25 @@ UI dev server runs on http://localhost:8080 and calls backend API at http://loca
 
 ### Data tab backend endpoint
 - `PATCH /api/records/:id` for partial record updates used by the Data tab.
+  - supports `year` (`integer` or `null`) in addition to existing patchable fields.
 - `POST /api/records/enrichment-jobs` to start bulk Crossref enrichment for selected record IDs.
+  - accepts `mode: "missing" | "full"` (default `missing`).
 - `GET /api/records/enrichment-jobs/:jobId` to poll job progress/results.
   - compact polling supported via `compact=1&resultCursor=<n>&updatedCursor=<n>` (delta payloads)
 - `POST /api/records/enrichment-jobs/:jobId/cancel` to stop queued/running enrichment jobs.
+- `GET /api/forums/duplicates` to discover duplicate forum groups (name/alias/issn based).
+- `POST /api/forums/merge` to preview/apply forum merges (`dryRun=true|false`).
 
 ### Crossref + OpenAlex enrichment
-- In the `Data` tab, select rows (leftmost checkbox column), choose service (`Crossref`, `OpenAlex`, or `Crossref + OpenAlex`), then click `Enrich selected`.
+- In the `Data` tab, select rows (leftmost checkbox column), open the `Enrichment` tools sub-tab, choose service (`Crossref`, `OpenAlex`, or `Crossref + OpenAlex`) and mode (`Missing only` / `Full`), then click `Enrich selected`.
 - Default service is `Crossref + OpenAlex`.
+- Default mode is `Missing only`.
 - You can stop a running job with the `Stop` button (cancels after the current record finishes).
-- `Force refresh` bypasses freshness windows for both Crossref and OpenAlex and re-fetches metadata.
+- `Force refresh` bypasses freshness windows and executes as full re-fetch.
 - Enrichment updates record DOI/author details/references and forum metadata (`publisher`, `issn`, `jufoLevel` when found).
+- Enrichment also records per-field provenance (`provider`, confidence level + score, reason, timestamp, source identifier) to:
+  - `Record.enrichmentProvenance`
+  - `Forum.enrichmentProvenance`
 - OpenAlex enrichment updates:
   - citation count
   - citation list (title/doi/link/year/forum)
@@ -143,7 +151,8 @@ UI dev server runs on http://localhost:8080 and calls backend API at http://loca
   - per-job record limit (`ENRICHMENT_MAX_RECORDS_PER_JOB`, default `500`)
 - DOI detection order:
   1. try extracting DOI from `url` / `alternateUrls`
-  2. fallback to Crossref title + author search
+  2. fallback to Crossref/OpenAlex title + author (+ year when available) search
+  3. if DOI is found and URL is missing, URL is filled from provider metadata or DOI URL fallback
 - JUFO lookup:
   - if forum ISSN is available, service does `etsi.php?issn=...` then resolves `/kanava/{id}` for level
   - JUFO requests are throttled with low concurrency and respectful pacing
@@ -171,6 +180,31 @@ UI dev server runs on http://localhost:8080 and calls backend API at http://loca
   - `ENRICHMENT_MAX_QUEUED_JOBS` (default `20`)
   - `ENRICHMENT_MAX_RECORDS_PER_JOB` (default `500`)
   - `RECORD_LIST_LIMIT_MAX` (default `250`)
+
+### Include/Map literature viewer
+- References and citations are shown with structured viewers (collapsed by default, `See more / See less`).
+- Viewer features:
+  - sorting (`Year ↓`, `Year ↑`, `Title`, `Forum`)
+  - free-text filtering (`title/forum/doi`)
+  - DOI filter (`All`, `Has DOI`, `Missing DOI`)
+  - progressive `Load more` rendering for large lists
+- DOI-first rendering is used (no extra generic link when DOI link exists).
+- Enriched field confidence/provenance badges are shown near record metadata.
+
+### Forum cleanup tools (Data tab)
+- Open Data tab -> `Forums` tools sub-tab.
+- Workflow:
+  1. Load/search duplicate groups.
+  2. Select group.
+  3. Choose one target forum and one or more source forums.
+  4. Run `Preview merge`.
+  5. Run `Apply merge`.
+- Merge behavior:
+  - transactional apply
+  - moves all source forum records to target forum
+  - merges aliases with normalization + dedupe
+  - target values win; missing target values can be filled from sources
+  - source forums are soft-deleted (paranoid model)
 
 ### Where to put `OPENALEX_API_KEY`
 - Docker: add `OPENALEX_API_KEY` under `services.backend.environment` in `docker-compose.yml` (or use `${OPENALEX_API_KEY}` with a local `.env` file).

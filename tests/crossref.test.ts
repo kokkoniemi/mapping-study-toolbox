@@ -37,13 +37,32 @@ describe("crossref fallback search ranking", () => {
     const queryTitle = "Toward an Improvement of Engineering Teaming Skills through an In-House Professionalism Course";
     const queryAuthor = "Doe, Alex";
 
-    const selected = pickBestSearchWork(queryTitle, queryAuthor, [
+    const selected = pickBestSearchWork(queryTitle, queryAuthor, 2024, [
       {
         DOI: "10.1000/wrong",
         title: ["A completely different article about climate policy outcomes"],
         author: [{ family: "Doe", given: "Alex" }],
+        issued: { "date-parts": [[2024]] },
       },
     ]);
+
+    expect(selected).toBeNull();
+  });
+
+  it("rejects same author with strong title but wrong year", () => {
+    const selected = pickBestSearchWork(
+      "Predicting teamwork group assessment using log data-based learning analytics",
+      "Smith, Jordan",
+      2024,
+      [
+        {
+          DOI: "10.1000/off-by-years",
+          title: ["Predicting teamwork group assessment using log data-based learning analytics"],
+          author: [{ family: "Smith", given: "Jordan" }],
+          issued: { "date-parts": [[2018]] },
+        },
+      ],
+    );
 
     expect(selected).toBeNull();
   });
@@ -52,16 +71,18 @@ describe("crossref fallback search ranking", () => {
     const queryTitle = "Predicting teamwork group assessment using log data-based learning analytics";
     const queryAuthor = "Smith, Jordan";
 
-    const selected = pickBestSearchWork(queryTitle, queryAuthor, [
+    const selected = pickBestSearchWork(queryTitle, queryAuthor, 2024, [
       {
         DOI: "10.1016/j.jss.2023.111795",
         title: ["Predicting teamwork group assessment using log data-based learning analytics"],
         author: [{ family: "Smith", given: "Jordan" }],
+        issued: { "date-parts": [[2024]] },
       },
       {
         DOI: "10.1000/noise",
         title: ["Teaching methods and teamwork perceptions in virtual settings"],
         author: [{ family: "Smith", given: "Jordan" }],
+        issued: { "date-parts": [[2021]] },
       },
     ]);
 

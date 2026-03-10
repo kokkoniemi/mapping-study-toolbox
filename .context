@@ -17,8 +17,8 @@
 - UI production build output: `ui/dist`.
 
 ## Data model snapshot
-- `Record`: bibliographic and classification fields (`title`, `author`, `url`, `abstract`, `status`, `comment`, `databases`, `alternateUrls`, `editedBy`) plus enrichment fields (DOI, references, citations, topics, affiliations).
-- `Forum`: venue metadata (`name`, `publisher`, `issn`, `jufoLevel`, aliases).
+- `Record`: bibliographic and classification fields (`title`, `author`, `year`, `url`, `abstract`, `status`, `comment`, `databases`, `alternateUrls`, `editedBy`) plus enrichment fields (DOI, references, citations, topics, affiliations, provenance map).
+- `Forum`: venue metadata (`name`, `publisher`, `issn`, `jufoLevel`, aliases, provenance map).
 - `MappingQuestion`: mapping metadata (`title`, `type`, `position`).
 - `MappingOption`: option value (`title`, `position`, `color`, `mappingQuestionId`).
 - `RecordMappingOption`: join table (`recordId`, `mappingQuestionId`, `mappingOptionId`).
@@ -34,8 +34,15 @@
 - Data tab partial updates use `PATCH /api/records/:id`.
 - Enrichment jobs:
   - `POST /api/records/enrichment-jobs`
+    - supports `mode: "missing" | "full"` (default `missing`)
   - `GET /api/records/enrichment-jobs/:jobId` (supports compact polling via `compact=1&resultCursor=&updatedCursor=`)
   - `POST /api/records/enrichment-jobs/:jobId/cancel`
+- Forum cleanup:
+  - `GET /api/forums/duplicates`
+  - `POST /api/forums/merge` (`dryRun=true|false`)
+- Enrichment provenance:
+  - field-level provider + confidence + reason + source + timestamp
+  - stored in `Record.enrichmentProvenance` and `Forum.enrichmentProvenance`
 
 ## Operational notes
 - Configuration template: `config/config.example.json`.

@@ -1,6 +1,11 @@
 import type {
   CreateEnrichmentJobPayload,
+  EnrichmentMode,
   EnrichmentJobSnapshot,
+  EnrichmentProvenanceMap,
+  ForumDuplicatesIndexResponse as SharedForumDuplicatesIndexResponse,
+  ForumMergePayload as SharedForumMergePayload,
+  ForumMergeResponse as SharedForumMergeResponse,
   MappingOptionsIndexResponse as SharedMappingOptionsIndexResponse,
   MappingQuestionsIndexResponse as SharedMappingQuestionsIndexResponse,
   PatchRecordPayload,
@@ -8,7 +13,7 @@ import type {
   RecordsIndexResponse as SharedRecordsIndexResponse,
 } from "@shared/contracts";
 
-export type { CreateEnrichmentJobPayload, PatchRecordPayload, RecordStatus };
+export type { CreateEnrichmentJobPayload, EnrichmentMode, PatchRecordPayload, RecordStatus };
 
 const API_ROOT = "http://localhost:3000/api/";
 const REQUEST_TIMEOUT_MS = 10000;
@@ -187,6 +192,7 @@ export interface Forum {
   jufoFetchedAt?: string | null;
   jufoLastError?: string | null;
   publisher?: string | null;
+  enrichmentProvenance?: EnrichmentProvenanceMap | null;
   [key: string]: unknown;
 }
 
@@ -234,9 +240,11 @@ export interface RecordItem {
   id: number;
   title: string;
   author: string;
+  year: number | null;
   url: string;
   databases: string[];
   alternateUrls: string[];
+  enrichmentProvenance?: EnrichmentProvenanceMap | null;
   doi?: string | null;
   authorDetails?: CrossrefAuthorDetail[] | null;
   referenceItems?: CrossrefReferenceItem[] | null;
@@ -266,6 +274,9 @@ export type EnrichmentJob = EnrichmentJobSnapshot<RecordItem>;
 type RecordsIndexResponse = SharedRecordsIndexResponse<RecordItem>;
 type MappingQuestionsIndexResponse = SharedMappingQuestionsIndexResponse<MappingQuestion>;
 type MappingOptionsIndexResponse = SharedMappingOptionsIndexResponse<MappingOption>;
+type ForumDuplicatesIndexResponse = SharedForumDuplicatesIndexResponse;
+type ForumMergePayload = SharedForumMergePayload;
+type ForumMergeResponse = SharedForumMergeResponse;
 
 type UpdateRecordPayload = Record<string, unknown>;
 type SaveMappingOptionPayload = {
@@ -311,6 +322,13 @@ export const records = {
     cancelJob: (jobId: string, params?: QueryParams) =>
       http.post<EnrichmentJob, Record<string, never>>(`records/enrichment-jobs/${jobId}/cancel`, {}, { params }),
   },
+};
+
+export const forums = {
+  duplicates: (params?: QueryParams) =>
+    http.get<ForumDuplicatesIndexResponse>("forums/duplicates", { params }),
+  merge: (data: ForumMergePayload, params?: QueryParams) =>
+    http.post<ForumMergeResponse, ForumMergePayload>("forums/merge", data, { params }),
 };
 
 export const mappingQuestions = {

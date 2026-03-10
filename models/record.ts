@@ -9,10 +9,12 @@ const defineRecord: ModelFactory<RecordModelStatic> = (sequelize: Sequelize, Dat
       title: DataTypes.TEXT,
       url: DataTypes.STRING,
       author: DataTypes.STRING,
+      year: DataTypes.INTEGER,
       status: DataTypes.STRING, // null,"excluded","included","uncertain"
       abstract: DataTypes.TEXT,
       databases: DataTypes.JSON, // JSON array
       alternateUrls: DataTypes.JSON, // JSON array
+      enrichmentProvenance: DataTypes.JSON,
       forumId: DataTypes.INTEGER,
       doi: DataTypes.STRING,
       authorDetails: DataTypes.JSON, // normalized Crossref author objects

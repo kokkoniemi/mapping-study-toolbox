@@ -3,14 +3,23 @@ import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const dbMock = vi.hoisted(() => ({
+  Forum: {
+    findAll: vi.fn(),
+    destroy: vi.fn(),
+  },
   Sequelize: {
     fn: vi.fn((name: string, ...args: unknown[]) => ({ fn: name, args })),
     col: vi.fn((name: string) => ({ col: name })),
+  },
+  sequelize: {
+    transaction: vi.fn(async (handler: (transaction: Record<string, unknown>) => Promise<void>) =>
+      handler({ tx: true })),
   },
   Record: {
     count: vi.fn(),
     findAll: vi.fn(),
     findByPk: vi.fn(),
+    update: vi.fn(),
   },
   MappingOption: {
     count: vi.fn(),
@@ -57,9 +66,13 @@ const describeWhenSocketAllowed = canListenToSocket ? describe : describe.skip;
 
 describeWhenSocketAllowed("API integration", () => {
   beforeEach(() => {
+    dbMock.Forum.findAll.mockReset();
+    dbMock.Forum.destroy.mockReset();
+    dbMock.sequelize.transaction.mockClear();
     dbMock.Record.count.mockReset();
     dbMock.Record.findAll.mockReset();
     dbMock.Record.findByPk.mockReset();
+    dbMock.Record.update.mockReset();
 
     dbMock.MappingOption.count.mockReset();
     dbMock.MappingOption.create.mockReset();
@@ -211,6 +224,87 @@ describeWhenSocketAllowed("API integration", () => {
       status: "queued",
       total: 2,
       processed: 0,
+    });
+  });
+
+  it("GET /api/forums/duplicates returns grouped duplicate payload", async () => {
+    dbMock.Forum.findAll.mockResolvedValue([
+      {
+        id: 1,
+        name: "Forum A",
+        alternateNames: [],
+        issn: "1234-5678",
+        publisher: "Pub",
+        jufoLevel: 2,
+      },
+      {
+        id: 2,
+        name: "forum a",
+        alternateNames: [],
+        issn: "1234-5678",
+        publisher: "Pub",
+        jufoLevel: 2,
+      },
+    ]);
+    dbMock.Record.findAll.mockResolvedValue([
+      { forumId: 1, recordCount: 5 },
+      { forumId: 2, recordCount: 3 },
+    ]);
+
+    const app = createApp();
+    const response = await request(app).get("/api/forums/duplicates").query({ offset: 0, limit: 25 });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      count: 1,
+      groups: [
+        {
+          count: 2,
+        },
+      ],
+    });
+  });
+
+  it("POST /api/forums/merge supports dryRun", async () => {
+    dbMock.Forum.findAll.mockResolvedValue([
+      {
+        id: 10,
+        name: "Target",
+        alternateNames: [],
+        issn: null,
+        publisher: null,
+        jufoLevel: null,
+        jufoId: null,
+        enrichmentProvenance: null,
+        update: vi.fn().mockResolvedValue(undefined),
+      },
+      {
+        id: 11,
+        name: "Source",
+        alternateNames: ["Source Alias"],
+        issn: "1111-1111",
+        publisher: "Pub",
+        jufoLevel: 2,
+        jufoId: 200,
+        enrichmentProvenance: null,
+      },
+    ]);
+    dbMock.Record.findAll.mockResolvedValue([{ id: 501 }, { id: 502 }]);
+
+    const app = createApp();
+    const response = await request(app).post("/api/forums/merge").send({
+      targetForumId: 10,
+      sourceForumIds: [11],
+      dryRun: true,
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      dryRun: true,
+      targetForumId: 10,
+      sourceForumIds: [11],
+      movedRecordCount: 2,
+      updatedRecordIds: [501, 502],
     });
   });
 

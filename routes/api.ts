@@ -3,6 +3,7 @@ import { Router } from "express";
 import { createRateLimitMiddleware } from "../lib/security";
 import * as records from "./records";
 import * as mappingQuestions from "./mappingQuestions";
+import * as forums from "./forums";
 
 const router = Router();
 const parsePositiveInteger = (value: string | undefined, fallback: number) => {
@@ -32,6 +33,10 @@ router.get("/records/enrichment-jobs/:jobId", records.getEnrichment);
 router.post("/records/enrichment-jobs/:jobId/cancel", enrichmentRateLimit, records.cancelEnrichment);
 router.post("/records/:recordId/mapping-options", records.createOption);
 router.delete("/records/:recordId/mapping-options/:mappingOptionId", records.removeOption);
+
+// FORUMS
+router.get("/forums/duplicates", forums.listDuplicates);
+router.post("/forums/merge", forums.mergeForums);
 
 // MAPPING QUESTIONS
 router.get("/mapping-questions", mappingQuestions.listing);

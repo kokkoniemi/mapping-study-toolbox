@@ -49,10 +49,15 @@ export type CrossrefWork = {
   author?: CrossrefAuthorRaw[];
   reference?: CrossrefReferenceRaw[];
   publisher?: string;
+  URL?: string;
   ISSN?: string[];
   "issn-type"?: Array<{ value?: string; type?: string }>;
   "container-title"?: string[];
   "short-container-title"?: string[];
+  issued?: { "date-parts"?: Array<Array<number>> };
+  "published-print"?: { "date-parts"?: Array<Array<number>> };
+  "published-online"?: { "date-parts"?: Array<Array<number>> };
+  created?: { "date-parts"?: Array<Array<number>> };
 };
 
 type CrossrefSearchMessage = {
@@ -78,6 +83,18 @@ const scoreAuthorSimilarity = (queryAuthor: string | null | undefined, work: Cro
   }
 
   return families.some((family) => family.includes(queryFamily) || queryFamily.includes(family)) ? 0.5 : 0;
+};
+
+export const extractWorkYear = (work: CrossrefWork): number | null => {
+  const candidates = [
+    work.issued?.["date-parts"]?.[0]?.[0],
+    work["published-print"]?.["date-parts"]?.[0]?.[0],
+    work["published-online"]?.["date-parts"]?.[0]?.[0],
+    work.created?.["date-parts"]?.[0]?.[0],
+  ];
+
+  const year = candidates.find((value) => Number.isInteger(value) && Number(value) > 0);
+  return year ? Number(year) : null;
 };
 
 const sanitizeDoi = (value: string) => normalizeDoiValue(value) ?? "";
@@ -161,6 +178,7 @@ export const extractDoiFromRecordUrls = (
 export const pickBestSearchWork = (
   title: string,
   author: string | null | undefined,
+  queryYear: number | null | undefined,
   items: CrossrefWork[],
 ): CrossrefWork | null => {
   if (items.length === 0) {
@@ -172,7 +190,23 @@ export const pickBestSearchWork = (
       const candidateTitle = item.title?.[0] ?? "";
       const titleScore = scoreTitleSimilarity(title, candidateTitle);
       const authorScore = scoreAuthorSimilarity(author, item);
-      return { item, titleScore, authorScore, score: titleScore * 100 + authorScore * 8 };
+      const workYear = extractWorkYear(item);
+      const yearScore =
+        queryYear === null || queryYear === undefined
+          ? 0.5
+          : workYear === null
+            ? 0.3
+            : Math.abs(workYear - queryYear) <= 1
+              ? 1
+              : 0;
+      return {
+        item,
+        titleScore,
+        authorScore,
+        yearScore,
+        workYear,
+        score: titleScore * 100 + authorScore * 10 + yearScore * 12,
+      };
     })
     .sort((left, right) => right.score - left.score);
 
@@ -183,6 +217,12 @@ export const pickBestSearchWork = (
 
   if (best.titleScore < CROSSREF_SEARCH_MIN_TITLE_SCORE) {
     return null;
+  }
+
+  if (queryYear !== null && queryYear !== undefined && best.workYear !== null) {
+    if (Math.abs(best.workYear - queryYear) > 1) {
+      return null;
+    }
   }
 
   const second = scored[1];
@@ -289,7 +329,11 @@ export class CrossrefClient {
     return payload.message;
   }
 
-  async searchWorkByTitleAndAuthor(title: string, author?: string | null): Promise<CrossrefWork | null> {
+  async searchWorkByTitleAndAuthor(
+    title: string,
+    author?: string | null,
+    year?: number | null,
+  ): Promise<CrossrefWork | null> {
     const trimmedTitle = title.trim();
     if (!trimmedTitle) {
       return null;
@@ -302,6 +346,6 @@ export class CrossrefClient {
     });
 
     const items = payload?.message?.items ?? [];
-    return pickBestSearchWork(trimmedTitle, author, items);
+    return pickBestSearchWork(trimmedTitle, author, year, items);
   }
 }
