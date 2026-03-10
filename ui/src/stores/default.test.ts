@@ -215,6 +215,92 @@ describe("defaultStore", () => {
     expect(store.searchFilter).toBe("filtered");
   });
 
+  it("hydrateRecordDetails fetches detail when only topics are present in list item", async () => {
+    const store = defaultStore();
+
+    store.pageItems = [
+      makeRecord({
+        id: 101,
+        openAlexTopicItems: [
+          {
+            id: "https://openalex.org/T1",
+            displayName: "Teamwork",
+            score: 0.9,
+            subfield: null,
+            field: null,
+            domain: null,
+          },
+        ],
+      }),
+    ];
+
+    apiMocks.recordsGet.mockClear();
+    apiMocks.recordsGet.mockResolvedValue({
+      status: 200,
+      data: makeRecord({
+        id: 101,
+        referenceItems: [
+          {
+            doi: "10.1000/example",
+            key: "ref-1",
+            unstructured: null,
+            articleTitle: "Reference title",
+            journalTitle: "Forum",
+            author: "Author, A.",
+            year: "2021",
+            volume: "12",
+            firstPage: "44",
+          },
+        ],
+        openAlexCitationItems: [
+          {
+            openAlexId: "https://openalex.org/W1",
+            doi: "10.1000/cite",
+            title: "Citation title",
+            year: 2022,
+            url: "https://doi.org/10.1000/cite",
+            forum: "Citation forum",
+            citedByCount: 3,
+          },
+        ],
+      }),
+    });
+
+    await store.hydrateRecordDetails(101);
+
+    expect(apiMocks.recordsGet).toHaveBeenCalledWith(101);
+    expect(store.pageItems[0]?.referenceItems?.length).toBe(1);
+    expect(store.pageItems[0]?.openAlexCitationItems?.length).toBe(1);
+  });
+
+  it("hydrateRecordDetails skips fetch when references and citations are already loaded", async () => {
+    const store = defaultStore();
+
+    store.pageItems = [
+      makeRecord({
+        id: 102,
+        referenceItems: [],
+        openAlexCitationItems: [],
+        openAlexTopicItems: [
+          {
+            id: "https://openalex.org/T2",
+            displayName: "Collaboration",
+            score: 0.82,
+            subfield: null,
+            field: null,
+            domain: null,
+          },
+        ],
+      }),
+    ];
+
+    apiMocks.recordsGet.mockClear();
+
+    await store.hydrateRecordDetails(102);
+
+    expect(apiMocks.recordsGet).not.toHaveBeenCalled();
+  });
+
   it("setItemStatus updates current record in-place when filter is not active", async () => {
     const store = defaultStore();
     const first = makeRecord({ id: 1, status: null });

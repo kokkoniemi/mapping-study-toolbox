@@ -238,7 +238,6 @@ export const defaultStore = defineStore("default", {
       const hasDetailedPayload =
         listItem.referenceItems !== undefined
         || listItem.openAlexCitationItems !== undefined
-        || listItem.openAlexTopicItems !== undefined
         || listItem.authorDetails !== undefined;
 
       if (hasDetailedPayload) {
