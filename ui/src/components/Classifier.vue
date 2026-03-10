@@ -3,9 +3,12 @@
         <div class="classifier-layout">
             <div class="classifier-main">
                 <h4 class="statusbar">
-                    id: {{ currentItem.id }} | created: {{ createdFormatted }} |&nbsp;
-                    modified: {{ modifiedFormatted }} | status: {{ currentItem.status }} |&nbsp;
-                    db: {{ currentItem.databases.join(", ") }}
+                    <span class="statusbar__meta">
+                        id: {{ currentItem.id }} | created: {{ createdFormatted }} |
+                        modified: {{ modifiedFormatted }} | status: {{ currentItem.status }}
+                    </span>
+                    <span class="statusbar__sep" aria-hidden="true">|</span>
+                    <span class="statusbar__db" :title="databaseList">db: {{ databaseList }}</span>
                 </h4>
 
                 <h1>{{ currentItem.title }}</h1>
@@ -387,6 +390,14 @@ const modifiedFormatted = computed(() => {
     return null;
   }
   return formatDate(new Date(updatedAt), "dd.MM.yyyy HH:mm:ss ");
+});
+
+const databaseList = computed(() => {
+  const databases = currentItem.value?.databases;
+  if (!Array.isArray(databases) || databases.length === 0) {
+    return "-";
+  }
+  return databases.join(", ");
 });
 
 const nextFlag = computed(() => {
@@ -966,5 +977,27 @@ h1 {
     text-transform: uppercase;
     font-size: 12px;
     font-weight: 400;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.statusbar__meta {
+    flex: 0 0 auto;
+}
+
+.statusbar__sep {
+    flex: 0 0 auto;
+}
+
+.statusbar__db {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 </style>
