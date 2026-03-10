@@ -65,6 +65,25 @@ const parseOptionalBoolean = (value: unknown, key: string) => {
   throw badRequest(`${key} must be a boolean`);
 };
 
+const duplicateGroupPriority = (group: ForumDuplicateGroup) => {
+  if (group.issn) {
+    return 2;
+  }
+  if (group.normalizedName) {
+    return 1;
+  }
+  return 0;
+};
+
+const shouldReplaceDuplicateGroup = (current: ForumDuplicateGroup, candidate: ForumDuplicateGroup) => {
+  const currentPriority = duplicateGroupPriority(current);
+  const candidatePriority = duplicateGroupPriority(candidate);
+  if (candidatePriority !== currentPriority) {
+    return candidatePriority > currentPriority;
+  }
+  return candidate.key.localeCompare(current.key) < 0;
+};
+
 const mergeProvenance = (target: EnrichmentProvenanceMap | null, sources: ForumLike[]) => {
   const merged: EnrichmentProvenanceMap = { ...(target ?? {}) };
   for (const source of sources) {
@@ -146,7 +165,7 @@ export const listDuplicates = async (req: Request, res: Response) => {
     }
   }
 
-  const groups: ForumDuplicateGroup[] = [];
+  const groupByForumSignature = new Map<string, ForumDuplicateGroup>();
   for (const [key, idSet] of groupedForumIds.entries()) {
     if (idSet.size < 2) {
       continue;
@@ -165,14 +184,25 @@ export const listDuplicates = async (req: Request, res: Response) => {
 
     const normalizedName = key.startsWith("name:") ? key.replace(/^name:/, "") : null;
     const issn = key.startsWith("issn:") ? key.replace(/^issn:/, "") : null;
-    groups.push({
+    const group: ForumDuplicateGroup = {
       key,
       normalizedName,
       issn,
       count: duplicateItems.length,
       forums: duplicateItems,
-    });
+    };
+
+    const signature = duplicateItems
+      .map((item) => item.id)
+      .sort((left, right) => left - right)
+      .join(",");
+    const existing = groupByForumSignature.get(signature);
+    if (!existing || shouldReplaceDuplicateGroup(existing, group)) {
+      groupByForumSignature.set(signature, group);
+    }
   }
+
+  const groups = [...groupByForumSignature.values()];
 
   let filtered = groups;
   if (search) {
