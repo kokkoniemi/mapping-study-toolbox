@@ -125,6 +125,10 @@ UI dev server runs on http://localhost:8080 and calls backend API at http://loca
 - `POST /api/records/enrichment-jobs/:jobId/cancel` to stop queued/running enrichment jobs.
 - `GET /api/forums/duplicates` to discover duplicate forum groups (name/alias/issn based).
 - `POST /api/forums/merge` to preview/apply forum merges (`dryRun=true|false`).
+- `POST /api/imports/preview` to parse file content and preview import rows before writing records.
+- `POST /api/imports` to create an import and insert new records.
+- `GET /api/imports` to list imports with linked record counts.
+- `DELETE /api/imports/:id` to remove an import and records created by that import.
 
 ### Crossref + OpenAlex enrichment
 - In the `Data` tab, select rows (leftmost checkbox column), open the `Enrichment` tools sub-tab, choose service (`Crossref`, `OpenAlex`, or `Crossref + OpenAlex`) and mode (`Missing only` / `Full`), then click `Enrich selected`.
@@ -174,7 +178,9 @@ UI dev server runs on http://localhost:8080 and calls backend API at http://loca
   - `JUFO_MIN_DELAY_MS` (default `500`)
   - `JUFO_MAX_DELAY_MS` (default `1000`)
   - `CORS_ALLOWED_ORIGINS` (comma-separated list, default `http://localhost:8080,http://localhost:3000`)
-  - `REQUEST_BODY_LIMIT` (default `1mb`)
+  - `REQUEST_BODY_LIMIT` (default `8mb`)
+  - `IMPORT_MAX_CONTENT_BYTES` (default `8000000`)
+  - `IMPORT_PREVIEW_MAX_ROWS` (default `200`)
   - `ENRICHMENT_RATE_LIMIT_MAX_REQUESTS` (default `20`)
   - `ENRICHMENT_RATE_LIMIT_WINDOW_MS` (default `60000`)
   - `ENRICHMENT_MAX_QUEUED_JOBS` (default `20`)
@@ -205,6 +211,24 @@ UI dev server runs on http://localhost:8080 and calls backend API at http://loca
   - merges aliases with normalization + dedupe
   - target values win; missing target values can be filled from sources
   - source forums are soft-deleted (paranoid model)
+
+### Data import tools (Data tab)
+- Open Data tab -> `Import` tools sub-tab.
+- Supported input:
+  - Scopus CSV
+  - Scopus/ACM/Google Scholar BibTeX
+  - other CSV/BibTeX files with common `title/author/year/doi/url` columns/fields
+- Workflow:
+  1. choose file
+  2. choose source (`Auto detect` recommended)
+  3. click `Preview`
+  4. inspect rows (`new`, `duplicate`, `invalid`)
+  5. click `Import`
+- Duplicate detection is applied before insert using:
+  - DOI match
+  - URL/alternate URL match
+  - title + first author family + year compatibility
+- Import history is shown in the same panel and supports deleting an import together with its imported records.
 
 ### Where to put `OPENALEX_API_KEY`
 - Docker: add `OPENALEX_API_KEY` under `services.backend.environment` in `docker-compose.yml` (or use `${OPENALEX_API_KEY}` with a local `.env` file).

@@ -5,7 +5,7 @@ import { createCorsMiddleware, createSecurityHeadersMiddleware, parseAllowedOrig
 import apiRouter from "./routes/api";
 
 const PORT = Number(process.env.PORT ?? 3000);
-const REQUEST_BODY_LIMIT = process.env.REQUEST_BODY_LIMIT?.trim() || "1mb";
+const REQUEST_BODY_LIMIT = process.env.REQUEST_BODY_LIMIT?.trim() || "8mb";
 const DEFAULT_ALLOWED_ORIGINS = ["http://localhost:8080", "http://localhost:3000"] as const;
 
 export const createApp = () => {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  extractAbstractFromWork,
   extractDoiFromRecordUrls,
   extractDoiFromText,
   extractIssnFromWork,
@@ -103,5 +104,21 @@ describe("crossref ISSN extraction", () => {
       "issn-type": [{ value: "1234-5678", type: "electronic" }],
     });
     expect(issn).toBe("0164-1212");
+  });
+});
+
+describe("crossref abstract extraction", () => {
+  it("extracts and normalizes JATS-like abstract markup", () => {
+    const abstract = extractAbstractFromWork({
+      abstract:
+        "<jats:p>The <jats:bold>study</jats:bold> explores teamwork &amp; collaboration.</jats:p>",
+    });
+
+    expect(abstract).toBe("The study explores teamwork & collaboration.");
+  });
+
+  it("returns null when abstract is missing", () => {
+    const abstract = extractAbstractFromWork({});
+    expect(abstract).toBeNull();
   });
 });

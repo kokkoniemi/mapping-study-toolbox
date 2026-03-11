@@ -1,4 +1,5 @@
 import {
+  decodeHtmlEntities,
   normalizeDoiValue,
   parseAuthorFamilyFromText,
   parseRetryAfterMs,
@@ -46,6 +47,7 @@ export type CrossrefReferenceRaw = {
 export type CrossrefWork = {
   DOI?: string;
   title?: string[];
+  abstract?: string;
   author?: CrossrefAuthorRaw[];
   reference?: CrossrefReferenceRaw[];
   publisher?: string;
@@ -95,6 +97,23 @@ export const extractWorkYear = (work: CrossrefWork): number | null => {
 
   const year = candidates.find((value) => Number.isInteger(value) && Number(value) > 0);
   return year ? Number(year) : null;
+};
+
+const stripMarkup = (value: string) =>
+  value
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+export const extractAbstractFromWork = (work: CrossrefWork): string | null => {
+  if (!work.abstract) {
+    return null;
+  }
+
+  const decoded = decodeHtmlEntities(work.abstract);
+  const withoutJatsPrefix = decoded.replace(/^jats:/gi, "");
+  const cleaned = stripMarkup(withoutJatsPrefix);
+  return cleaned.length > 0 ? cleaned : null;
 };
 
 const sanitizeDoi = (value: string) => normalizeDoiValue(value) ?? "";

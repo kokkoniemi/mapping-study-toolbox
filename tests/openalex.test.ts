@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { pickBestOpenAlexSearchWork } from "../lib/openalex";
+import { decodeOpenAlexAbstractInvertedIndex, pickBestOpenAlexSearchWork } from "../lib/openalex";
 
 describe("openalex fallback search ranking", () => {
   it("rejects mismatched title even when author matches", () => {
@@ -61,5 +61,22 @@ describe("openalex fallback search ranking", () => {
     );
 
     expect(selected).toBeNull();
+  });
+});
+
+describe("openalex abstract decoding", () => {
+  it("decodes abstract_inverted_index into readable text", () => {
+    const abstract = decodeOpenAlexAbstractInvertedIndex({
+      Teamwork: [0],
+      skills: [1],
+      improve: [2],
+      outcomes: [3],
+    });
+
+    expect(abstract).toBe("Teamwork skills improve outcomes");
+  });
+
+  it("returns null for empty abstract index", () => {
+    expect(decodeOpenAlexAbstractInvertedIndex({})).toBeNull();
   });
 });

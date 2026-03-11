@@ -1,6 +1,7 @@
 import db from "../models";
 import type { CrossrefAuthorDetail, CrossrefReferenceItem } from "../models/types";
 import {
+  extractAbstractFromWork,
   extractDoiFromRecordUrls,
   extractDoiFromText,
   extractWorkYear,
@@ -242,6 +243,7 @@ const enrichReferenceTitlesByDoi = async (
 const getMissingCrossrefTargets = (record: {
   doi?: string | null;
   url?: string | null;
+  abstract?: string | null;
   year?: number | null;
   forumId?: number | null;
   authorDetails?: unknown[] | null;
@@ -259,6 +261,9 @@ const getMissingCrossrefTargets = (record: {
   }
   if (!record.url || record.url.trim().length === 0) {
     missing.push("url");
+  }
+  if (!record.abstract || record.abstract.trim().length === 0) {
+    missing.push("abstract");
   }
   if (!record.year) {
     missing.push("year");
@@ -373,6 +378,7 @@ export const enrichRecordWithCrossref = async (
   }
 
   const normalizedDoi = sanitizeDoi(work.DOI) ?? doiUsed;
+  const crossrefAbstract = extractAbstractFromWork(work);
   const authorDetails = normalizeAuthorDetails(work.author);
   const displayAuthor = formatAuthorDisplay(authorDetails);
   const normalizedReferenceItems = normalizeReferenceItems(work.reference);
@@ -428,6 +434,17 @@ export const enrichRecordWithCrossref = async (
         mode,
       });
     }
+  }
+
+  if ((mode === "full" || missingTargets.includes("abstract")) && crossrefAbstract) {
+    updatePayload.abstract = crossrefAbstract;
+    provenanceUpdates.abstract = buildFieldProvenance({
+      provider: "crossref",
+      confidenceScore: Math.max(78, matchScore - 3),
+      reason: "Crossref abstract normalized from work metadata",
+      source,
+      mode,
+    });
   }
 
   if ((mode === "full" || missingTargets.includes("year")) && workYear) {

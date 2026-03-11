@@ -28,6 +28,14 @@
         >
           Forums
         </button>
+        <button
+          type="button"
+          class="data-tools__tab"
+          :class="{ 'data-tools__tab--active': toolsTab === 'imports' }"
+          @click="onImportsTabOpen"
+        >
+          Import
+        </button>
       </div>
 
       <div v-if="toolsTab === 'enrichment'" class="data-tools__panel">
@@ -103,7 +111,7 @@
         </div>
       </div>
 
-      <div v-else class="data-tools__panel data-tools__panel--forums">
+      <div v-else-if="toolsTab === 'forums'" class="data-tools__panel data-tools__panel--forums">
         <div class="forum-tools__top">
           <label class="forum-tools__label">
             <span>Search duplicates</span>
@@ -208,6 +216,130 @@
           </div>
         </div>
       </div>
+
+      <div v-else class="data-tools__panel data-tools__panel--imports">
+        <div class="import-tools__top">
+          <label class="import-tools__label import-tools__label--file">
+            <span>File</span>
+            <input
+              type="file"
+              accept=".csv,.bib,.bibtex,.txt,text/csv,text/plain,application/x-bibtex"
+              @change="onImportFileChange"
+            />
+          </label>
+
+          <label class="import-tools__label">
+            <span>Source</span>
+            <select :value="importSource" :disabled="importPreviewLoading || importApplyLoading" @change="onImportSourceChange">
+              <option v-for="option in importSourceOptions" :key="option.value" :value="option.value">
+                {{ option.label }}
+              </option>
+            </select>
+          </label>
+
+          <div class="import-tools__actions">
+            <button type="button" :disabled="!canPreviewImport" @click="previewImportFile">
+              {{ importPreviewLoading ? "Previewing..." : "Preview" }}
+            </button>
+            <button type="button" class="data-tools__primary" :disabled="!canCreateImport" @click="createImportFile">
+              {{ importApplyLoading ? "Importing..." : "Import" }}
+            </button>
+            <button type="button" :disabled="!importFile && !importPreview" @click="clearImportSelection">Clear</button>
+          </div>
+        </div>
+
+        <p v-if="importError" class="import-tools__error">{{ importError }}</p>
+        <p v-if="importMessage" class="import-tools__message">{{ importMessage }}</p>
+
+        <div v-if="importPreview" class="import-tools__summary">
+          <span>{{ importPreview.detectedSource }} / {{ importPreview.detectedFormat }}</span>
+          <span>Total {{ importPreview.total }}</span>
+          <span>New {{ importPreview.newRecords }}</span>
+          <span>Duplicates {{ importPreview.duplicates }}</span>
+          <span>Invalid {{ importPreview.invalid }}</span>
+        </div>
+
+        <ul v-if="importPreview?.warnings?.length" class="import-tools__warnings">
+          <li v-for="warning in importPreview.warnings" :key="warning">{{ warning }}</li>
+        </ul>
+
+        <div class="import-tools__content">
+          <section class="import-tools__preview">
+            <h4>Preview</h4>
+            <div v-if="importPreview" class="import-tools__table-wrap">
+              <table class="import-tools__table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Status</th>
+                    <th>Title</th>
+                    <th>Author</th>
+                    <th>Year</th>
+                    <th>DOI</th>
+                    <th>Duplicate</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="row in importPreview.records" :key="`${row.rowNumber}-${row.title ?? ''}`">
+                    <td>{{ row.rowNumber }}</td>
+                    <td>
+                      <span class="import-tools__status" :class="`import-tools__status--${row.status}`">
+                        {{ row.status }}
+                      </span>
+                    </td>
+                    <td>{{ row.title || "-" }}</td>
+                    <td>{{ row.author || "-" }}</td>
+                    <td>{{ row.year ?? "-" }}</td>
+                    <td>{{ row.doi || "-" }}</td>
+                    <td>
+                      <span v-if="row.duplicateReason">
+                        {{ row.duplicateReason }}
+                        <template v-if="row.duplicateRecordId">(#{{ row.duplicateRecordId }})</template>
+                      </span>
+                      <span v-else>-</span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p v-else class="import-tools__empty">Select a file and click Preview.</p>
+          </section>
+
+          <section class="import-tools__history">
+            <div class="import-tools__history-head">
+              <h4>Imports</h4>
+              <span class="import-tools__history-count">{{ importHistoryTotal }} total</span>
+              <button type="button" :disabled="importHistoryLoading" @click="reloadImportHistory">
+                {{ importHistoryLoading ? "Loading..." : "Reload" }}
+              </button>
+            </div>
+            <ul class="import-tools__history-list">
+              <li v-for="entry in importHistory" :key="entry.id" class="import-tools__history-item">
+                <div class="import-tools__history-meta">
+                  <strong>#{{ entry.id }} {{ entry.fileName || "(no file name)" }}</strong>
+                  <span>{{ entry.source || "-" }} / {{ entry.format || "-" }}</span>
+                  <span>
+                    Imported {{ entry.imported ?? 0 }} / {{ entry.total ?? 0 }}
+                    (duplicates {{ entry.dublicates ?? 0 }})
+                  </span>
+                  <span>{{ entry.recordCount }} linked records</span>
+                </div>
+                <button
+                  type="button"
+                  class="import-tools__danger"
+                  :disabled="importDeleteLoadingId === entry.id"
+                  @click="removeImport(entry.id)"
+                >
+                  {{ importDeleteLoadingId === entry.id ? "Deleting..." : "Delete import + records" }}
+                </button>
+              </li>
+              <li v-if="!importHistoryLoading && importHistory.length === 0" class="import-tools__empty">
+                No imports yet.
+              </li>
+            </ul>
+          </section>
+        </div>
+      </div>
     </section>
 
     <EnrichmentStatus
@@ -273,6 +405,9 @@ import type {
   ForumDuplicateGroup,
   ForumDuplicateItem,
   ForumMergeResponse,
+  ImportPreviewResponse,
+  ImportSource,
+  ImportSummary,
   StatusFilter,
 } from "@shared/contracts";
 import type { CellChange } from "handsontable/common";
@@ -288,7 +423,7 @@ import { useDataGrid, type DataGridExpose } from "../composables/useDataGrid";
 import { useEnrichmentJob } from "../composables/useEnrichmentJob";
 import { decodeHtmlEntities, debounce } from "../helpers/utils";
 import { defaultStore } from "../stores/default";
-import { forums, type MappingOption, type RecordItem, type RecordStatus } from "../helpers/api";
+import { forums, imports as importApi, type MappingOption, type RecordItem, type RecordStatus } from "../helpers/api";
 import { getApiErrorMessage } from "../helpers/errors";
 
 type GridRow = Record<string, string | number | boolean> & { __recordId: number };
@@ -304,7 +439,7 @@ type AnchorRect = {
   width: number;
   height: number;
 };
-type DataToolsTab = "enrichment" | "forums";
+type DataToolsTab = "enrichment" | "forums" | "imports";
 type ConfidenceChip = {
   label: string;
   score: number;
@@ -339,6 +474,13 @@ const searchInput = ref(searchFilter.value);
 const selectedRecordIds = ref<number[]>([]);
 const isUnmounted = ref(false);
 const toolsTab = ref<DataToolsTab>("enrichment");
+const importSourceOptions: Array<{ value: ImportSource; label: string }> = [
+  { value: "auto", label: "Auto detect" },
+  { value: "scopus", label: "Scopus" },
+  { value: "acm", label: "ACM Digital Library" },
+  { value: "google-scholar", label: "Google Scholar" },
+  { value: "other-bibtex", label: "Other BibTeX" },
+];
 
 const forumGroups = ref<ForumDuplicateGroup[]>([]);
 const forumGroupsTotal = ref(0);
@@ -352,6 +494,17 @@ const selectedSourceForumIds = ref<number[]>([]);
 const forumMergePreview = ref<ForumMergeResponse | null>(null);
 const forumMergeLoading = ref(false);
 const forumMergeError = ref("");
+const importFile = ref<File | null>(null);
+const importSource = ref<ImportSource>("auto");
+const importPreview = ref<ImportPreviewResponse | null>(null);
+const importPreviewLoading = ref(false);
+const importApplyLoading = ref(false);
+const importError = ref("");
+const importMessage = ref("");
+const importHistory = ref<ImportSummary[]>([]);
+const importHistoryTotal = ref(0);
+const importHistoryLoading = ref(false);
+const importDeleteLoadingId = ref<number | null>(null);
 
 const {
   enrichmentRunning,
@@ -403,6 +556,12 @@ const canApplyForumMerge = computed(
 );
 const forumHasMore = computed(
   () => forumGroups.value.length < forumGroupsTotal.value,
+);
+const canPreviewImport = computed(
+  () => importFile.value !== null && !importPreviewLoading.value && !importApplyLoading.value,
+);
+const canCreateImport = computed(
+  () => importFile.value !== null && !importPreviewLoading.value && !importApplyLoading.value,
 );
 const totalCountLabel = computed(() => {
   if (dataLoading.value && dataTotal.value <= 0) {
@@ -1352,6 +1511,131 @@ const applyForumMerge = async () => {
   }
 };
 
+const readFileAsText = async (file: File) =>
+  new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
+    reader.onerror = () => reject(new Error("Failed to read file"));
+    reader.readAsText(file);
+  });
+
+const clearImportSelection = () => {
+  importFile.value = null;
+  importPreview.value = null;
+  importError.value = "";
+  importMessage.value = "";
+};
+
+const loadImportHistory = async () => {
+  if (importHistoryLoading.value) {
+    return;
+  }
+
+  importHistoryLoading.value = true;
+  try {
+    const response = await importApi.index({ offset: 0, limit: 50 });
+    importHistory.value = response.data.imports;
+    importHistoryTotal.value = response.data.count;
+  } catch (error) {
+    importError.value = getApiErrorMessage(error);
+  } finally {
+    importHistoryLoading.value = false;
+  }
+};
+
+const reloadImportHistory = () => {
+  void loadImportHistory();
+};
+
+const onImportFileChange = (event: Event) => {
+  const target = event.target as HTMLInputElement;
+  importFile.value = target.files?.[0] ?? null;
+  importPreview.value = null;
+  importError.value = "";
+  importMessage.value = "";
+};
+
+const onImportSourceChange = (event: Event) => {
+  importSource.value = (event.target as HTMLSelectElement).value as ImportSource;
+};
+
+const previewImportFile = async () => {
+  if (!importFile.value) {
+    return;
+  }
+
+  importPreviewLoading.value = true;
+  importError.value = "";
+  importMessage.value = "";
+
+  try {
+    const content = await readFileAsText(importFile.value);
+    const response = await importApi.preview({
+      fileName: importFile.value.name,
+      source: importSource.value,
+      content,
+    });
+    importPreview.value = response.data;
+  } catch (error) {
+    importError.value = getApiErrorMessage(error);
+  } finally {
+    importPreviewLoading.value = false;
+  }
+};
+
+const createImportFile = async () => {
+  if (!importFile.value) {
+    return;
+  }
+
+  importApplyLoading.value = true;
+  importError.value = "";
+  importMessage.value = "";
+
+  try {
+    const content = await readFileAsText(importFile.value);
+    const response = await importApi.create({
+      fileName: importFile.value.name,
+      source: importSource.value,
+      content,
+    });
+
+    importPreview.value = response.data.summary;
+    importMessage.value = `Import #${response.data.import.id} created. Imported ${response.data.createdRecordIds.length} records.`;
+    await Promise.all([loadImportHistory(), store.loadInitialData(), store.fetchPageItems()]);
+  } catch (error) {
+    importError.value = getApiErrorMessage(error);
+  } finally {
+    importApplyLoading.value = false;
+  }
+};
+
+const removeImport = async (importId: number) => {
+  if (!window.confirm(`Delete import #${importId} and all records imported in it?`)) {
+    return;
+  }
+
+  importDeleteLoadingId.value = importId;
+  importError.value = "";
+  importMessage.value = "";
+  try {
+    const response = await importApi.delete(importId);
+    importMessage.value = `Import #${response.data.importId} deleted with ${response.data.deletedRecords} records.`;
+    await Promise.all([loadImportHistory(), store.loadInitialData(), store.fetchPageItems()]);
+  } catch (error) {
+    importError.value = getApiErrorMessage(error);
+  } finally {
+    importDeleteLoadingId.value = null;
+  }
+};
+
+const onImportsTabOpen = () => {
+  toolsTab.value = "imports";
+  if (importHistory.value.length === 0) {
+    void loadImportHistory();
+  }
+};
+
 watch(
   () => searchFilter.value,
   (value) => {
@@ -1742,6 +2026,201 @@ onUnmounted(() => {
   }
 }
 
+.import-tools {
+  &__top {
+    width: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 8px;
+  }
+
+  &__label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 180px;
+    font-size: 12px;
+    color: #5b5858;
+    text-transform: uppercase;
+
+    &--file {
+      min-width: 260px;
+      flex: 1;
+    }
+
+    input[type="file"] {
+      height: 30px;
+      font-size: 12px;
+    }
+  }
+
+  &__actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+  }
+
+  &__error {
+    margin: 0;
+    font-size: 12px;
+    color: #8f2a2a;
+  }
+
+  &__message {
+    margin: 0;
+    font-size: 12px;
+    color: #395c3f;
+  }
+
+  &__summary {
+    width: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    font-size: 12px;
+    color: #5d5d5d;
+  }
+
+  &__warnings {
+    width: 100%;
+    margin: 0;
+    padding-left: 18px;
+    font-size: 12px;
+    color: #8e6e21;
+  }
+
+  &__content {
+    width: 100%;
+    display: grid;
+    grid-template-columns: minmax(0, 1.3fr) minmax(280px, 1fr);
+    gap: 10px;
+  }
+
+  &__preview,
+  &__history {
+    border: 1px solid #ededed;
+    background: #fff;
+    padding: 8px;
+    min-height: 220px;
+
+    h4 {
+      margin: 0 0 8px;
+      font-size: 14px;
+      color: #425a6a;
+    }
+  }
+
+  &__table-wrap {
+    max-height: 260px;
+    overflow: auto;
+  }
+
+  &__table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+
+    th,
+    td {
+      padding: 5px 6px;
+      border-bottom: 1px solid #efefef;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      color: #5f5f5f;
+      text-transform: uppercase;
+      font-size: 11px;
+      position: sticky;
+      top: 0;
+      background: #fafafa;
+      z-index: 1;
+    }
+  }
+
+  &__status {
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 11px;
+
+    &--new {
+      color: #2f6f3f;
+    }
+
+    &--duplicate {
+      color: #8f6d2a;
+    }
+
+    &--invalid {
+      color: #8f2a2a;
+    }
+  }
+
+  &__history-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+
+    h4 {
+      margin: 0;
+    }
+  }
+
+  &__history-count {
+    margin-left: auto;
+    font-size: 12px;
+    color: #737373;
+  }
+
+  &__history-list {
+    list-style: none;
+    margin: 8px 0 0;
+    padding: 0;
+    max-height: 260px;
+    overflow: auto;
+  }
+
+  &__history-item {
+    border-top: 1px solid #f0f0f0;
+    padding: 8px 0;
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+  }
+
+  &__history-item:first-child {
+    border-top: 0;
+    padding-top: 0;
+  }
+
+  &__history-meta {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 12px;
+    color: #5f5f5f;
+  }
+
+  &__danger {
+    border-color: #bf5d5d !important;
+    color: #8f2a2a !important;
+    white-space: nowrap;
+  }
+
+  &__empty {
+    margin: 0;
+    font-size: 12px;
+    color: #8b8b8b;
+  }
+}
+
 .data-footer {
   margin-top: 6px;
   font-size: 12px;
@@ -1768,6 +2247,15 @@ onUnmounted(() => {
 
   .forum-tools__merge {
     min-height: 0;
+  }
+
+  .import-tools__content {
+    grid-template-columns: 1fr;
+  }
+
+  .import-tools__actions {
+    margin-left: 0;
+    width: 100%;
   }
 }
 </style>

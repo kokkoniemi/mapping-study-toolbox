@@ -65,6 +65,7 @@ const resolveOpenAlexWork = async (
 
 const getMissingOpenAlexTargets = (record: {
   doi?: string | null;
+  abstract?: string | null;
   openAlexId?: string | null;
   citationCount?: number | null;
   openAlexCitationItems?: unknown[] | null;
@@ -74,6 +75,9 @@ const getMissingOpenAlexTargets = (record: {
   const missing: string[] = [];
   if (!sanitizeDoi(record.doi)) {
     missing.push("doi");
+  }
+  if (!record.abstract || record.abstract.trim().length === 0) {
+    missing.push("abstract");
   }
   if (!record.openAlexId) {
     missing.push("openAlexId");
@@ -238,6 +242,17 @@ export const enrichRecordWithOpenAlex = async (
       confidenceScore: Math.max(70, matchScore - 5),
       reason: openAlexWork.url ? "OpenAlex landing page URL" : "URL inferred from DOI",
       source: openAlexWork.url ?? openAlexWork.doi,
+      mode,
+    });
+  }
+
+  if ((mode === "full" || missingTargets.includes("abstract")) && openAlexWork.abstract) {
+    updatePayload.abstract = openAlexWork.abstract;
+    provenanceUpdates.abstract = buildFieldProvenance({
+      provider: "openalex",
+      confidenceScore: Math.max(74, matchScore - 4),
+      reason: "OpenAlex abstract reconstructed from abstract index",
+      source,
       mode,
     });
   }

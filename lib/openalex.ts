@@ -60,6 +60,7 @@ export type OpenAlexWorkRaw = {
   id?: string;
   doi?: string;
   title?: string;
+  abstract_inverted_index?: Record<string, number[]>;
   publication_year?: number;
   cited_by_count?: number;
   primary_location?: OpenAlexLocationRaw | null;
@@ -101,6 +102,7 @@ export type OpenAlexResolvedWork = {
   openAlexId: string | null;
   doi: string | null;
   title: string | null;
+  abstract: string | null;
   year: number | null;
   citationCount: number | null;
   url: string | null;
@@ -274,6 +276,39 @@ const uniqueStrings = (values: Array<string | null | undefined>) => {
   return result;
 };
 
+export const decodeOpenAlexAbstractInvertedIndex = (
+  abstractInvertedIndex: Record<string, number[]> | null | undefined,
+): string | null => {
+  if (!abstractInvertedIndex || typeof abstractInvertedIndex !== "object") {
+    return null;
+  }
+
+  const positionedTokens: Array<{ index: number; token: string }> = [];
+  for (const [token, positions] of Object.entries(abstractInvertedIndex)) {
+    if (!Array.isArray(positions) || token.trim().length === 0) {
+      continue;
+    }
+    for (const position of positions) {
+      if (!Number.isInteger(position) || position < 0) {
+        continue;
+      }
+      positionedTokens.push({ index: Number(position), token: token.trim() });
+    }
+  }
+
+  if (positionedTokens.length === 0) {
+    return null;
+  }
+
+  positionedTokens.sort((left, right) => left.index - right.index);
+  const abstract = positionedTokens
+    .map((item) => item.token)
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return abstract.length > 0 ? abstract : null;
+};
+
 const workToSummary = (work: OpenAlexWorkRaw): OpenAlexReferenceItem => {
   const doi = sanitizeDoi(work.doi);
   const forum =
@@ -306,6 +341,7 @@ const workToResolved = (work: OpenAlexWorkRaw): OpenAlexResolvedWork => {
     openAlexId: summary.openAlexId,
     doi: summary.doi,
     title: summary.title,
+    abstract: decodeOpenAlexAbstractInvertedIndex(work.abstract_inverted_index),
     year: summary.year,
     citationCount: summary.citedByCount,
     url: summary.url,
@@ -321,7 +357,7 @@ export class OpenAlexClient {
   private lastRequestAt = 0;
 
   private readonly defaultSelect =
-    "id,doi,title,publication_year,cited_by_count,primary_location,locations,topics,primary_topic,authorships";
+    "id,doi,title,abstract_inverted_index,publication_year,cited_by_count,primary_location,locations,topics,primary_topic,authorships";
 
   private async waitForRequestSlot() {
     const now = Date.now();

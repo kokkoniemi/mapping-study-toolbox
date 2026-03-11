@@ -4,6 +4,7 @@ import { createRateLimitMiddleware } from "../lib/security";
 import * as records from "./records";
 import * as mappingQuestions from "./mappingQuestions";
 import * as forums from "./forums";
+import * as imports from "./imports";
 
 const router = Router();
 const parsePositiveInteger = (value: string | undefined, fallback: number) => {
@@ -37,6 +38,12 @@ router.delete("/records/:recordId/mapping-options/:mappingOptionId", records.rem
 // FORUMS
 router.get("/forums/duplicates", forums.listDuplicates);
 router.post("/forums/merge", forums.mergeForums);
+
+// IMPORTS
+router.get("/imports", imports.listing);
+router.post("/imports/preview", imports.preview);
+router.post("/imports", imports.create);
+router.delete("/imports/:id", imports.remove);
 
 // MAPPING QUESTIONS
 router.get("/mapping-questions", mappingQuestions.listing);

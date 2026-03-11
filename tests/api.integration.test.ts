@@ -47,10 +47,18 @@ const enrichmentMock = vi.hoisted(() => ({
   getEnrichmentQueueStatus: vi.fn(),
 }));
 
+const importPipelineMock = vi.hoisted(() => ({
+  previewImportData: vi.fn(),
+  createImportData: vi.fn(),
+  listImports: vi.fn(),
+  deleteImportWithRecords: vi.fn(),
+}));
+
 vi.mock("../models", () => ({
   default: dbMock,
 }));
 vi.mock("../lib/recordEnrichment", () => enrichmentMock);
+vi.mock("../lib/importPipeline", () => importPipelineMock);
 
 import { createApp } from "../server";
 
@@ -96,6 +104,10 @@ describeWhenSocketAllowed("API integration", () => {
       runningJobs: 0,
       maxQueuedJobs: 20,
     });
+    importPipelineMock.previewImportData.mockReset();
+    importPipelineMock.createImportData.mockReset();
+    importPipelineMock.listImports.mockReset();
+    importPipelineMock.deleteImportWithRecords.mockReset();
   });
 
   it("GET /api/health returns ok", async () => {
@@ -305,6 +317,131 @@ describeWhenSocketAllowed("API integration", () => {
       sourceForumIds: [11],
       movedRecordCount: 2,
       updatedRecordIds: [501, 502],
+    });
+  });
+
+  it("POST /api/imports/preview returns preview payload", async () => {
+    importPipelineMock.previewImportData.mockResolvedValue({
+      detectedFormat: "csv",
+      detectedSource: "scopus",
+      total: 2,
+      parsed: 2,
+      newRecords: 1,
+      duplicates: 1,
+      invalid: 0,
+      warnings: [],
+      records: [],
+    });
+
+    const app = createApp();
+    const response = await request(app).post("/api/imports/preview").send({
+      fileName: "scopus.csv",
+      content: "Title,Year\nOne,2024",
+      source: "auto",
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      detectedFormat: "csv",
+      detectedSource: "scopus",
+      total: 2,
+    });
+  });
+
+  it("POST /api/imports creates import and returns summary", async () => {
+    importPipelineMock.createImportData.mockResolvedValue({
+      import: {
+        id: 10,
+        database: "SCOPUS",
+        source: "scopus",
+        format: "csv",
+        fileName: "scopus.csv",
+        total: 2,
+        imported: 1,
+        dublicates: 1,
+        namesakes: null,
+        query: null,
+        createdAt: "2026-03-11T00:00:00.000Z",
+        updatedAt: "2026-03-11T00:00:00.000Z",
+        recordCount: 1,
+      },
+      summary: {
+        detectedFormat: "csv",
+        detectedSource: "scopus",
+        total: 2,
+        parsed: 1,
+        newRecords: 1,
+        duplicates: 1,
+        invalid: 0,
+        warnings: [],
+        records: [],
+      },
+      createdRecordIds: [100],
+    });
+
+    const app = createApp();
+    const response = await request(app).post("/api/imports").send({
+      fileName: "scopus.csv",
+      content: "Title,Year\nOne,2024",
+    });
+
+    expect(response.status).toBe(201);
+    expect(response.body).toMatchObject({
+      import: {
+        id: 10,
+        imported: 1,
+      },
+      createdRecordIds: [100],
+    });
+  });
+
+  it("GET /api/imports returns import history", async () => {
+    importPipelineMock.listImports.mockResolvedValue({
+      count: 1,
+      imports: [
+        {
+          id: 10,
+          database: "SCOPUS",
+          source: "scopus",
+          format: "csv",
+          fileName: "scopus.csv",
+          total: 2,
+          imported: 1,
+          dublicates: 1,
+          namesakes: null,
+          query: null,
+          createdAt: "2026-03-11T00:00:00.000Z",
+          updatedAt: "2026-03-11T00:00:00.000Z",
+          recordCount: 1,
+        },
+      ],
+    });
+
+    const app = createApp();
+    const response = await request(app).get("/api/imports").query({ offset: 0, limit: 25 });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      count: 1,
+      imports: [{ id: 10 }],
+    });
+  });
+
+  it("DELETE /api/imports/:id deletes import and imported records", async () => {
+    importPipelineMock.deleteImportWithRecords.mockResolvedValue({
+      importId: 10,
+      deletedImport: true,
+      deletedRecords: 7,
+    });
+
+    const app = createApp();
+    const response = await request(app).delete("/api/imports/10");
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      importId: 10,
+      deletedImport: true,
+      deletedRecords: 7,
     });
   });
 

@@ -4,6 +4,12 @@ import type {
   EnrichmentJobSnapshot,
   EnrichmentProvenanceMap,
   ForumDuplicatesIndexResponse as SharedForumDuplicatesIndexResponse,
+  ImportCreateResponse as SharedImportCreateResponse,
+  ImportPreviewPayload as SharedImportPreviewPayload,
+  ImportPreviewRecord as SharedImportPreviewRecord,
+  ImportPreviewResponse as SharedImportPreviewResponse,
+  ImportsIndexResponse as SharedImportsIndexResponse,
+  DeleteImportResponse as SharedDeleteImportResponse,
   ForumMergePayload as SharedForumMergePayload,
   ForumMergeResponse as SharedForumMergeResponse,
   MappingOptionsIndexResponse as SharedMappingOptionsIndexResponse,
@@ -277,6 +283,12 @@ type MappingOptionsIndexResponse = SharedMappingOptionsIndexResponse<MappingOpti
 type ForumDuplicatesIndexResponse = SharedForumDuplicatesIndexResponse;
 type ForumMergePayload = SharedForumMergePayload;
 type ForumMergeResponse = SharedForumMergeResponse;
+export type ImportPreviewRecord = SharedImportPreviewRecord;
+export type ImportPreviewPayload = SharedImportPreviewPayload;
+export type ImportPreviewResponse = SharedImportPreviewResponse;
+export type ImportCreateResponse = SharedImportCreateResponse;
+export type ImportsIndexResponse = SharedImportsIndexResponse;
+export type DeleteImportResponse = SharedDeleteImportResponse;
 
 type UpdateRecordPayload = Record<string, unknown>;
 type SaveMappingOptionPayload = {
@@ -329,6 +341,17 @@ export const forums = {
     http.get<ForumDuplicatesIndexResponse>("forums/duplicates", { params }),
   merge: (data: ForumMergePayload, params?: QueryParams) =>
     http.post<ForumMergeResponse, ForumMergePayload>("forums/merge", data, { params }),
+};
+
+export const imports = {
+  index: (params?: QueryParams) =>
+    http.get<ImportsIndexResponse>("imports", { params }),
+  preview: (data: ImportPreviewPayload, params?: QueryParams) =>
+    http.post<ImportPreviewResponse, ImportPreviewPayload>("imports/preview", data, { params }),
+  create: (data: ImportPreviewPayload, params?: QueryParams) =>
+    http.post<ImportCreateResponse, ImportPreviewPayload>("imports", data, { params }),
+  delete: (id: number, params?: QueryParams) =>
+    http.delete<DeleteImportResponse>(`imports/${id}`, { params }),
 };
 
 export const mappingQuestions = {

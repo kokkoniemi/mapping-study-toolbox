@@ -31,6 +31,7 @@ const defineRecord: ModelFactory<RecordModelStatic> = (sequelize: Sequelize, Dat
       openAlexLastError: DataTypes.TEXT,
       editedBy: DataTypes.STRING,
       comment: DataTypes.TEXT,
+      importId: DataTypes.INTEGER,
     },
     {
       paranoid: true,
@@ -39,6 +40,7 @@ const defineRecord: ModelFactory<RecordModelStatic> = (sequelize: Sequelize, Dat
 
   Record.associate = (models: DbModels) => {
     Record.belongsTo(models.Forum, { foreignKey: "forumId" });
+    Record.belongsTo(models.Import, { foreignKey: "importId" });
     Record.belongsToMany(models.MappingOption, { through: models.RecordMappingOption });
   };
 

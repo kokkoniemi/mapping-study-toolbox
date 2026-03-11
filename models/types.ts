@@ -145,6 +145,7 @@ export interface RecordAttributes {
   openAlexEnrichedAt: Date | null;
   openAlexLastError: string | null;
   forumId: number | null;
+  importId: number | null;
   editedBy: string | null;
   comment: string | null;
   createdAt: Date;
@@ -161,7 +162,11 @@ export type RecordModelStatic = AssociableModel<RecordModel> & {
 export interface ImportAttributes {
   id: number;
   database: string | null;
+  source: string | null;
+  format: string | null;
+  fileName: string | null;
   total: number | null;
+  imported: number | null;
   dublicates: number | null;
   namesakes: string[] | null;
   query: string | null;

@@ -160,3 +160,82 @@ export type ForumMergeResponse = {
   updatedRecordIds: number[];
   mergedAliases: string[];
 };
+
+export const IMPORT_SOURCE_VALUES = ["auto", "scopus", "acm", "google-scholar", "other-bibtex"] as const;
+export type ImportSource = (typeof IMPORT_SOURCE_VALUES)[number];
+export type ImportDetectedSource = Exclude<ImportSource, "auto">;
+export type ImportFormat = "csv" | "bibtex";
+export type ImportRowStatus = "new" | "duplicate" | "invalid";
+export type ImportDuplicateReason = "doi" | "url" | "title-author-year" | "batch";
+
+export type ImportPreviewRecord = {
+  rowNumber: number;
+  status: ImportRowStatus;
+  duplicateReason: ImportDuplicateReason | null;
+  duplicateRecordId: number | null;
+  errors: string[];
+  title: string | null;
+  author: string | null;
+  year: number | null;
+  doi: string | null;
+  url: string | null;
+  abstract: string | null;
+  forumName: string | null;
+  publisher: string | null;
+  issn: string | null;
+  databases: string[];
+  alternateUrls: string[];
+};
+
+export type ImportPreviewPayload = {
+  fileName: string;
+  source?: ImportSource;
+  content: string;
+};
+
+export type ImportPreviewResponse = {
+  detectedFormat: ImportFormat;
+  detectedSource: ImportDetectedSource;
+  total: number;
+  parsed: number;
+  newRecords: number;
+  duplicates: number;
+  invalid: number;
+  records: ImportPreviewRecord[];
+  warnings: string[];
+};
+
+export type CreateImportPayload = ImportPreviewPayload;
+
+export type ImportSummary = {
+  id: number;
+  database: string | null;
+  source: ImportDetectedSource | null;
+  format: ImportFormat | null;
+  fileName: string | null;
+  total: number | null;
+  imported: number | null;
+  dublicates: number | null;
+  namesakes: string[] | null;
+  query: string | null;
+  createdAt: string;
+  updatedAt: string;
+  recordCount: number;
+};
+
+export type ImportCreateResponse = {
+  import: ImportSummary;
+  summary: ImportPreviewResponse;
+  createdRecordIds: number[];
+};
+
+export type ImportsIndexResponse = {
+  count: number;
+  imports: ImportSummary[];
+};
+
+export type DeleteImportResponse = {
+  importId: number;
+  deletedImport: boolean;
+  deletedRecords: number;
+};
