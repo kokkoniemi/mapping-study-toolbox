@@ -324,6 +324,10 @@ describeWhenSocketAllowed("API integration", () => {
     importPipelineMock.previewImportData.mockResolvedValue({
       detectedFormat: "csv",
       detectedSource: "scopus",
+      databaseLabel: "SCOPUS",
+      csvColumns: ["Title", "Year"],
+      suggestedCsvMapping: { title: "Title", year: "Year", doi: null, url: null, author: null },
+      appliedCsvMapping: { title: "Title", year: "Year", doi: null, url: null, author: null },
       total: 2,
       parsed: 2,
       newRecords: 1,
@@ -368,6 +372,10 @@ describeWhenSocketAllowed("API integration", () => {
       summary: {
         detectedFormat: "csv",
         detectedSource: "scopus",
+        databaseLabel: "SCOPUS",
+        csvColumns: ["Title", "Year"],
+        suggestedCsvMapping: { title: "Title", year: "Year", doi: null, url: null, author: null },
+        appliedCsvMapping: { title: "Title", year: "Year", doi: null, url: null, author: null },
         total: 2,
         parsed: 1,
         newRecords: 1,

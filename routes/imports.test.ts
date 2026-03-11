@@ -46,6 +46,8 @@ describe("routes/imports", () => {
       fileName: "items.csv",
       content: "title\nA",
       source: "scopus",
+      databaseName: undefined,
+      csvMapping: undefined,
     });
     expect(res.send).toHaveBeenCalledWith({ total: 2 });
   });
@@ -68,6 +70,8 @@ describe("routes/imports", () => {
       fileName: "items.bib",
       content: "@article{a,title={A}}",
       source: "auto",
+      databaseName: undefined,
+      csvMapping: undefined,
     });
     expect(res.status).toHaveBeenCalledWith(201);
     expect(res.send).toHaveBeenCalledWith({
@@ -106,6 +110,92 @@ describe("routes/imports", () => {
   it("preview rejects unsupported source", async () => {
     const req = {
       body: { fileName: "x.csv", content: "a,b", source: "bad-source" },
+    } as unknown as Request;
+    const res = mockResponse();
+
+    await expect(preview(req, res)).rejects.toBeInstanceOf(ApiError);
+    expect(pipelineMock.previewImportData).not.toHaveBeenCalled();
+  });
+
+  it("preview forwards csvMapping", async () => {
+    pipelineMock.previewImportData.mockResolvedValue({ total: 1 });
+
+    const req = {
+      body: {
+        fileName: "items.csv",
+        content: "AA,ID\nAlice,10.1000/example",
+        source: "auto",
+        csvMapping: {
+          author: "AA",
+          doi: "ID",
+          title: null,
+        },
+      },
+    } as unknown as Request;
+    const res = mockResponse();
+
+    await preview(req, res);
+
+    expect(pipelineMock.previewImportData).toHaveBeenCalledWith({
+      fileName: "items.csv",
+      content: "AA,ID\nAlice,10.1000/example",
+      source: "auto",
+      databaseName: undefined,
+      csvMapping: {
+        author: "AA",
+        doi: "ID",
+        title: null,
+      },
+    });
+  });
+
+  it("preview rejects other-csv source without databaseName", async () => {
+    const req = {
+      body: {
+        fileName: "generic.csv",
+        content: "AA,ID\nA,10.1000/x",
+        source: "other-csv",
+      },
+    } as unknown as Request;
+    const res = mockResponse();
+
+    await expect(preview(req, res)).rejects.toBeInstanceOf(ApiError);
+    expect(pipelineMock.previewImportData).not.toHaveBeenCalled();
+  });
+
+  it("preview accepts other-csv source with databaseName", async () => {
+    pipelineMock.previewImportData.mockResolvedValue({ total: 1 });
+
+    const req = {
+      body: {
+        fileName: "generic.csv",
+        content: "AA,ID\nA,10.1000/x",
+        source: "other-csv",
+        databaseName: "IEEE_XPLORE",
+      },
+    } as unknown as Request;
+    const res = mockResponse();
+
+    await preview(req, res);
+
+    expect(pipelineMock.previewImportData).toHaveBeenCalledWith({
+      fileName: "generic.csv",
+      content: "AA,ID\nA,10.1000/x",
+      source: "other-csv",
+      databaseName: "IEEE_XPLORE",
+      csvMapping: undefined,
+    });
+  });
+
+  it("preview rejects unsupported csvMapping keys", async () => {
+    const req = {
+      body: {
+        fileName: "x.csv",
+        content: "a,b",
+        csvMapping: {
+          unknownField: "a",
+        },
+      },
     } as unknown as Request;
     const res = mockResponse();
 

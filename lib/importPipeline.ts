@@ -3,18 +3,21 @@ import { Op, type Transaction } from "sequelize";
 import { normalizeDoiValue, parseAuthorFamilyFromText } from "./enrichmentCommon";
 import { badRequest, notFound } from "./http";
 import db from "../models";
-import type {
-  CreateImportPayload,
-  DeleteImportResponse,
-  ImportCreateResponse,
-  ImportDetectedSource,
-  ImportDuplicateReason,
-  ImportFormat,
-  ImportPreviewPayload,
-  ImportPreviewRecord,
-  ImportPreviewResponse,
-  ImportsIndexResponse,
-  ImportSummary,
+import {
+  CSV_IMPORT_FIELD_KEYS,
+  type CsvImportFieldKey,
+  type CsvImportMapping,
+  type CreateImportPayload,
+  type DeleteImportResponse,
+  type ImportCreateResponse,
+  type ImportDetectedSource,
+  type ImportDuplicateReason,
+  type ImportFormat,
+  type ImportPreviewPayload,
+  type ImportPreviewRecord,
+  type ImportPreviewResponse,
+  type ImportsIndexResponse,
+  type ImportSummary,
 } from "../shared/contracts";
 
 const MAX_IMPORT_CONTENT_BYTES = Number.parseInt(process.env.IMPORT_MAX_CONTENT_BYTES ?? "", 10) || 8_000_000;
@@ -37,6 +40,16 @@ type ParsedInputRecord = {
   alternateUrls: string[];
 };
 
+type ParsedCsvRawRow = {
+  rowNumber: number;
+  values: string[];
+};
+
+type ParsedCsvInput = {
+  headers: string[];
+  rows: ParsedCsvRawRow[];
+};
+
 type DuplicateDetectionIndex = {
   doiToRecordId: Map<string, number>;
   urlToRecordId: Map<string, number>;
@@ -51,6 +64,10 @@ type AnalyzedCandidate = {
 type AnalyzeImportResult = {
   detectedFormat: ImportFormat;
   detectedSource: ImportDetectedSource;
+  databaseLabel: string;
+  csvColumns: string[] | null;
+  suggestedCsvMapping: CsvImportMapping | null;
+  appliedCsvMapping: CsvImportMapping | null;
   warnings: string[];
   total: number;
   parsed: number;
@@ -65,7 +82,36 @@ const SOURCE_DATABASE_LABELS: Record<ImportDetectedSource, string> = {
   scopus: "SCOPUS",
   acm: "ACM_DL",
   "google-scholar": "GOOGLE_SCHOLAR",
+  "other-csv": "OTHER_CSV",
   "other-bibtex": "BIBTEX",
+};
+
+const isCustomDatabaseSource = (source: ImportDetectedSource) => source === "other-csv" || source === "other-bibtex";
+
+const normalizeDatabaseName = (value: string | null | undefined) => {
+  const normalized = value?.replace(/\s+/g, " ").trim();
+  return normalized && normalized.length > 0 ? normalized : null;
+};
+
+const resolveDatabaseLabel = (
+  source: ImportDetectedSource,
+  providedDatabaseName: string | null | undefined,
+  mode: "preview" | "create",
+) => {
+  if (!isCustomDatabaseSource(source)) {
+    return SOURCE_DATABASE_LABELS[source];
+  }
+
+  const customDatabaseName = normalizeDatabaseName(providedDatabaseName);
+  if (customDatabaseName) {
+    return customDatabaseName;
+  }
+
+  if (mode === "create") {
+    throw badRequest("databaseName is required when source is other-csv or other-bibtex");
+  }
+
+  return SOURCE_DATABASE_LABELS[source];
 };
 
 const toStringOrNull = (value: string | null | undefined) => {
@@ -177,9 +223,15 @@ const detectImportSource = (
   format: ImportFormat,
   fileName: string,
   headers: string[],
+  content?: string,
 ): ImportDetectedSource => {
   if (explicitSource && explicitSource !== "auto") {
-    if (explicitSource === "scopus" || explicitSource === "acm" || explicitSource === "google-scholar") {
+    if (
+      explicitSource === "scopus"
+      || explicitSource === "acm"
+      || explicitSource === "google-scholar"
+      || explicitSource === "other-csv"
+    ) {
       return explicitSource;
     }
     return "other-bibtex";
@@ -200,15 +252,46 @@ const detectImportSource = (
   if (normalizedHeaders.includes("eid") || normalizedHeaders.includes("sourcetitle")) {
     return "scopus";
   }
+  if (
+    normalizedHeaders.includes("accessionnumber")
+    || normalizedHeaders.includes("documenttype")
+    || normalizedHeaders.includes("source")
+  ) {
+    return "scopus";
+  }
+  if (
+    normalizedHeaders.includes("publicationtitle")
+    || normalizedHeaders.includes("acmkeywords")
+    || normalizedHeaders.includes("ccsconcepts")
+  ) {
+    return "acm";
+  }
   if (normalizedHeaders.includes("citedby") || normalizedHeaders.includes("publicationyear")) {
+    return "google-scholar";
+  }
+  if (
+    normalizedHeaders.includes("scholarlycitations")
+    || normalizedHeaders.includes("citations")
+    || normalizedHeaders.includes("versions")
+  ) {
     return "google-scholar";
   }
 
   if (format === "bibtex") {
+    const lowerContent = content?.toLocaleLowerCase() ?? "";
+    if (lowerContent.includes("association for computing machinery") || lowerContent.includes("10.1145/")) {
+      return "acm";
+    }
+    if (lowerContent.includes("eid = {2-s2.0-") || lowerContent.includes("scopus")) {
+      return "scopus";
+    }
+    if (lowerContent.includes("scholar.google") || lowerContent.includes("google scholar")) {
+      return "google-scholar";
+    }
     return "other-bibtex";
   }
 
-  return "scopus";
+  return "other-csv";
 };
 
 const parseCsvRows = (content: string) => {
@@ -261,57 +344,309 @@ const parseCsvRows = (content: string) => {
   return rows;
 };
 
-const parseCsvInput = (content: string, databaseLabel: string): { headers: string[]; rows: ParsedInputRecord[] } => {
+const parseCsvInput = (content: string): ParsedCsvInput => {
   const csvRows = parseCsvRows(content);
   if (csvRows.length < 2) {
     throw badRequest("CSV file must contain a header row and at least one data row");
   }
 
   const headers = csvRows[0] ?? [];
-  const normalizedHeaders = headers.map(normalizeHeader);
-  const indexOf = (...candidates: string[]) =>
-    normalizedHeaders.findIndex((header) => candidates.includes(header));
 
-  const titleIndex = indexOf("title", "documenttitle", "articletitle");
-  const authorIndex = indexOf("authors", "author", "authorfullnames", "authorsfullnames");
-  const yearIndex = indexOf("year", "publicationyear", "pubyear", "coverdate");
-  const doiIndex = indexOf("doi");
-  const urlIndex = indexOf("url", "link", "documenturl", "sourceurl", "articledoi", "doiurl");
-  const abstractIndex = indexOf("abstract", "description", "summary");
-  const forumIndex = indexOf("sourcetitle", "journal", "publicationtitle", "forum", "venue", "booktitle");
-  const publisherIndex = indexOf("publisher");
-  const issnIndex = indexOf("issn", "eissn", "printissn");
+  const rows = csvRows.slice(1).map((fields, position) => ({
+    rowNumber: position + 2,
+    values: fields,
+  }));
 
-  if (titleIndex < 0 && doiIndex < 0 && urlIndex < 0) {
-    throw badRequest("CSV file does not contain supported title/DOI/URL columns");
+  return { headers, rows };
+};
+
+const CSV_HEADER_HINTS: Record<CsvImportFieldKey, string[]> = {
+  title: ["title", "documenttitle", "articletitle", "paper", "article"],
+  author: ["author", "authors", "authorfullnames", "authorsfullnames", "aa", "au"],
+  year: ["year", "publicationyear", "pubyear", "coverdate", "date"],
+  doi: ["doi", "documentdoi", "articledoi", "id"],
+  url: ["url", "link", "documenturl", "sourceurl", "fulltext", "landingpage"],
+  abstract: ["abstract", "description", "summary", "notes"],
+  forumName: ["sourcetitle", "journal", "publicationtitle", "forum", "venue", "booktitle", "source"],
+  publisher: ["publisher", "publishername"],
+  issn: ["issn", "eissn", "printissn"],
+  alternateUrls: ["alternateurls", "alternateurl", "alturl", "urls"],
+};
+
+const CSV_FIELD_SUGGESTION_ORDER: CsvImportFieldKey[] = [
+  "doi",
+  "url",
+  "title",
+  "author",
+  "year",
+  "abstract",
+  "forumName",
+  "publisher",
+  "issn",
+  "alternateUrls",
+];
+
+const parseDelimitedCell = (value: string | null | undefined) =>
+  (value ?? "")
+    .split(/[;|\n]+/)
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+
+const normalizeHeaderString = (value: string) => normalizeHeader(value);
+
+const countMatches = (values: string[], predicate: (value: string) => boolean) =>
+  values.reduce((sum, value) => sum + (predicate(value) ? 1 : 0), 0);
+
+const isLikelyUrl = (value: string) => {
+  try {
+    const parsed = new URL(value.trim());
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+};
+
+const isLikelyIssn = (value: string) => /^[0-9]{4}-?[0-9X]{4}$/i.test(value.trim());
+
+const csvHeaderHintScore = (normalizedHeader: string, hints: string[]) => {
+  if (hints.includes(normalizedHeader)) {
+    return 120;
+  }
+  if (hints.some((hint) => normalizedHeader.includes(hint))) {
+    return 70;
+  }
+  return 0;
+};
+
+const scoreCsvColumn = (field: CsvImportFieldKey, header: string, sampleValues: string[]) => {
+  const normalizedHeader = normalizeHeaderString(header);
+  const baseHeaderScore = csvHeaderHintScore(normalizedHeader, CSV_HEADER_HINTS[field]);
+  const nonEmptyValues = sampleValues.filter((value) => value.length > 0);
+  const sampleCount = nonEmptyValues.length || 1;
+
+  const doiMatches = countMatches(nonEmptyValues, (value) => normalizeDoiValue(value) !== null || extractDoiFromText(value) !== null);
+  const urlMatches = countMatches(nonEmptyValues, isLikelyUrl);
+  const yearMatches = countMatches(nonEmptyValues, (value) => toNumberYear(value) !== null);
+  const issnMatches = countMatches(nonEmptyValues, isLikelyIssn);
+
+  const averageLength =
+    nonEmptyValues.reduce((sum, value) => sum + value.length, 0) / sampleCount;
+
+  const ratio = (matches: number) => Math.round((matches / sampleCount) * 100);
+
+  if (field === "doi") {
+    return baseHeaderScore + ratio(doiMatches);
   }
 
-  const records = csvRows.slice(1).map((fields, position) => {
-    const read = (idx: number) => (idx >= 0 ? toStringOrNull(fields[idx]) : null);
-    const title = read(titleIndex);
-    const author = read(authorIndex);
-    const year = toNumberYear(read(yearIndex));
-    const doiRaw = read(doiIndex);
-    const doi = normalizeDoiValue(doiRaw) ?? extractDoiFromText(read(urlIndex));
-    const url = read(urlIndex);
+  if (field === "url") {
+    return baseHeaderScore + ratio(urlMatches);
+  }
+
+  if (field === "year") {
+    return baseHeaderScore + ratio(yearMatches);
+  }
+
+  if (field === "issn") {
+    return baseHeaderScore + ratio(issnMatches);
+  }
+
+  if (field === "abstract") {
+    const longTextMatches = countMatches(nonEmptyValues, (value) => value.length >= 120);
+    return baseHeaderScore + ratio(longTextMatches);
+  }
+
+  if (field === "title") {
+    const likelyTitleMatches = countMatches(
+      nonEmptyValues,
+      (value) => value.length >= 20 && !isLikelyUrl(value) && normalizeDoiValue(value) === null,
+    );
+    return baseHeaderScore + ratio(likelyTitleMatches);
+  }
+
+  if (field === "author") {
+    const likelyAuthorMatches = countMatches(
+      nonEmptyValues,
+      (value) =>
+        /[A-Za-z]/.test(value)
+        && (value.includes(",") || value.includes(";") || /\band\b/i.test(value)),
+    );
+    return baseHeaderScore + ratio(likelyAuthorMatches);
+  }
+
+  if (field === "forumName") {
+    const likelyForumMatches = countMatches(
+      nonEmptyValues,
+      (value) => /\b(journal|conference|proceedings|transactions|review)\b/i.test(value),
+    );
+    return baseHeaderScore + ratio(likelyForumMatches);
+  }
+
+  if (field === "publisher") {
+    const likelyPublisherMatches = countMatches(
+      nonEmptyValues,
+      (value) => /\b(press|publisher|springer|ieee|elsevier|wiley|acm|sage|taylor)\b/i.test(value),
+    );
+    return baseHeaderScore + ratio(likelyPublisherMatches);
+  }
+
+  if (field === "alternateUrls") {
+    const listMatches = countMatches(
+      nonEmptyValues,
+      (value) => value.includes(";") || value.includes("|"),
+    );
+    return baseHeaderScore + ratio(listMatches) + Math.min(30, Math.round(averageLength / 8));
+  }
+
+  return baseHeaderScore;
+};
+
+const fieldSuggestionThreshold = (field: CsvImportFieldKey) => {
+  if (field === "doi" || field === "url" || field === "year" || field === "issn") {
+    return 60;
+  }
+  if (field === "alternateUrls") {
+    return 45;
+  }
+  return 50;
+};
+
+const guessCsvMapping = (parsedCsv: ParsedCsvInput): CsvImportMapping => {
+  const mapping: CsvImportMapping = {};
+  const usedColumnIndexes = new Set<number>();
+
+  const columns = parsedCsv.headers.map((header, index) => {
+    const sampleValues = parsedCsv.rows
+      .slice(0, 25)
+      .map((row) => toStringOrNull(row.values[index] ?? null) ?? "");
+    return { index, header, sampleValues };
+  });
+
+  for (const field of CSV_FIELD_SUGGESTION_ORDER) {
+    let bestIndex = -1;
+    let bestScore = -1;
+
+    for (const column of columns) {
+      if (usedColumnIndexes.has(column.index)) {
+        continue;
+      }
+
+      const score = scoreCsvColumn(field, column.header, column.sampleValues);
+      if (score > bestScore) {
+        bestScore = score;
+        bestIndex = column.index;
+      }
+    }
+
+    if (bestIndex >= 0 && bestScore >= fieldSuggestionThreshold(field)) {
+      mapping[field] = parsedCsv.headers[bestIndex] ?? null;
+      usedColumnIndexes.add(bestIndex);
+    } else {
+      mapping[field] = null;
+    }
+  }
+
+  return mapping;
+};
+
+const resolveCsvHeaderName = (headers: string[], value: string) => {
+  const exact = headers.find((header) => header === value);
+  if (exact) {
+    return exact;
+  }
+  const normalizedValue = normalizeHeaderString(value);
+  return headers.find((header) => normalizeHeaderString(header) === normalizedValue) ?? null;
+};
+
+const applyCsvMapping = (
+  headers: string[],
+  suggested: CsvImportMapping,
+  explicit?: CsvImportMapping,
+): CsvImportMapping => {
+  const mapping: CsvImportMapping = { ...suggested };
+
+  if (!explicit) {
+    return mapping;
+  }
+
+  for (const field of CSV_IMPORT_FIELD_KEYS) {
+    if (!(field in explicit)) {
+      continue;
+    }
+
+    const rawValue = explicit[field];
+    if (rawValue === null || rawValue === undefined) {
+      mapping[field] = null;
+      continue;
+    }
+
+    if (typeof rawValue !== "string") {
+      throw badRequest(`csvMapping.${field} must be a string or null`);
+    }
+
+    if (rawValue.trim().length === 0) {
+      mapping[field] = null;
+      continue;
+    }
+
+    const resolvedHeader = resolveCsvHeaderName(headers, rawValue);
+    if (!resolvedHeader) {
+      throw badRequest(`csvMapping.${field} references unknown column "${rawValue}"`);
+    }
+
+    mapping[field] = resolvedHeader;
+  }
+
+  return mapping;
+};
+
+const parseCsvMappedRows = (
+  parsedCsv: ParsedCsvInput,
+  mapping: CsvImportMapping,
+  databaseLabel: string,
+): ParsedInputRecord[] => {
+  const headerIndexByName = new Map(parsedCsv.headers.map((header, index) => [header, index]));
+
+  const readMappedValue = (row: ParsedCsvRawRow, field: CsvImportFieldKey) => {
+    const headerName = mapping[field];
+    if (!headerName) {
+      return null;
+    }
+
+    const index = headerIndexByName.get(headerName);
+    if (index === undefined) {
+      return null;
+    }
+    return toStringOrNull(row.values[index] ?? null);
+  };
+
+  return parsedCsv.rows.map((row) => {
+    const title = readMappedValue(row, "title");
+    const author = readMappedValue(row, "author");
+    const year = toNumberYear(readMappedValue(row, "year"));
+    const doiRaw = readMappedValue(row, "doi");
+    const url = readMappedValue(row, "url");
+    const possibleAlternateUrls = parseDelimitedCell(readMappedValue(row, "alternateUrls"));
+    const doi =
+      normalizeDoiValue(doiRaw)
+      ?? extractDoiFromText(url)
+      ?? possibleAlternateUrls.map((item) => extractDoiFromText(item)).find((item): item is string => Boolean(item))
+      ?? null;
 
     return {
-      rowNumber: position + 2,
+      rowNumber: row.rowNumber,
       title,
       author,
       year,
       doi,
       url,
-      abstract: read(abstractIndex),
-      forumName: read(forumIndex),
-      publisher: read(publisherIndex),
-      issn: read(issnIndex),
+      abstract: readMappedValue(row, "abstract"),
+      forumName: readMappedValue(row, "forumName"),
+      publisher: readMappedValue(row, "publisher"),
+      issn: readMappedValue(row, "issn"),
       databases: uniqueStrings([databaseLabel]),
-      alternateUrls: uniqueStrings([]),
+      alternateUrls: [],
     } satisfies ParsedInputRecord;
   });
-
-  return { headers, rows: records };
 };
 
 const cleanBibtexValue = (value: string) =>
@@ -559,16 +894,17 @@ const analyzeImportPayload = async (payload: ImportPreviewPayload): Promise<Anal
   }
 
   const detectedFormat = detectImportFormat(fileName, content);
-  const parsedCsv = detectedFormat === "csv" ? parseCsvInput(content, "CSV_IMPORT") : null;
-  const detectedSource = detectImportSource(source, detectedFormat, fileName, parsedCsv?.headers ?? []);
-  const databaseLabel = SOURCE_DATABASE_LABELS[detectedSource];
+  const parsedCsv = detectedFormat === "csv" ? parseCsvInput(content) : null;
+  const detectedSource = detectImportSource(source, detectedFormat, fileName, parsedCsv?.headers ?? [], content);
+  const databaseLabel = resolveDatabaseLabel(detectedSource, payload.databaseName, "preview");
+  const suggestedCsvMapping = parsedCsv ? guessCsvMapping(parsedCsv) : null;
+  const appliedCsvMapping = parsedCsv
+    ? applyCsvMapping(parsedCsv.headers, suggestedCsvMapping ?? {}, payload.csvMapping)
+    : null;
   const parsedRows =
-    detectedFormat === "csv"
-      ? parseCsvInput(content, databaseLabel).rows
-      : parseBibtexInput(content, databaseLabel).map((item) => ({
-        ...item,
-        databases: uniqueStrings([databaseLabel, ...item.databases]),
-      }));
+    detectedFormat === "csv" && parsedCsv
+      ? parseCsvMappedRows(parsedCsv, appliedCsvMapping ?? {}, databaseLabel)
+      : parseBibtexInput(content, databaseLabel);
 
   const duplicateIndex = await buildDuplicateDetectionIndex();
   const seenDoi = new Set<string>();
@@ -581,6 +917,16 @@ const analyzeImportPayload = async (payload: ImportPreviewPayload): Promise<Anal
   let newRecords = 0;
   const warnings: string[] = [];
   const candidates: AnalyzedCandidate[] = [];
+
+  if (detectedFormat === "csv" && appliedCsvMapping) {
+    if (!appliedCsvMapping.title && !appliedCsvMapping.doi && !appliedCsvMapping.url) {
+      warnings.push("No title/DOI/URL column is mapped. Rows without these values will be marked invalid.");
+    }
+  }
+
+  if (isCustomDatabaseSource(detectedSource) && !normalizeDatabaseName(payload.databaseName)) {
+    warnings.push("Custom source detected. Set Database name in step 1 before importing.");
+  }
 
   for (const row of parsedRows) {
     const errors: string[] = [];
@@ -635,6 +981,10 @@ const analyzeImportPayload = async (payload: ImportPreviewPayload): Promise<Anal
   return {
     detectedFormat,
     detectedSource,
+    databaseLabel,
+    csvColumns: parsedCsv?.headers ?? null,
+    suggestedCsvMapping,
+    appliedCsvMapping,
     warnings,
     total: candidates.length,
     parsed,
@@ -659,7 +1009,7 @@ const resolveForumId = async (
   forumName: string | null,
   publisher: string | null,
   issn: string | null,
-  detectedSource: ImportDetectedSource,
+  databaseLabel: string,
   forumsByName: Map<string, number>,
   forumsByIssn: Map<string, number>,
   transaction: Transaction,
@@ -682,7 +1032,7 @@ const resolveForumId = async (
       name: forumName ?? "(Unnamed forum)",
       publisher,
       issn: issn ?? null,
-      database: SOURCE_DATABASE_LABELS[detectedSource],
+      database: databaseLabel,
     },
     { transaction },
   );
@@ -734,6 +1084,10 @@ export const previewImportData = async (payload: ImportPreviewPayload): Promise<
   return {
     detectedFormat: analyzed.detectedFormat,
     detectedSource: analyzed.detectedSource,
+    databaseLabel: analyzed.databaseLabel,
+    csvColumns: analyzed.csvColumns,
+    suggestedCsvMapping: analyzed.suggestedCsvMapping,
+    appliedCsvMapping: analyzed.appliedCsvMapping,
     total: analyzed.total,
     parsed: analyzed.parsed,
     newRecords: analyzed.newRecords,
@@ -746,6 +1100,7 @@ export const previewImportData = async (payload: ImportPreviewPayload): Promise<
 
 export const createImportData = async (payload: CreateImportPayload): Promise<ImportCreateResponse> => {
   const analyzed = await analyzeImportPayload(payload);
+  const databaseLabel = resolveDatabaseLabel(analyzed.detectedSource, payload.databaseName, "create");
   const namesakes = uniqueStrings(
     analyzed.candidates
       .filter((item) => item.preview.duplicateReason === "title-author-year")
@@ -757,7 +1112,7 @@ export const createImportData = async (payload: CreateImportPayload): Promise<Im
   const createdImport = await db.sequelize.transaction(async (transaction) => {
     const importModel = await db.Import.create(
       {
-        database: SOURCE_DATABASE_LABELS[analyzed.detectedSource],
+        database: databaseLabel,
         source: analyzed.detectedSource,
         format: analyzed.detectedFormat,
         fileName: payload.fileName,
@@ -767,8 +1122,10 @@ export const createImportData = async (payload: CreateImportPayload): Promise<Im
         namesakes: namesakes.length > 0 ? namesakes : null,
         query: JSON.stringify({
           source: analyzed.detectedSource,
+          databaseName: databaseLabel,
           format: analyzed.detectedFormat,
           fileName: payload.fileName,
+          csvMapping: analyzed.appliedCsvMapping,
         }),
       },
       { transaction },
@@ -806,7 +1163,7 @@ export const createImportData = async (payload: CreateImportPayload): Promise<Im
         candidate.preview.forumName,
         candidate.preview.publisher,
         candidate.preview.issn,
-        analyzed.detectedSource,
+        databaseLabel,
         forumsByName,
         forumsByIssn,
         transaction,
@@ -820,7 +1177,7 @@ export const createImportData = async (payload: CreateImportPayload): Promise<Im
           url: candidate.preview.url ?? "",
           status: null,
           abstract: candidate.preview.abstract,
-          databases: uniqueStrings([SOURCE_DATABASE_LABELS[analyzed.detectedSource], ...candidate.preview.databases]),
+          databases: uniqueStrings(candidate.preview.databases),
           alternateUrls: candidate.preview.alternateUrls,
           forumId,
           doi: candidate.preview.doi,
@@ -854,6 +1211,10 @@ export const createImportData = async (payload: CreateImportPayload): Promise<Im
     summary: {
       detectedFormat: analyzed.detectedFormat,
       detectedSource: analyzed.detectedSource,
+      databaseLabel,
+      csvColumns: analyzed.csvColumns,
+      suggestedCsvMapping: analyzed.suggestedCsvMapping,
+      appliedCsvMapping: analyzed.appliedCsvMapping,
       total: analyzed.total,
       parsed: analyzed.parsed,
       newRecords: analyzed.newRecords,

@@ -1,16 +1,6 @@
 <template>
   <section class="data-tab">
-    <DataToolbar
-      :statusFilter="statusFilter"
-      :statusOptions="statusOptions"
-      :searchInput="searchInput"
-      :showFullText="!dataCellsTruncated"
-      @status-filter-change="onStatusFilterChange"
-      @search-input="onSearchInput"
-      @show-full-text-change="onShowFullTextChange"
-    />
-
-    <section class="data-tools">
+    <section class="data-tools" :class="{ 'data-tools--workspace': !showDataGrid }">
       <div class="data-tools__tabs">
         <button
           type="button"
@@ -111,7 +101,7 @@
         </div>
       </div>
 
-      <div v-else-if="toolsTab === 'forums'" class="data-tools__panel data-tools__panel--forums">
+      <div v-else-if="toolsTab === 'forums'" class="data-tools__panel data-tools__panel--forums data-tools__panel--workspace">
         <div class="forum-tools__top">
           <label class="forum-tools__label">
             <span>Search duplicates</span>
@@ -217,181 +207,292 @@
         </div>
       </div>
 
-      <div v-else class="data-tools__panel data-tools__panel--imports">
-        <div class="import-tools__top">
-          <label class="import-tools__label import-tools__label--file">
-            <span>File</span>
-            <input
-              type="file"
-              accept=".csv,.bib,.bibtex,.txt,text/csv,text/plain,application/x-bibtex"
-              @change="onImportFileChange"
-            />
-          </label>
-
-          <label class="import-tools__label">
-            <span>Source</span>
-            <select :value="importSource" :disabled="importPreviewLoading || importApplyLoading" @change="onImportSourceChange">
-              <option v-for="option in importSourceOptions" :key="option.value" :value="option.value">
-                {{ option.label }}
-              </option>
-            </select>
-          </label>
-
-          <div class="import-tools__actions">
-            <button type="button" :disabled="!canPreviewImport" @click="previewImportFile">
-              {{ importPreviewLoading ? "Previewing..." : "Preview" }}
-            </button>
-            <button type="button" class="data-tools__primary" :disabled="!canCreateImport" @click="createImportFile">
-              {{ importApplyLoading ? "Importing..." : "Import" }}
-            </button>
-            <button type="button" :disabled="!importFile && !importPreview" @click="clearImportSelection">Clear</button>
-          </div>
+      <div v-else class="data-tools__panel data-tools__panel--imports data-tools__panel--workspace">
+        <div v-if="importViewMode === 'history'" class="import-tools__history-head import-tools__history-head--top">
+          <h4>Import history</h4>
+          <span class="import-tools__history-count">{{ importHistoryTotal }} total</span>
+          <button type="button" :disabled="importHistoryLoading" @click="reloadImportHistory">
+            {{ importHistoryLoading ? "Loading..." : "Reload" }}
+          </button>
+          <button type="button" class="data-tools__primary" @click="startNewImport">New import</button>
         </div>
 
         <p v-if="importError" class="import-tools__error">{{ importError }}</p>
         <p v-if="importMessage" class="import-tools__message">{{ importMessage }}</p>
 
-        <div v-if="importPreview" class="import-tools__summary">
-          <span>{{ importPreview.detectedSource }} / {{ importPreview.detectedFormat }}</span>
-          <span>Total {{ importPreview.total }}</span>
-          <span>New {{ importPreview.newRecords }}</span>
-          <span>Duplicates {{ importPreview.duplicates }}</span>
-          <span>Invalid {{ importPreview.invalid }}</span>
-        </div>
-
-        <ul v-if="importPreview?.warnings?.length" class="import-tools__warnings">
-          <li v-for="warning in importPreview.warnings" :key="warning">{{ warning }}</li>
-        </ul>
-
-        <div class="import-tools__content">
-          <section class="import-tools__preview">
-            <h4>Preview</h4>
-            <div v-if="importPreview" class="import-tools__table-wrap">
-              <table class="import-tools__table">
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th>Status</th>
-                    <th>Title</th>
-                    <th>Author</th>
-                    <th>Year</th>
-                    <th>DOI</th>
-                    <th>Duplicate</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="row in importPreview.records" :key="`${row.rowNumber}-${row.title ?? ''}`">
-                    <td>{{ row.rowNumber }}</td>
-                    <td>
-                      <span class="import-tools__status" :class="`import-tools__status--${row.status}`">
-                        {{ row.status }}
-                      </span>
-                    </td>
-                    <td>{{ row.title || "-" }}</td>
-                    <td>{{ row.author || "-" }}</td>
-                    <td>{{ row.year ?? "-" }}</td>
-                    <td>{{ row.doi || "-" }}</td>
-                    <td>
-                      <span v-if="row.duplicateReason">
-                        {{ row.duplicateReason }}
-                        <template v-if="row.duplicateRecordId">(#{{ row.duplicateRecordId }})</template>
-                      </span>
-                      <span v-else>-</span>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-            <p v-else class="import-tools__empty">Select a file and click Preview.</p>
-          </section>
-
-          <section class="import-tools__history">
-            <div class="import-tools__history-head">
-              <h4>Imports</h4>
-              <span class="import-tools__history-count">{{ importHistoryTotal }} total</span>
-              <button type="button" :disabled="importHistoryLoading" @click="reloadImportHistory">
-                {{ importHistoryLoading ? "Loading..." : "Reload" }}
+        <section v-if="importViewMode === 'history'" class="import-tools__history import-tools__history--workspace">
+          <ul class="import-tools__history-list import-tools__history-list--workspace">
+            <li v-for="entry in importHistory" :key="entry.id" class="import-tools__history-item">
+              <div class="import-tools__history-meta">
+                <strong>#{{ entry.id }} {{ entry.fileName || "(no file name)" }}</strong>
+                <span>{{ entry.source || "-" }} / {{ entry.format || "-" }}</span>
+                <span>
+                  Imported {{ entry.imported ?? 0 }} / {{ entry.total ?? 0 }}
+                  (duplicates {{ entry.dublicates ?? 0 }})
+                </span>
+                <span>{{ entry.recordCount }} linked records</span>
+                <details class="import-tools__history-details">
+                  <summary>Details</summary>
+                  <div class="import-tools__history-details-body">
+                    <span>Database: {{ entry.database || "-" }}</span>
+                    <span>Created: {{ formatTimestamp(entry.createdAt) }}</span>
+                    <span>Updated: {{ formatTimestamp(entry.updatedAt) }}</span>
+                    <span v-if="entry.namesakes?.length">Namesakes: {{ entry.namesakes.join(", ") }}</span>
+                    <pre v-if="entry.query">{{ formatImportQuery(entry.query) }}</pre>
+                  </div>
+                </details>
+              </div>
+              <button
+                type="button"
+                class="import-tools__danger"
+                :disabled="importDeleteLoadingId === entry.id"
+                @click="removeImport(entry.id)"
+              >
+                {{ importDeleteLoadingId === entry.id ? "Deleting..." : "Delete import + records" }}
               </button>
-            </div>
-            <ul class="import-tools__history-list">
-              <li v-for="entry in importHistory" :key="entry.id" class="import-tools__history-item">
-                <div class="import-tools__history-meta">
-                  <strong>#{{ entry.id }} {{ entry.fileName || "(no file name)" }}</strong>
-                  <span>{{ entry.source || "-" }} / {{ entry.format || "-" }}</span>
-                  <span>
-                    Imported {{ entry.imported ?? 0 }} / {{ entry.total ?? 0 }}
-                    (duplicates {{ entry.dublicates ?? 0 }})
-                  </span>
-                  <span>{{ entry.recordCount }} linked records</span>
+            </li>
+            <li v-if="!importHistoryLoading && importHistory.length === 0" class="import-tools__empty">
+              No imports yet.
+            </li>
+          </ul>
+        </section>
+
+        <div v-else class="import-wizard">
+          <aside class="import-wizard__steps">
+            <h4>Import Wizard</h4>
+            <ol class="import-wizard__step-list">
+              <li
+                class="import-wizard__step-item"
+                :class="{
+                  'import-wizard__step-item--active': importWizardCurrentStep === 1,
+                  'import-wizard__step-item--done': !!importFile,
+                }"
+              >
+                1. Select file
+              </li>
+              <li
+                class="import-wizard__step-item"
+                :class="{
+                  'import-wizard__step-item--active': importWizardCurrentStep === 2,
+                  'import-wizard__step-item--done': !!importPreview,
+                }"
+              >
+                2. Preview and map fields
+              </li>
+              <li
+                class="import-wizard__step-item"
+                :class="{
+                  'import-wizard__step-item--active': importWizardCurrentStep === 3,
+                  'import-wizard__step-item--done': importPreviewReady,
+                }"
+              >
+                3. Import
+              </li>
+            </ol>
+            <button type="button" @click="backToImportHistory">Back to history</button>
+            <button type="button" :disabled="!importFile && !importPreview" @click="clearImportSelection">Reset wizard</button>
+          </aside>
+
+          <div class="import-wizard__body">
+            <section class="import-wizard__card">
+              <h4>Step 1: Choose file and source</h4>
+              <div class="import-tools__top">
+                <label class="import-tools__label import-tools__label--file">
+                  <span>File</span>
+                  <input
+                    type="file"
+                    accept=".csv,.bib,.bibtex,.txt,text/csv,text/plain,application/x-bibtex"
+                    @change="onImportFileChange"
+                  />
+                </label>
+
+                <label class="import-tools__label">
+                  <span>Source</span>
+                  <select :value="importSource" :disabled="importPreviewLoading || importApplyLoading" @change="onImportSourceChange">
+                    <option v-for="option in importSourceOptions" :key="option.value" :value="option.value">
+                      {{ option.label }}
+                    </option>
+                  </select>
+                </label>
+
+                <label v-if="requiresCustomDatabaseName" class="import-tools__label">
+                  <span>Database name</span>
+                  <input
+                    :value="importDatabaseName"
+                    type="text"
+                    placeholder="e.g. IEEE_XPLORE"
+                    :disabled="importPreviewLoading || importApplyLoading"
+                    @input="onImportDatabaseNameInput"
+                  />
+                </label>
+
+                <div class="import-tools__actions import-tools__actions--inline">
+                  <button type="button" :disabled="!canPreviewImport" @click="previewImportFile">
+                    {{ importPreviewLoading ? "Previewing..." : "Run preview" }}
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  class="import-tools__danger"
-                  :disabled="importDeleteLoadingId === entry.id"
-                  @click="removeImport(entry.id)"
-                >
-                  {{ importDeleteLoadingId === entry.id ? "Deleting..." : "Delete import + records" }}
+              </div>
+            </section>
+
+            <section class="import-wizard__card">
+              <h4>Step 2: Review preview</h4>
+              <p v-if="importPreview && !importPreviewReady" class="import-tools__warning">
+                Preview is outdated. Run Preview again before importing.
+              </p>
+
+              <section v-if="showImportCsvMapping" class="import-tools__mapping">
+                <h4>Column mapping</h4>
+                <p class="import-tools__mapping-hint">
+                  Confirm or adjust guessed mappings. Empty means “not mapped”.
+                </p>
+                <div class="import-tools__mapping-grid">
+                  <label
+                    v-for="field in importCsvFieldOptions"
+                    :key="field.key"
+                    class="import-tools__mapping-field"
+                  >
+                    <span>{{ field.label }}</span>
+                    <select
+                      :value="importCsvMapping[field.key] ?? ''"
+                      :disabled="importPreviewLoading || importApplyLoading"
+                      @change="onImportCsvMappingChange(field.key, $event)"
+                    >
+                      <option value="">(Not mapped)</option>
+                      <option v-for="column in importCsvColumns" :key="`${field.key}-${column}`" :value="column">
+                        {{ column }}
+                      </option>
+                    </select>
+                  </label>
+                </div>
+              </section>
+
+              <div v-if="importPreview" class="import-tools__summary">
+                <span>{{ importPreview.detectedSource }} / {{ importPreview.detectedFormat }}</span>
+                <span>Database {{ importPreview.databaseLabel }}</span>
+                <span>Total {{ importPreview.total }}</span>
+                <span>New {{ importPreview.newRecords }}</span>
+                <span>Duplicates {{ importPreview.duplicates }}</span>
+                <span>Invalid {{ importPreview.invalid }}</span>
+              </div>
+
+              <ul v-if="importPreview?.warnings?.length" class="import-tools__warnings">
+                <li v-for="warning in importPreview.warnings" :key="warning">{{ warning }}</li>
+              </ul>
+
+              <div v-if="importPreview" class="import-tools__table-wrap">
+                <table class="import-tools__table">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Status</th>
+                      <th>Title</th>
+                      <th>Author</th>
+                      <th>Year</th>
+                      <th>DOI</th>
+                      <th>Duplicate</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="row in importPreview.records" :key="`${row.rowNumber}-${row.title ?? ''}`">
+                      <td>{{ row.rowNumber }}</td>
+                      <td>
+                        <span class="import-tools__status" :class="`import-tools__status--${row.status}`">
+                          {{ row.status }}
+                        </span>
+                      </td>
+                      <td>{{ row.title || "-" }}</td>
+                      <td>{{ row.author || "-" }}</td>
+                      <td>{{ row.year ?? "-" }}</td>
+                      <td>{{ row.doi || "-" }}</td>
+                      <td>
+                        <span v-if="row.duplicateReason">
+                          {{ row.duplicateReason }}
+                          <template v-if="row.duplicateRecordId">(#{{ row.duplicateRecordId }})</template>
+                        </span>
+                        <span v-else>-</span>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <p v-else class="import-tools__empty">Choose a file and run Preview to continue.</p>
+            </section>
+
+            <section class="import-wizard__card">
+              <h4>Step 3: Import</h4>
+              <div class="import-tools__actions import-tools__actions--end">
+                <button type="button" class="data-tools__primary" :disabled="!canCreateImport" @click="createImportFile">
+                  {{ importApplyLoading ? "Importing..." : "Import records" }}
                 </button>
-              </li>
-              <li v-if="!importHistoryLoading && importHistory.length === 0" class="import-tools__empty">
-                No imports yet.
-              </li>
-            </ul>
-          </section>
+              </div>
+            </section>
+          </div>
         </div>
       </div>
     </section>
 
-    <EnrichmentStatus
-      :selectedRecordCount="selectedRecordCount"
-      :enrichmentRunning="enrichmentRunning"
-      :enrichmentStopping="enrichmentStopping"
-      :enrichmentMessage="enrichmentMessage"
-      :enrichmentError="enrichmentError"
-      :enrichmentProgressPercent="enrichmentProgressPercent"
-      :enrichmentProcessed="enrichmentProcessed"
-      :enrichmentTotal="enrichmentTotal"
-      :enrichmentMetrics="enrichmentMetrics"
-      @stop="stopEnrichment"
-    />
+    <template v-if="showDataGrid">
+      <EnrichmentStatus
+        :selectedRecordCount="selectedRecordCount"
+        :enrichmentRunning="enrichmentRunning"
+        :enrichmentStopping="enrichmentStopping"
+        :enrichmentMessage="enrichmentMessage"
+        :enrichmentError="enrichmentError"
+        :enrichmentProgressPercent="enrichmentProgressPercent"
+        :enrichmentProcessed="enrichmentProcessed"
+        :enrichmentTotal="enrichmentTotal"
+        :enrichmentMetrics="enrichmentMetrics"
+        @stop="stopEnrichment"
+      />
 
-    <DataGrid
-      ref="dataGridRef"
-      :tableKey="tableKey"
-      :tableRows="tableRows"
-      :columns="columns"
-      :columnHeaders="columnHeaders"
-      :tableAutoRowSize="tableAutoRowSize"
-      :tableRowHeights="tableRowHeights"
-      :gridHeight="gridHeight"
-      :cellMetaFactory="cellMetaFactory"
-      @after-change="onAfterChange"
-      @after-scroll-vertically="onAfterScrollVertically"
-      @after-cell-mouse-down="onAfterOnCellMouseDown"
-    />
+      <DataToolbar
+        :statusFilter="statusFilter"
+        :statusOptions="statusOptions"
+        :searchInput="searchInput"
+        :showFullText="!dataCellsTruncated"
+        @status-filter-change="onStatusFilterChange"
+        @search-input="onSearchInput"
+        @show-full-text-change="onShowFullTextChange"
+      />
 
-    <MappingEditor
-      :open="mappingEditorOpen"
-      :panelStyle="mappingEditorPanelStyle"
-      :questionTitle="mappingEditorQuestionTitle"
-      :selectedOptions="mappingEditorSelectedOptions"
-      :inputValue="mappingEditorInput"
-      :createColor="mappingEditorCreateColor"
-      :availableOptions="mappingEditorAvailableOptions"
-      :canCreateMappingOption="canCreateMappingOption"
-      @close="closeMappingEditor"
-      @update:inputValue="onMappingEditorInputUpdate"
-      @remove-option="removeMappingOption"
-      @create-option="createMappingOption"
-      @add-option="addMappingOption"
-    />
+      <DataGrid
+        ref="dataGridRef"
+        :tableKey="tableKey"
+        :tableRows="tableRows"
+        :columns="columns"
+        :columnHeaders="columnHeaders"
+        :tableAutoRowSize="tableAutoRowSize"
+        :tableRowHeights="tableRowHeights"
+        :gridHeight="gridHeight"
+        :cellMetaFactory="cellMetaFactory"
+        @after-change="onAfterChange"
+        @after-scroll-vertically="onAfterScrollVertically"
+        @after-cell-mouse-down="onAfterOnCellMouseDown"
+      />
 
-    <footer class="data-footer">
-      <span class="data-footer__loaded">Loaded {{ loadedCount }} / {{ totalCountLabel }}</span>
-      <span v-if="dataLoading">Loading more records...</span>
-      <span v-else-if="!dataHasMore">All records loaded</span>
-      <span v-else>Scroll to load more</span>
-    </footer>
+      <MappingEditor
+        :open="mappingEditorOpen"
+        :panelStyle="mappingEditorPanelStyle"
+        :questionTitle="mappingEditorQuestionTitle"
+        :selectedOptions="mappingEditorSelectedOptions"
+        :inputValue="mappingEditorInput"
+        :createColor="mappingEditorCreateColor"
+        :availableOptions="mappingEditorAvailableOptions"
+        :canCreateMappingOption="canCreateMappingOption"
+        @close="closeMappingEditor"
+        @update:inputValue="onMappingEditorInputUpdate"
+        @remove-option="removeMappingOption"
+        @create-option="createMappingOption"
+        @add-option="addMappingOption"
+      />
+
+      <footer class="data-footer">
+        <span class="data-footer__loaded">Loaded {{ loadedCount }} / {{ totalCountLabel }}</span>
+        <span v-if="dataLoading">Loading more records...</span>
+        <span v-else-if="!dataHasMore">All records loaded</span>
+        <span v-else>Scroll to load more</span>
+      </footer>
+    </template>
   </section>
 </template>
 
@@ -400,6 +501,8 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { storeToRefs } from "pinia";
 import { format as formatDate } from "date-fns";
 import type {
+  CsvImportFieldKey,
+  CsvImportMapping,
   EnrichmentMode,
   EnrichmentProvider,
   ForumDuplicateGroup,
@@ -440,6 +543,7 @@ type AnchorRect = {
   height: number;
 };
 type DataToolsTab = "enrichment" | "forums" | "imports";
+type ImportViewMode = "history" | "wizard";
 type ConfidenceChip = {
   label: string;
   score: number;
@@ -474,12 +578,25 @@ const searchInput = ref(searchFilter.value);
 const selectedRecordIds = ref<number[]>([]);
 const isUnmounted = ref(false);
 const toolsTab = ref<DataToolsTab>("enrichment");
+const showDataGrid = computed(() => toolsTab.value === "enrichment");
 const importSourceOptions: Array<{ value: ImportSource; label: string }> = [
   { value: "auto", label: "Auto detect" },
   { value: "scopus", label: "Scopus" },
   { value: "acm", label: "ACM Digital Library" },
   { value: "google-scholar", label: "Google Scholar" },
+  { value: "other-csv", label: "Other CSV" },
   { value: "other-bibtex", label: "Other BibTeX" },
+];
+const importCsvFieldOptions: Array<{ key: CsvImportFieldKey; label: string }> = [
+  { key: "title", label: "Title" },
+  { key: "author", label: "Authors" },
+  { key: "year", label: "Year" },
+  { key: "doi", label: "DOI" },
+  { key: "url", label: "URL" },
+  { key: "abstract", label: "Abstract" },
+  { key: "forumName", label: "Forum name" },
+  { key: "publisher", label: "Publisher" },
+  { key: "issn", label: "ISSN" },
 ];
 
 const forumGroups = ref<ForumDuplicateGroup[]>([]);
@@ -496,7 +613,11 @@ const forumMergeLoading = ref(false);
 const forumMergeError = ref("");
 const importFile = ref<File | null>(null);
 const importSource = ref<ImportSource>("auto");
+const importDatabaseName = ref("");
+const importSourceUserSelected = ref(false);
 const importPreview = ref<ImportPreviewResponse | null>(null);
+const importCsvMapping = ref<CsvImportMapping>({});
+const importPreviewReady = ref(false);
 const importPreviewLoading = ref(false);
 const importApplyLoading = ref(false);
 const importError = ref("");
@@ -505,6 +626,7 @@ const importHistory = ref<ImportSummary[]>([]);
 const importHistoryTotal = ref(0);
 const importHistoryLoading = ref(false);
 const importDeleteLoadingId = ref<number | null>(null);
+const importViewMode = ref<ImportViewMode>("history");
 
 const {
   enrichmentRunning,
@@ -558,11 +680,44 @@ const forumHasMore = computed(
   () => forumGroups.value.length < forumGroupsTotal.value,
 );
 const canPreviewImport = computed(
-  () => importFile.value !== null && !importPreviewLoading.value && !importApplyLoading.value,
+  () =>
+    importFile.value !== null
+    && (!selectedSourceRequiresDatabaseName.value || importDatabaseNameTrimmed.value.length > 0)
+    && !importPreviewLoading.value
+    && !importApplyLoading.value,
 );
 const canCreateImport = computed(
-  () => importFile.value !== null && !importPreviewLoading.value && !importApplyLoading.value,
+  () =>
+    importFile.value !== null
+    && (!requiresCustomDatabaseName.value || importDatabaseNameTrimmed.value.length > 0)
+    && importPreview.value !== null
+    && importPreviewReady.value
+    && !importPreviewLoading.value
+    && !importApplyLoading.value,
 );
+const importDatabaseNameTrimmed = computed(() => importDatabaseName.value.trim());
+const selectedSourceRequiresDatabaseName = computed(
+  () => importSource.value === "other-csv" || importSource.value === "other-bibtex",
+);
+const requiresCustomDatabaseName = computed(
+  () =>
+    selectedSourceRequiresDatabaseName.value
+    || importPreview.value?.detectedSource === "other-csv"
+    || importPreview.value?.detectedSource === "other-bibtex",
+);
+const importCsvColumns = computed(() => importPreview.value?.csvColumns ?? []);
+const showImportCsvMapping = computed(
+  () => importPreview.value?.detectedFormat === "csv" && importCsvColumns.value.length > 0,
+);
+const importWizardCurrentStep = computed(() => {
+  if (!importFile.value) {
+    return 1;
+  }
+  if (!importPreview.value || !importPreviewReady.value) {
+    return 2;
+  }
+  return 3;
+});
 const totalCountLabel = computed(() => {
   if (dataLoading.value && dataTotal.value <= 0) {
     return "...";
@@ -576,6 +731,18 @@ const formatTimestamp = (value: string) => {
     return value;
   }
   return formatDate(date, "dd.MM.yyyy HH:mm:ss");
+};
+const formatImportQuery = (value: string | null | undefined) => {
+  if (!value) {
+    return "";
+  }
+
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return JSON.stringify(parsed, null, 2);
+  } catch {
+    return value;
+  }
 };
 const stringListToCell = (items: string[] | null | undefined) => (Array.isArray(items) ? items.join(", ") : "");
 const confidenceLevel = (score: number): ConfidenceChip["level"] => {
@@ -1519,11 +1686,46 @@ const readFileAsText = async (file: File) =>
     reader.readAsText(file);
   });
 
+const markImportPreviewStale = (reason?: string) => {
+  if (!importPreview.value) {
+    importPreviewReady.value = false;
+    return;
+  }
+  importPreviewReady.value = false;
+  if (reason) {
+    importMessage.value = reason;
+  }
+};
+
 const clearImportSelection = () => {
   importFile.value = null;
+  importSource.value = "auto";
+  importDatabaseName.value = "";
+  importSourceUserSelected.value = false;
   importPreview.value = null;
+  importCsvMapping.value = {};
+  importPreviewReady.value = false;
   importError.value = "";
   importMessage.value = "";
+};
+
+const resetImportDraftKeepMessage = () => {
+  importFile.value = null;
+  importSource.value = "auto";
+  importDatabaseName.value = "";
+  importSourceUserSelected.value = false;
+  importPreview.value = null;
+  importCsvMapping.value = {};
+  importPreviewReady.value = false;
+};
+
+const startNewImport = () => {
+  clearImportSelection();
+  importViewMode.value = "wizard";
+};
+
+const backToImportHistory = () => {
+  importViewMode.value = "history";
 };
 
 const loadImportHistory = async () => {
@@ -1550,13 +1752,57 @@ const reloadImportHistory = () => {
 const onImportFileChange = (event: Event) => {
   const target = event.target as HTMLInputElement;
   importFile.value = target.files?.[0] ?? null;
+  importSource.value = "auto";
+  importDatabaseName.value = "";
+  importSourceUserSelected.value = false;
   importPreview.value = null;
+  importCsvMapping.value = {};
+  importPreviewReady.value = false;
   importError.value = "";
   importMessage.value = "";
 };
 
 const onImportSourceChange = (event: Event) => {
+  importSourceUserSelected.value = true;
   importSource.value = (event.target as HTMLSelectElement).value as ImportSource;
+  markImportPreviewStale("Import settings changed. Run Preview before importing.");
+};
+
+const onImportDatabaseNameInput = (event: Event) => {
+  importDatabaseName.value = (event.target as HTMLInputElement).value;
+  markImportPreviewStale("Import settings changed. Run Preview before importing.");
+};
+
+const onImportCsvMappingChange = (field: CsvImportFieldKey, event: Event) => {
+  const value = (event.target as HTMLSelectElement).value;
+  importCsvMapping.value = {
+    ...importCsvMapping.value,
+    [field]: value.length > 0 ? value : null,
+  };
+  markImportPreviewStale("CSV mapping changed. Run Preview before importing.");
+};
+
+const buildImportPayload = (fileName: string, content: string) => {
+  const payload: {
+    fileName: string;
+    source: ImportSource;
+    databaseName?: string;
+    content: string;
+    csvMapping?: CsvImportMapping;
+  } = {
+    fileName,
+    source: importSource.value,
+    content,
+  };
+  if (importDatabaseNameTrimmed.value.length > 0) {
+    payload.databaseName = importDatabaseNameTrimmed.value;
+  }
+
+  if (Object.keys(importCsvMapping.value).length > 0) {
+    payload.csvMapping = importCsvMapping.value;
+  }
+
+  return payload;
 };
 
 const previewImportFile = async () => {
@@ -1565,17 +1811,19 @@ const previewImportFile = async () => {
   }
 
   importPreviewLoading.value = true;
+  importPreviewReady.value = false;
   importError.value = "";
   importMessage.value = "";
 
   try {
     const content = await readFileAsText(importFile.value);
-    const response = await importApi.preview({
-      fileName: importFile.value.name,
-      source: importSource.value,
-      content,
-    });
+    const response = await importApi.preview(buildImportPayload(importFile.value.name, content));
     importPreview.value = response.data;
+    importCsvMapping.value = response.data.appliedCsvMapping ? { ...response.data.appliedCsvMapping } : {};
+    if (!importSourceUserSelected.value || importSource.value === "auto") {
+      importSource.value = response.data.detectedSource;
+    }
+    importPreviewReady.value = true;
   } catch (error) {
     importError.value = getApiErrorMessage(error);
   } finally {
@@ -1588,21 +1836,33 @@ const createImportFile = async () => {
     return;
   }
 
+  if (!importPreview.value) {
+    importError.value = "Preview is required before importing.";
+    return;
+  }
+
+  if (!importPreviewReady.value) {
+    importError.value = "Preview is outdated. Run Preview before importing.";
+    return;
+  }
+
   importApplyLoading.value = true;
   importError.value = "";
   importMessage.value = "";
 
   try {
     const content = await readFileAsText(importFile.value);
-    const response = await importApi.create({
-      fileName: importFile.value.name,
-      source: importSource.value,
-      content,
-    });
+    const response = await importApi.create(buildImportPayload(importFile.value.name, content));
 
     importPreview.value = response.data.summary;
+    importCsvMapping.value = response.data.summary.appliedCsvMapping
+      ? { ...response.data.summary.appliedCsvMapping }
+      : {};
+    importPreviewReady.value = true;
     importMessage.value = `Import #${response.data.import.id} created. Imported ${response.data.createdRecordIds.length} records.`;
     await Promise.all([loadImportHistory(), store.loadInitialData(), store.fetchPageItems()]);
+    importViewMode.value = "history";
+    resetImportDraftKeepMessage();
   } catch (error) {
     importError.value = getApiErrorMessage(error);
   } finally {
@@ -1631,6 +1891,7 @@ const removeImport = async (importId: number) => {
 
 const onImportsTabOpen = () => {
   toolsTab.value = "imports";
+  importViewMode.value = "history";
   if (importHistory.value.length === 0) {
     void loadImportHistory();
   }
@@ -1676,6 +1937,15 @@ watch(
   },
 );
 
+watch(
+  () => toolsTab.value,
+  (value) => {
+    if (value !== "enrichment") {
+      closeMappingEditor();
+    }
+  },
+);
+
 onMounted(async () => {
   isUnmounted.value = false;
   searchInput.value = searchFilter.value;
@@ -1712,39 +1982,90 @@ onUnmounted(() => {
 
 .data-tools {
   border: 1px solid #eaeaea;
+  border-radius: 0;
+  overflow: visible;
   background: #fff;
-  margin-top: -2px;
+  margin-top: 0;
   margin-bottom: 8px;
 
   &__tabs {
     display: flex;
-    gap: 4px;
+    gap: 0;
     padding: 8px 10px 0;
+    background: #fff;
+    border-bottom: 1px solid #eaeaea;
   }
 
   &__tab {
-    height: 28px;
-    padding: 0 10px;
-    border: 1px solid #d7d7d7;
-    border-bottom: 0;
-    background: #f8f8f8;
-    color: #5b5858;
+    height: auto;
+    margin: 0 5px 0 0;
+    padding: 5px 10px;
+    border: 0 solid transparent;
+    border-width: 1px 1px 0 1px;
+    border-radius: 0;
+    background: #fff;
+    color: #8a8a8a;
     font-size: 12px;
-    font-weight: 600;
+    font-weight: 500;
+    transform: translateY(1px);
+    transition: background-color 0.2s ease-in, border-color 0.2s ease-in, color 0.2s ease-in;
+    position: relative;
+
+    &:hover:not(&--active) {
+      background: #f7f7f7;
+      border-color: #eaeaea;
+    }
 
     &--active {
-      background: #fff;
-      color: #2f4fc6;
+      background: #ffffff;
+      color: #2c3e50;
+      font-weight: 700;
+      border-color: #eaeaea;
+      box-shadow: none;
+
+      &::after {
+        content: "";
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: -1px;
+        height: 2px;
+        background: #fff;
+      }
     }
   }
 
   &__panel {
-    border-top: 1px solid #eaeaea;
     display: flex;
     flex-wrap: wrap;
     align-items: flex-end;
     gap: 10px;
-    padding: 10px;
+    padding: 12px;
+  }
+
+  &--workspace {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 0;
+  }
+
+  &__panel--workspace {
+    flex: 1;
+    min-height: 0;
+    align-items: stretch;
+    overflow: hidden;
+    border-top: 0;
+  }
+
+  &__panel--forums,
+  &__panel--imports {
+    display: flex;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    gap: 10px;
   }
 
   &__group {
@@ -1895,6 +2216,7 @@ onUnmounted(() => {
     display: grid;
     grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
     gap: 10px;
+    flex: 1;
     min-height: 0;
   }
 
@@ -1902,7 +2224,7 @@ onUnmounted(() => {
     list-style: none;
     margin: 0;
     padding: 0;
-    max-height: 240px;
+    min-height: 0;
     overflow: auto;
     border: 1px solid #ededed;
     background: #fafafa;
@@ -1947,7 +2269,10 @@ onUnmounted(() => {
     border: 1px solid #ededed;
     background: #fff;
     padding: 8px;
-    min-height: 240px;
+    min-height: 0;
+    overflow: auto;
+    display: flex;
+    flex-direction: column;
 
     h4 {
       margin: 0 0 4px;
@@ -1966,7 +2291,8 @@ onUnmounted(() => {
     list-style: none;
     margin: 0;
     padding: 0;
-    max-height: 180px;
+    min-height: 0;
+    flex: 1;
     overflow: auto;
   }
 
@@ -2061,6 +2387,16 @@ onUnmounted(() => {
     align-items: center;
     gap: 6px;
     margin-left: auto;
+
+    &--inline {
+      margin-left: 0;
+    }
+
+    &--end {
+      width: 100%;
+      justify-content: flex-end;
+      margin-left: 0;
+    }
   }
 
   &__error {
@@ -2073,6 +2409,47 @@ onUnmounted(() => {
     margin: 0;
     font-size: 12px;
     color: #395c3f;
+  }
+
+  &__warning {
+    margin: 0;
+    font-size: 12px;
+    color: #8e6e21;
+  }
+
+  &__mapping {
+    width: 100%;
+    border: 1px solid #ededed;
+    background: #fafafa;
+    padding: 8px;
+
+    h4 {
+      margin: 0;
+      font-size: 13px;
+      color: #425a6a;
+    }
+  }
+
+  &__mapping-hint {
+    margin: 4px 0 0;
+    font-size: 11px;
+    color: #6f6f6f;
+  }
+
+  &__mapping-grid {
+    margin-top: 8px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 8px;
+  }
+
+  &__mapping-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 12px;
+    color: #5b5858;
+    text-transform: uppercase;
   }
 
   &__summary {
@@ -2092,19 +2469,11 @@ onUnmounted(() => {
     color: #8e6e21;
   }
 
-  &__content {
-    width: 100%;
-    display: grid;
-    grid-template-columns: minmax(0, 1.3fr) minmax(280px, 1fr);
-    gap: 10px;
-  }
-
-  &__preview,
   &__history {
     border: 1px solid #ededed;
     background: #fff;
     padding: 8px;
-    min-height: 220px;
+    min-height: 0;
 
     h4 {
       margin: 0 0 8px;
@@ -2114,7 +2483,7 @@ onUnmounted(() => {
   }
 
   &__table-wrap {
-    max-height: 260px;
+    max-height: min(45vh, 420px);
     overflow: auto;
   }
 
@@ -2169,6 +2538,14 @@ onUnmounted(() => {
     h4 {
       margin: 0;
     }
+
+    &--top {
+      width: 100%;
+      border: 1px solid #ededed;
+      background: #fafafa;
+      padding: 8px;
+      box-sizing: border-box;
+    }
   }
 
   &__history-count {
@@ -2181,13 +2558,23 @@ onUnmounted(() => {
     list-style: none;
     margin: 8px 0 0;
     padding: 0;
-    max-height: 260px;
+    max-height: min(35vh, 320px);
     overflow: auto;
+    scrollbar-gutter: stable;
+
+    &--workspace {
+      max-height: none;
+      height: 100%;
+      padding-right: 10px;
+      box-sizing: border-box;
+      margin-top: 0;
+    }
   }
 
   &__history-item {
     border-top: 1px solid #f0f0f0;
     padding: 8px 0;
+    padding-right: 4px;
     display: flex;
     gap: 8px;
     align-items: flex-start;
@@ -2208,6 +2595,45 @@ onUnmounted(() => {
     color: #5f5f5f;
   }
 
+  &__history-details {
+    margin-top: 4px;
+
+    summary {
+      cursor: pointer;
+      color: #4f5d69;
+      font-size: 12px;
+      user-select: none;
+    }
+  }
+
+  &__history-details-body {
+    margin-top: 6px;
+    display: grid;
+    gap: 4px;
+    font-size: 12px;
+    color: #5f5f5f;
+
+    pre {
+      margin: 2px 0 0;
+      padding: 6px;
+      max-height: 160px;
+      overflow: auto;
+      border: 1px solid #e9e9e9;
+      background: #fcfcfc;
+      font-size: 11px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+  }
+
+  &__history--workspace {
+    width: 100%;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
   &__danger {
     border-color: #bf5d5d !important;
     color: #8f2a2a !important;
@@ -2218,6 +2644,76 @@ onUnmounted(() => {
     margin: 0;
     font-size: 12px;
     color: #8b8b8b;
+  }
+}
+
+.import-wizard {
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(200px, 240px) minmax(0, 1fr);
+  gap: 10px;
+  align-items: stretch;
+
+  &__steps {
+    border: 1px solid #ededed;
+    background: #fafafa;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-height: 0;
+
+    h4 {
+      margin: 0;
+      font-size: 14px;
+      color: #425a6a;
+    }
+  }
+
+  &__step-list {
+    margin: 0;
+    padding-left: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    font-size: 12px;
+    color: #666;
+  }
+
+  &__step-item {
+    font-weight: 500;
+
+    &--active {
+      color: #2f4fc6;
+      font-weight: 700;
+    }
+
+    &--done {
+      color: #2f6f3f;
+    }
+  }
+
+  &__body {
+    min-height: 0;
+    overflow: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding-right: 2px;
+  }
+
+  &__card {
+    border: 1px solid #ededed;
+    background: #fff;
+    padding: 10px;
+
+    h4 {
+      margin: 0 0 8px;
+      font-size: 14px;
+      color: #425a6a;
+    }
   }
 }
 
@@ -2249,13 +2745,13 @@ onUnmounted(() => {
     min-height: 0;
   }
 
-  .import-tools__content {
-    grid-template-columns: 1fr;
-  }
-
   .import-tools__actions {
     margin-left: 0;
     width: 100%;
+  }
+
+  .import-wizard {
+    grid-template-columns: 1fr;
   }
 }
 </style>

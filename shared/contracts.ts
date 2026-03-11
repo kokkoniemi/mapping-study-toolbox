@@ -161,12 +161,26 @@ export type ForumMergeResponse = {
   mergedAliases: string[];
 };
 
-export const IMPORT_SOURCE_VALUES = ["auto", "scopus", "acm", "google-scholar", "other-bibtex"] as const;
+export const IMPORT_SOURCE_VALUES = ["auto", "scopus", "acm", "google-scholar", "other-csv", "other-bibtex"] as const;
 export type ImportSource = (typeof IMPORT_SOURCE_VALUES)[number];
 export type ImportDetectedSource = Exclude<ImportSource, "auto">;
 export type ImportFormat = "csv" | "bibtex";
 export type ImportRowStatus = "new" | "duplicate" | "invalid";
 export type ImportDuplicateReason = "doi" | "url" | "title-author-year" | "batch";
+export const CSV_IMPORT_FIELD_KEYS = [
+  "title",
+  "author",
+  "year",
+  "doi",
+  "url",
+  "abstract",
+  "forumName",
+  "publisher",
+  "issn",
+  "alternateUrls",
+] as const;
+export type CsvImportFieldKey = (typeof CSV_IMPORT_FIELD_KEYS)[number];
+export type CsvImportMapping = Partial<Record<CsvImportFieldKey, string | null>>;
 
 export type ImportPreviewRecord = {
   rowNumber: number;
@@ -190,12 +204,18 @@ export type ImportPreviewRecord = {
 export type ImportPreviewPayload = {
   fileName: string;
   source?: ImportSource;
+  databaseName?: string | null;
   content: string;
+  csvMapping?: CsvImportMapping;
 };
 
 export type ImportPreviewResponse = {
   detectedFormat: ImportFormat;
   detectedSource: ImportDetectedSource;
+  databaseLabel: string;
+  csvColumns: string[] | null;
+  suggestedCsvMapping: CsvImportMapping | null;
+  appliedCsvMapping: CsvImportMapping | null;
   total: number;
   parsed: number;
   newRecords: number;
