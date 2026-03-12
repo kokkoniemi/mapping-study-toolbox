@@ -1,7 +1,7 @@
 <template>
     <section id="classifier" v-if="currentItem" ref="classifierRef">
         <div class="classifier-layout">
-            <div class="classifier-main">
+            <div class="classifier-main" ref="classifierMainRef">
                 <h4 class="statusbar">
                     <span class="statusbar__meta">
                         id: {{ currentItem.id }} | created: {{ createdFormatted }} |
@@ -47,81 +47,80 @@
                             <span v-else class="abstract__empty">No abstract available.</span>
                         </p>
                     </div>
+                    <section class="literature-lists">
+                        <div class="literature-list">
+                            <div class="literature-list__header">
+                                <h4>References ({{ referenceDisplayItems.length }})</h4>
+                                <button type="button" class="literature-list__toggle" @click="toggleReferencesVisibility">
+                                    {{ showReferences ? "Hide" : "Show" }}
+                                </button>
+                            </div>
+                            <ul v-if="showReferences" class="literature-list__items">
+                                <li v-for="item in referenceDisplayItems" :key="item.key" class="literature-list__item">
+                                    <span v-if="item.title">{{ item.title }}</span>
+                                    <span v-else class="literature-list__muted">Untitled reference</span>
+                                    <template v-if="item.year"> ({{ item.year }})</template>
+                                    <template v-if="item.forum"> - {{ item.forum }}</template>
+                                    <template v-if="item.doi">
+                                        - <a :href="`https://doi.org/${item.doi}`" target="_blank" rel="noopener noreferrer">doi:{{ item.doi }}</a>
+                                    </template>
+                                    <template v-else-if="item.url">
+                                        - <a :href="item.url" target="_blank" rel="noopener noreferrer">open</a>
+                                    </template>
+                                </li>
+                                <li v-if="referenceDisplayItems.length === 0" class="literature-list__muted">
+                                    No references available.
+                                </li>
+                            </ul>
+                        </div>
+
+                        <div class="literature-list">
+                            <div class="literature-list__header">
+                                <h4>Citations ({{ citationDisplayItems.length }})</h4>
+                                <button type="button" class="literature-list__toggle" @click="toggleCitationsVisibility">
+                                    {{ showCitations ? "Hide" : "Show" }}
+                                </button>
+                            </div>
+                            <ul v-if="showCitations" class="literature-list__items">
+                                <li v-for="item in citationDisplayItems" :key="item.key" class="literature-list__item">
+                                    <span v-if="item.title">{{ item.title }}</span>
+                                    <span v-else class="literature-list__muted">Untitled citation</span>
+                                    <template v-if="item.year"> ({{ item.year }})</template>
+                                    <template v-if="item.forum"> - {{ item.forum }}</template>
+                                    <template v-if="item.doi">
+                                        - <a :href="`https://doi.org/${item.doi}`" target="_blank" rel="noopener noreferrer">doi:{{ item.doi }}</a>
+                                    </template>
+                                    <template v-else-if="item.url">
+                                        - <a :href="item.url" target="_blank" rel="noopener noreferrer">open</a>
+                                    </template>
+                                </li>
+                                <li v-if="citationDisplayItems.length === 0" class="literature-list__muted">
+                                    No citations available.
+                                </li>
+                            </ul>
+                        </div>
+
+                        <div class="literature-list">
+                            <div class="literature-list__header">
+                                <h4>Topics ({{ topicDisplayItems.length }})</h4>
+                                <button type="button" class="literature-list__toggle" @click="toggleTopicsVisibility">
+                                    {{ showTopics ? "Hide" : "Show" }}
+                                </button>
+                            </div>
+                            <ul v-if="showTopics" class="literature-list__items">
+                                <li v-for="item in topicDisplayItems" :key="item.key" class="literature-list__item">
+                                    <span>{{ item.displayName }}</span>
+                                    <template v-if="item.score !== null"> (score: {{ item.score.toFixed(2) }})</template>
+                                    <template v-if="item.field"> - {{ item.field }}</template>
+                                    <template v-if="item.subfield"> / {{ item.subfield }}</template>
+                                </li>
+                                <li v-if="topicDisplayItems.length === 0" class="literature-list__muted">
+                                    No topics available.
+                                </li>
+                            </ul>
+                        </div>
+                    </section>
                 </div>
-
-                <section class="literature-lists">
-                    <div class="literature-list">
-                        <div class="literature-list__header">
-                            <h4>References ({{ referenceDisplayItems.length }})</h4>
-                            <button type="button" class="literature-list__toggle" @click="toggleReferencesVisibility">
-                                {{ showReferences ? "Hide" : "Show" }}
-                            </button>
-                        </div>
-                        <ul v-if="showReferences" class="literature-list__items">
-                            <li v-for="item in referenceDisplayItems" :key="item.key" class="literature-list__item">
-                                <span v-if="item.title">{{ item.title }}</span>
-                                <span v-else class="literature-list__muted">Untitled reference</span>
-                                <template v-if="item.year"> ({{ item.year }})</template>
-                                <template v-if="item.forum"> - {{ item.forum }}</template>
-                                <template v-if="item.doi">
-                                    - <a :href="`https://doi.org/${item.doi}`" target="_blank" rel="noopener noreferrer">doi:{{ item.doi }}</a>
-                                </template>
-                                <template v-else-if="item.url">
-                                    - <a :href="item.url" target="_blank" rel="noopener noreferrer">open</a>
-                                </template>
-                            </li>
-                            <li v-if="referenceDisplayItems.length === 0" class="literature-list__muted">
-                                No references available.
-                            </li>
-                        </ul>
-                    </div>
-
-                    <div class="literature-list">
-                        <div class="literature-list__header">
-                            <h4>Citations ({{ citationDisplayItems.length }})</h4>
-                            <button type="button" class="literature-list__toggle" @click="toggleCitationsVisibility">
-                                {{ showCitations ? "Hide" : "Show" }}
-                            </button>
-                        </div>
-                        <ul v-if="showCitations" class="literature-list__items">
-                            <li v-for="item in citationDisplayItems" :key="item.key" class="literature-list__item">
-                                <span v-if="item.title">{{ item.title }}</span>
-                                <span v-else class="literature-list__muted">Untitled citation</span>
-                                <template v-if="item.year"> ({{ item.year }})</template>
-                                <template v-if="item.forum"> - {{ item.forum }}</template>
-                                <template v-if="item.doi">
-                                    - <a :href="`https://doi.org/${item.doi}`" target="_blank" rel="noopener noreferrer">doi:{{ item.doi }}</a>
-                                </template>
-                                <template v-else-if="item.url">
-                                    - <a :href="item.url" target="_blank" rel="noopener noreferrer">open</a>
-                                </template>
-                            </li>
-                            <li v-if="citationDisplayItems.length === 0" class="literature-list__muted">
-                                No citations available.
-                            </li>
-                        </ul>
-                    </div>
-
-                    <div class="literature-list">
-                        <div class="literature-list__header">
-                            <h4>Topics ({{ topicDisplayItems.length }})</h4>
-                            <button type="button" class="literature-list__toggle" @click="toggleTopicsVisibility">
-                                {{ showTopics ? "Hide" : "Show" }}
-                            </button>
-                        </div>
-                        <ul v-if="showTopics" class="literature-list__items">
-                            <li v-for="item in topicDisplayItems" :key="item.key" class="literature-list__item">
-                                <span>{{ item.displayName }}</span>
-                                <template v-if="item.score !== null"> (score: {{ item.score.toFixed(2) }})</template>
-                                <template v-if="item.field"> - {{ item.field }}</template>
-                                <template v-if="item.subfield"> / {{ item.subfield }}</template>
-                            </li>
-                            <li v-if="topicDisplayItems.length === 0" class="literature-list__muted">
-                                No topics available.
-                            </li>
-                        </ul>
-                    </div>
-                </section>
 
                 <section class="bottom-bar">
                     <div class="bottom-bar__center">
@@ -194,6 +193,7 @@ const store = defaultStore();
 const { pageItems, pageLength, page, statusFilter, tab, moveLock, currentItem } =
   storeToRefs(store);
 const classifierRef = ref<HTMLElement | null>(null);
+const classifierMainRef = ref<HTMLElement | null>(null);
 let sidebarHeightObserver: ResizeObserver | null = null;
 
 const showReferences = ref(false);
@@ -485,10 +485,12 @@ const isInteractiveTarget = (target: EventTarget | null) => {
 
 watch(
   () => currentItem.value?.id,
-  () => {
+  async () => {
     showReferences.value = false;
     showCitations.value = false;
     showTopics.value = false;
+    await nextTick();
+    classifierMainRef.value?.scrollTo({ top: 0, left: 0, behavior: "auto" });
   },
 );
 
@@ -578,6 +580,9 @@ onUnmounted(() => {
     min-height: 100%;
     display: flex;
     flex-direction: column;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-gutter: stable;
 }
 
 .notebook-panel {
@@ -637,12 +642,10 @@ onUnmounted(() => {
 }
 
 .abstract-wrapper {
-    flex: 1 1 auto;
-    min-height: 140px;
-    overflow-y: auto;
-    overflow-x: hidden;
-    border-bottom: 1px solid #eaeaea;
-    padding-bottom: 4px;
+    flex: 0 0 auto;
+    min-height: 0;
+    overflow: visible;
+    padding-bottom: 0;
 }
 
 .text-content {
@@ -651,9 +654,9 @@ onUnmounted(() => {
 }
 
 .literature-lists {
-    flex: 0 0 auto;
-    margin-top: 8px;
-    padding-top: 8px;
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid var(--ui-border-subtle);
 }
 
 .literature-list {
@@ -696,11 +699,6 @@ onUnmounted(() => {
         line-height: 1.35;
         font-size: 12px;
         color: #3a3a3a;
-        max-height: clamp(140px, 28vh, 320px);
-        overflow-y: auto;
-        overscroll-behavior: contain;
-        border: 1px solid #eaeaea;
-        background: #fff;
     }
 
     &__item {
@@ -985,6 +983,8 @@ onUnmounted(() => {
     text-transform: uppercase;
     font-size: 11px;
     font-weight: 500;
+    line-height: 1.35;
+    min-height: 24px;
     display: flex;
     align-items: center;
     gap: 4px;
