@@ -127,7 +127,7 @@ const onSelectItem = (item: RecordItem) => {
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
-    border: 1px solid #eaeaea;
+    border: 1px solid var(--ui-border-subtle);
     padding: 5px;
     align-self: stretch;
     position: sticky;
@@ -139,30 +139,28 @@ const onSelectItem = (item: RecordItem) => {
 
 h4 {
     margin: 0;
-    background: #f7f7f7;
+    background: var(--ui-surface-subtle);
     padding: 3px 5px;
-    color: #5b5858;
+    color: var(--ui-text-secondary);
     text-transform: uppercase;
     font-size: 12px;
-    font-weight: 400;
+    font-weight: 500;
 }
 
 .status-filter {
     width: 100%;
-    margin-top: 5px;
-    margin-bottom: 5px;
+    margin: 6px 0;
 }
 
 .search-filter {
     width: 100%;
-    box-sizing: border-box;
-    margin-top: 5px;
-    margin-bottom: 5px;
+    margin: 6px 0;
 }
 
 .page-length-filter {
     width: auto;
     margin-top: 0;
+    min-width: 76px;
 }
 
 .jump {
@@ -181,6 +179,7 @@ h4 {
     input {
         width: 58px;
         max-width: none;
+        margin-left: 2px;
     }
 }
 
@@ -193,37 +192,45 @@ h4 {
     overflow: auto;
 
     .item {
-        border-bottom: 1px solid rgba(0, 0, 0, 0.15);
-        padding: 5px;
+        border-bottom: 1px solid var(--ui-border-subtle);
+        padding: 4px 6px;
         font-size: 12px;
         position: relative;
         cursor: pointer;
-        opacity: 0.8;
+        opacity: 0.9;
         white-space: nowrap;
         overflow: hidden;
-        height: 18px;
+        height: 24px;
+        display: flex;
+        align-items: center;
+        gap: 2px;
+        color: var(--ui-text-secondary);
 
         &:hover {
             opacity: 1;
+            background: var(--ui-surface-subtle);
         }
 
         &--uncertain {
-            background: #ffffb4;
+            background: var(--ui-status-uncertain-bg);
+            border-left: 2px solid var(--ui-status-uncertain-border);
         }
 
         &--excluded {
-            background: #ffb4b4;
+            background: var(--ui-status-excluded-bg);
+            border-left: 2px solid var(--ui-status-excluded-border);
         }
 
         &--included {
-            background: #c4ffb4;
+            background: var(--ui-status-included-bg);
+            border-left: 2px solid var(--ui-status-included-border);
         }
 
         &--current {
             opacity: 1;
 
             &::after {
-                background: #3750dc;
+                background: #335cc4;
                 position: absolute;
                 display: flex;
                 align-items: center;
@@ -232,13 +239,13 @@ h4 {
                 right: 0;
                 top: 0;
                 bottom: 0;
-                width: 20px;
+                width: 18px;
                 content: ">";
             }
         }
 
         small {
-            color: #000000aa;
+            color: #00000099;
         }
     }
 }
@@ -246,7 +253,7 @@ h4 {
 .sidebar-footer {
     margin-top: 8px;
     padding-top: 6px;
-    border-top: 1px solid #eaeaea;
+    border-top: 1px solid var(--ui-border-subtle);
 }
 
 .pagination-controls {
@@ -285,7 +292,7 @@ h4 {
         white-space: nowrap;
 
         &:hover {
-            color: #233496;
+            color: #2847a8;
         }
 
         &--disabled {

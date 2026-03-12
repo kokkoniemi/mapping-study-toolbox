@@ -117,7 +117,7 @@ watch(
     position: fixed;
     z-index: 2001;
     background: #fff;
-    border: 1px solid #aeaeae;
+    border: 1px solid var(--ui-border-default);
     box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
     padding: 10px 8px 8px;
     display: flex;
@@ -136,10 +136,10 @@ watch(
 
     h3 {
       margin: 0;
-      font-size: 20px;
+      font-size: 18px;
       line-height: 1.2;
       font-weight: 600;
-      color: #2c3e50;
+      color: var(--ui-text-primary);
     }
   }
 
@@ -174,17 +174,7 @@ watch(
 
     input {
       width: 100%;
-      box-sizing: border-box;
-      border: 0;
-      border-bottom: 1px solid #eaeaea;
-      padding: 6px 4px 8px;
-      font-size: 15px;
-      background: transparent;
-      color: #2c3e50;
-
-      &:focus {
-        outline: none;
-      }
+      margin: 2px 0;
     }
   }
 
@@ -217,7 +207,7 @@ watch(
   }
 
   &__item {
-    height: 32px;
+    min-height: 32px;
     display: flex;
     align-items: center;
     margin: 0 -3px;
@@ -225,7 +215,7 @@ watch(
     transition: background-color 0.2s ease-in;
 
     &:hover {
-      background-color: #eaeaea;
+      background-color: var(--ui-surface-subtle);
     }
   }
 
@@ -242,13 +232,13 @@ watch(
 
   &__create-label {
     font-size: 12px;
-    color: #5b5858;
+    color: var(--ui-text-secondary);
     margin-right: 2px;
   }
 
   &__hint {
     font-size: 12px;
-    color: #c0c0c0;
+    color: var(--ui-text-muted);
     margin: 0 4px;
 
     &--empty {
@@ -257,19 +247,16 @@ watch(
   }
 
   &__close {
-    font-size: 12px;
-    color: #5b5858;
-    padding: 2px 8px;
-    background: #fff;
-    border: 1px solid #e0e0e0;
-
-    &:hover {
-      background: #f7f7f7;
-    }
+    min-height: 28px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    padding: 0 8px;
   }
 }
 
 .mapping-chip {
+  min-height: 0;
   font-size: 10px;
   border-radius: 3px;
   padding: 5px;

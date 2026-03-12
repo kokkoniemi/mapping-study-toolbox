@@ -368,14 +368,9 @@ onMounted(async () => {
                 }
 
                 input {
-                    border: 0;
                     flex: 1;
-                    background: transparent;
-
-                    &:focus {
-                        border: 0;
-                        outline: 0;
-                    }
+                    min-width: 140px;
+                    margin-left: 6px;
                 }
             }
 
@@ -387,7 +382,7 @@ onMounted(async () => {
                 right: 0;
                 transform: translateY(calc(-100% + 35px));
                 background-color: #fff;
-                border: 1px solid #aeaeae;
+                border: 1px solid var(--ui-border-default);
                 padding: 10px 5px 35px;
                 z-index: 1;
                 box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
@@ -441,7 +436,7 @@ onMounted(async () => {
                 top: 0;
                 background-color: #fff;
                 min-width: 300px;
-                border: 1px solid #aeaeae;
+                border: 1px solid var(--ui-border-default);
                 padding: 0px 10px 10px;
                 display: flex;
                 flex-direction: column;
@@ -451,7 +446,11 @@ onMounted(async () => {
                 transform: translateY(-100%);
 
                 button {
-                    margin-top: 20px;
+                    margin-top: 16px;
+                }
+
+                select {
+                    width: 100%;
                 }
             }
 
@@ -508,17 +507,7 @@ onMounted(async () => {
             }
 
             input {
-                height: 24px;
-                color: #2c3e50;
-                font-size: 15px;
-                padding-left: 7px;
-                border: 1px solid #cecece;
-
-                &:focus {
-                    outline: unset;
-                    box-shadow: none;
-                    border: 1px solid #cecece;
-                }
+                width: 100%;
             }
         }
 

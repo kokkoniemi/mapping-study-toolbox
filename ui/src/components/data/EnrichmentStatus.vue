@@ -101,17 +101,17 @@ defineEmits<{
   }
 
   &__stop {
-    height: 24px;
-    padding: 0 10px;
-    border: 1px solid #b85757;
+    min-height: var(--ui-control-height);
+    border-color: #d3a3aa;
     background: #fff;
-    color: #8c2e2e;
+    color: #8a2f3e;
     font-size: 11px;
     font-weight: 600;
     white-space: nowrap;
 
     &:hover:not(:disabled) {
-      background: #f8f2f2;
+      border-color: #bf848f;
+      background: #faf1f3;
     }
 
     &:disabled {

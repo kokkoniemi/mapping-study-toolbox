@@ -69,7 +69,7 @@ const emitShowFullTextChange = (event: Event) => {
   flex-wrap: wrap;
   gap: 12px;
   align-items: flex-end;
-  border: 1px solid #eaeaea;
+  border: 1px solid var(--ui-border-subtle);
   padding: 10px;
   background: #fff;
   margin-bottom: 8px;
@@ -88,7 +88,7 @@ const emitShowFullTextChange = (event: Event) => {
 
     &--toggle {
       min-width: 150px;
-      border-left: 1px solid #dddddd;
+      border-left: 1px solid var(--ui-border-subtle);
       padding-left: 10px;
       margin-left: 2px;
     }
@@ -98,10 +98,10 @@ const emitShowFullTextChange = (event: Event) => {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    height: 30px;
+    min-height: var(--ui-control-height);
     box-sizing: border-box;
     font-size: 12px;
-    color: #5b5858;
+    color: var(--ui-text-secondary);
     text-transform: none;
     cursor: pointer;
     margin: 0;
@@ -114,16 +114,10 @@ const emitShowFullTextChange = (event: Event) => {
 
   &__group > label {
     font-size: 12px;
-    color: #5b5858;
+    color: var(--ui-text-secondary);
     text-transform: uppercase;
     margin: 0;
     line-height: 1.2;
-  }
-
-  select,
-  input[type="text"] {
-    height: 30px;
-    box-sizing: border-box;
   }
 }
 

@@ -45,7 +45,7 @@ const updateTab = (value: "inc-exc" | "map" | "data") => {
           @click="updateTab('data')"
         >Data</li>
       </ul>
-      <input type="text" :class="[!nick && 'empty']" placeholder="Nickname" v-model="nickname" />
+      <input type="text" :class="['nickname-input', !nick && 'empty']" placeholder="Nickname" v-model="nickname" />
     </div>
     <div class="main-container" v-if="nick && tab !== 'data'">
       <Sidebar />
@@ -65,10 +65,10 @@ const updateTab = (value: "inc-exc" | "map" | "data") => {
 }
 
 #app {
-  font-family: Avenir, Helvetica, Arial, sans-serif;
+  font-family: var(--ui-font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  color: #2c3e50;
+  color: var(--ui-text-primary);
   width: 100%;
   height: 100vh;
   min-height: 100vh;
@@ -76,7 +76,7 @@ const updateTab = (value: "inc-exc" | "map" | "data") => {
   flex-direction: column;
   overflow: hidden;
   box-sizing: border-box;
-  padding: 0 var(--layout-gutter) var(--layout-gutter);
+  padding: clamp(6px, 1vh, 10px) var(--layout-gutter) var(--layout-gutter);
 }
 .main-container {
   display: grid;
@@ -98,36 +98,35 @@ const updateTab = (value: "inc-exc" | "map" | "data") => {
   overflow: hidden;
 }
 .app-name {
-  border-bottom: 1px solid #eaeaea;
+  position: relative;
+  border-bottom: 1px solid var(--ui-border-subtle);
   display: flex;
   gap: var(--layout-gutter);
   justify-content: space-between;
   align-items: flex-end;
-  margin: 0 0 var(--layout-gutter);
-  font-size: 22px;
+  margin: 0 0 clamp(6px, 1vh, 10px);
+  font-size: 20px;
   min-width: 0;
+}
 
-  input {
-    margin-bottom: 5px;
-    border: 0;
-    padding: 5px;
-    height: 20px;
-    width: 100px;
-    transition: background-color 0.2s ease-in, border-color 0.2s ease-in;
-    font-family: "Times New Roman", Times, serif;
-    font-style: italic;
-    font-weight: 600;
-    font-size: 14px;
+.nickname-input {
+  flex: 0 0 auto;
+  width: clamp(108px, 11vw, 150px);
+  min-width: 108px;
+  max-width: 150px;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-size: 12px;
+  font-weight: 600;
+}
 
-    &:hover,
-    &:focus {
-      background: #f7f7f7;
-    }
+.app-name .nickname-input {
+  width: clamp(108px, 11vw, 150px);
+}
 
-    &.empty {
-      animation: blink 1.4s infinite;
-    }
-  }
+.nickname-input.empty {
+  animation: blink 1.4s infinite;
 }
 
 .message {
@@ -137,32 +136,50 @@ const updateTab = (value: "inc-exc" | "map" | "data") => {
 
 .app-tabs {
   list-style: none;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: flex-end;
+  gap: 4px;
   padding: 0;
-  margin: 0;
+  margin: 0 0 -1px;
   min-width: 0;
+  overflow-x: auto;
 }
 
 .app-tab {
   display: inline-block;
-  margin: 0 5px;
+  margin: 0;
   padding: 5px 10px;
-  font-size: 18px;
-  color: #878787;
+  font-size: 17px;
+  color: var(--ui-text-muted);
   transition: background-color 0.2s ease-in, border-color 0.2s ease-in;
   transform: translateY(1px);
-  border: 0px solid transparent;
+  position: relative;
+  border: 0 solid transparent;
   border-width: 1px 1px 0 1px;
 
   &:hover {
-    background-color: #f7f7f7;
-    border-color: #eaeaea;
+    background-color: var(--ui-surface-subtle);
+    border-color: var(--ui-border-subtle);
     cursor: pointer;
   }
 
   &--active {
-    border-color: #eaeaea;
+    border-color: var(--ui-border-subtle);
+    border-bottom-color: #fff;
     background-color: #fff;
     color: inherit;
+    z-index: 2;
+
+    &::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: -1px;
+      height: 3px;
+      background: #fff;
+    }
 
     &:hover {
       background-color: #fff;
@@ -175,7 +192,7 @@ const updateTab = (value: "inc-exc" | "map" | "data") => {
     background: transparent;
   }
   50% {
-    background: #f7f7f7;
+    background: var(--ui-surface-subtle);
   }
   100% {
     background: auto;
@@ -206,33 +223,9 @@ body {
     align-items: stretch;
   }
 
-  .app-name input {
+  .app-name .nickname-input {
     width: 100%;
-    box-sizing: border-box;
-  }
-}
-
-button {
-  border: 0;
-  background: #fff;
-  font-size: 12px;
-  cursor: pointer;
-  color: #2c3e50;
-  font-weight: 600;
-  padding: 5px 10px;
-
-  &:hover {
-    background: #eaeaea;
-  }
-
-  .icon {
-    display: inline-block;
-    padding-right: 4px;
-    font-size: 12px;
-  }
-
-  &.button--danger {
-    color: #7b0c27;
+    max-width: none;
   }
 }
 </style>

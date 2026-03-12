@@ -1981,7 +1981,7 @@ onUnmounted(() => {
 }
 
 .data-tools {
-  border: 1px solid #eaeaea;
+  border: 1px solid var(--ui-border-subtle);
   border-radius: 0;
   overflow: visible;
   background: #fff;
@@ -1993,18 +1993,18 @@ onUnmounted(() => {
     gap: 0;
     padding: 8px 10px 0;
     background: #fff;
-    border-bottom: 1px solid #eaeaea;
+    border-bottom: 1px solid var(--ui-border-subtle);
+    margin-bottom: -1px;
   }
 
   &__tab {
     height: auto;
     margin: 0 5px 0 0;
     padding: 5px 10px;
-    border: 0 solid transparent;
-    border-width: 1px 1px 0 1px;
+    border: 1px solid var(--ui-border-subtle);
     border-radius: 0;
     background: #fff;
-    color: #8a8a8a;
+    color: var(--ui-text-muted);
     font-size: 12px;
     font-weight: 500;
     transform: translateY(1px);
@@ -2012,16 +2012,18 @@ onUnmounted(() => {
     position: relative;
 
     &:hover:not(&--active) {
-      background: #f7f7f7;
-      border-color: #eaeaea;
+      background: var(--ui-surface-subtle);
+      border-color: var(--ui-border-subtle);
     }
 
     &--active {
       background: #ffffff;
-      color: #2c3e50;
-      font-weight: 700;
-      border-color: #eaeaea;
+      color: var(--ui-text-primary);
+      font-weight: 500;
+      border-color: var(--ui-border-subtle);
+      border-bottom-color: #fff;
       box-shadow: none;
+      z-index: 2;
 
       &::after {
         content: "";
@@ -2029,7 +2031,7 @@ onUnmounted(() => {
         left: 0;
         right: 0;
         bottom: -1px;
-        height: 2px;
+        height: 3px;
         background: #fff;
       }
     }
@@ -2080,7 +2082,7 @@ onUnmounted(() => {
     align-items: center;
     gap: 6px;
     font-size: 12px;
-    color: #5b5858;
+    color: var(--ui-text-secondary);
     text-transform: uppercase;
     line-height: 1.2;
   }
@@ -2089,9 +2091,9 @@ onUnmounted(() => {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    height: 30px;
+    min-height: var(--ui-control-height);
     font-size: 12px;
-    color: #5b5858;
+    color: var(--ui-text-secondary);
 
     input {
       margin: 0;
@@ -2150,32 +2152,13 @@ onUnmounted(() => {
   }
 
   &__primary {
-    border-color: #3c67d8 !important;
-    color: #2d4fc9 !important;
+    border-color: #8ca8e8 !important;
+    color: #2d4ec0 !important;
+    background: #f4f7ff !important;
     font-weight: 600;
-  }
-
-  select,
-  input[type="text"] {
-    height: 30px;
-    box-sizing: border-box;
-  }
-
-  button {
-    height: 30px;
-    padding: 0 10px;
-    border: 1px solid #dedede;
-    background: #ffffff;
-    color: #5b5858;
-    font-size: 12px;
-
     &:hover:not(:disabled) {
-      background: #f6f6f6;
-    }
-
-    &:disabled {
-      opacity: 0.6;
-      cursor: default;
+      border-color: #7894d8 !important;
+      background: #ecf2ff !important;
     }
   }
 }
@@ -2195,7 +2178,7 @@ onUnmounted(() => {
     min-width: min(320px, 100%);
     flex: 1;
     font-size: 12px;
-    color: #5b5858;
+    color: var(--ui-text-secondary);
     text-transform: uppercase;
   }
 
@@ -2376,7 +2359,6 @@ onUnmounted(() => {
     }
 
     input[type="file"] {
-      height: 30px;
       font-size: 12px;
     }
   }
@@ -2635,9 +2617,15 @@ onUnmounted(() => {
   }
 
   &__danger {
-    border-color: #bf5d5d !important;
-    color: #8f2a2a !important;
+    border-color: #d3a3aa !important;
+    color: #8a2f3e !important;
+    background: #fff !important;
     white-space: nowrap;
+
+    &:hover:not(:disabled) {
+      border-color: #bf848f !important;
+      background: #faf1f3 !important;
+    }
   }
 
   &__empty {

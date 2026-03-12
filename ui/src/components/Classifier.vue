@@ -11,7 +11,7 @@
                     <span class="statusbar__db" :title="databaseList">db: {{ databaseList }}</span>
                 </h4>
 
-                <h1>{{ currentItem.title }}</h1>
+                <h1 class="record-title">{{ currentItem.title }}</h1>
                 <p class="author">
                     <small>
                         {{ authorDisplay }}
@@ -42,12 +42,9 @@
                 <div class="abstract-wrapper" :settings="{}">
                     <div class="text-content">
                         <p class="abstract">
-                            <small>
-                                <b>Abstract:</b>
-                            </small>
-                            <br />
+                            <span class="abstract__label">Abstract</span>
                             <span v-if="currentItem.abstract" class="abstract__text">{{ sanitizeAbstract(currentItem.abstract) }}</span>
-                            <span v-else>No abstract available.</span>
+                            <span v-else class="abstract__empty">No abstract available.</span>
                         </p>
                     </div>
                 </div>
@@ -589,32 +586,54 @@ onUnmounted(() => {
 
 .notebook-title {
     margin: 0 0 5px;
-    background: #f7f7f7;
+    background: var(--ui-surface-subtle);
     padding: 3px 5px;
-    color: #5b5858;
+    color: var(--ui-text-secondary);
     text-transform: uppercase;
     font-size: 12px;
-    font-weight: 400;
+    font-weight: 500;
 }
 
 .notebook-title--inline {
     display: block;
 }
 
-h1 {
-    margin: 10px 0 6px;
-    line-height: 1.15;
+.record-title {
+    margin: 6px 0 3px;
+    font-size: clamp(1.05rem, 0.92rem + 0.45vw, 1.55rem);
+    line-height: 1.18;
+    letter-spacing: -0.01em;
 }
 
 .abstract {
-    line-height: 32px;
-    font-family: Georgia;
-    font-size: 18px;
+    line-height: 1.58;
+    font-family: var(--ui-font-serif);
+    font-size: clamp(0.95rem, 0.86rem + 0.25vw, 1.05rem);
+    color: #2f3d4d;
     margin: 0;
+    max-width: 84ch;
+}
+
+.abstract__label {
+    display: block;
+    margin-bottom: 6px;
+    font-family: var(--ui-font-sans);
+    color: var(--ui-text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    font-size: 11px;
+    font-weight: 600;
 }
 
 .abstract__text {
+    display: block;
     white-space: pre-line;
+}
+
+.abstract__empty {
+    display: block;
+    color: var(--ui-text-muted);
+    font-style: italic;
 }
 
 .abstract-wrapper {
@@ -628,6 +647,7 @@ h1 {
 
 .text-content {
     position: relative;
+    max-width: 88ch;
 }
 
 .literature-lists {
@@ -653,14 +673,11 @@ h1 {
     h4 {
         margin: 0;
         font-size: 14px;
-        color: #3b4c5d;
+        color: #394e60;
     }
 
     &__toggle {
         padding: 2px 6px;
-        border: 0;
-        background: #fff;
-        border-radius: 3px;
         color: #3750dc;
         font-size: 12px;
         font-weight: 600;
@@ -668,8 +685,7 @@ h1 {
         letter-spacing: 0.02em;
 
         &:hover {
-            color: #233496;
-            background: #f7f7f7;
+            color: #2847a8;
         }
     }
 
@@ -706,7 +722,7 @@ h1 {
     &__label {
         font-size: 12px;
         font-weight: 600;
-        color: #586572;
+        color: var(--ui-text-secondary);
         align-self: center;
         margin-right: 2px;
     }
@@ -745,129 +761,121 @@ h1 {
 .inclusion-actions {
     margin-top: 5px;
     display: flex;
-    padding: 5px;
+    padding: 5px 0;
 
     .action {
         flex: 1;
-        height: 32px;
-        font-size: 20px;
-        background: #c0c0c0;
-        border: 0;
-        box-shadow: inset 0 0 1px rgba(0, 0, 0, 0.7), 0 2px 3px rgba(0, 0, 0, 0.3);
-        cursor: pointer;
-        text-shadow: 1px 1px rgba(255, 255, 255, 0.7);
-        font-family: Helvetica, Arial, sans-serif;
-        font-size: 14px;
+        min-height: var(--ui-control-height);
+        border: 1px solid var(--ui-border-default);
+        border-radius: var(--ui-radius-sm);
+        box-shadow: none;
+        text-shadow: none;
+        font-family: var(--ui-font-sans);
+        font-size: 12px;
         font-weight: 600;
         text-transform: uppercase;
+        letter-spacing: 0.03em;
 
-        +.action {
-            margin-left: 5px;
+        + .action {
+            margin-left: 6px;
         }
 
         &--exclude {
-            background: rgb(255, 180, 180);
-            background: linear-gradient(180deg,
-                    rgba(255, 180, 180, 1) 0%,
-                    rgb(182, 143, 143) 100%);
-            color: #592f2f;
+            background: var(--ui-status-excluded-bg);
+            border-color: var(--ui-status-excluded-border);
+            color: var(--ui-status-excluded-text);
         }
 
         &--uncertain {
-            background: #ffffb4;
-            background: linear-gradient(180deg, #ffffb4 0%, #baba72 100%);
-            color: #464208;
+            background: var(--ui-status-uncertain-bg);
+            border-color: var(--ui-status-uncertain-border);
+            color: var(--ui-status-uncertain-text);
         }
 
         &--include {
-            background: #c4ffb4;
-            background: linear-gradient(180deg, #c4ffb4 0%, #89b57d 100%);
-            color: #1d4612;
+            background: var(--ui-status-included-bg);
+            border-color: var(--ui-status-included-border);
+            color: var(--ui-status-included-text);
         }
 
         &--selected,
-        &:active,
-        &:focus {
-            text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.6);
-            color: #fff;
-            outline: none;
+        &:active {
+            box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.05);
         }
 
         &--selected.action--exclude,
         &--exclude:active {
-            background: linear-gradient(180deg,
-                    rgb(143, 106, 106) 0%,
-                    rgb(211, 151, 151) 100%);
-            box-shadow: inset 0 0 1px #111111e9, inset 0px 2px 4px rgba(0, 0, 0, 0.4),
-                inset 0 -2px 2px rgba(0, 0, 0, 0.2);
+            background: #f0dde1;
+            border-color: #c99ca6;
+            color: #6e2b38;
         }
 
         &--selected.action--include,
         &--include:active {
-            background: linear-gradient(180deg, #719766 0%, #aadc9d 100%);
-            box-shadow: inset 0 0 1px #111111e9, inset 0px 2px 4px rgba(0, 0, 0, 0.4),
-                inset 0 -2px 2px rgba(0, 0, 0, 0.2);
+            background: #ddecd9;
+            border-color: #9fc49a;
+            color: #254d2d;
         }
 
         &--selected.action--uncertain,
         &--uncertain:active {
-            background: linear-gradient(180deg, #a6a656 0%, #d7d78e 100%);
-            box-shadow: inset 0 0 1px #111111e9, inset 0px 2px 4px rgba(0, 0, 0, 0.4),
-                inset 0 -2px 2px rgba(0, 0, 0, 0.2);
+            background: #f2ead2;
+            border-color: #ccb980;
+            color: #5c4d14;
         }
     }
 }
 
 .comment {
-    padding: 5px;
-    border: none;
-    border-bottom: 1px solid #eaeaea;
-    // box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.3);
+    padding: 8px 10px;
+    border: 1px solid var(--ui-border-default);
+    border-radius: var(--ui-radius-sm);
     margin: 5px 0;
-    transition: background-color 0.2s ease-in, box-shadow 0.2s ease-in;
-    font-size: 14px;
-    font-family: Georgia, "Times New Roman", Times, serif;
+    transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+    font-size: 13px;
+    line-height: 1.45;
+    font-family: var(--ui-font-serif);
     resize: vertical;
     width: 100%;
-    box-sizing: border-box;
 
     &:focus,
     &:hover {
-        outline: none;
-        box-shadow: none;
-        background-color: #eaeaea;
+        background-color: #fff;
     }
 }
 
 .comment--notebook {
     min-height: 280px;
     margin: 0;
-    padding: 5px;
+    padding: 8px 10px;
 }
 
 .forum {
-    margin: 0 0 8px;
+    margin: 0 0 7px;
     padding-bottom: 6px;
-    border-bottom: 2px solid #eaeaea;
+    border-bottom: 1px solid var(--ui-border-subtle);
     line-height: 1.2;
+    font-size: 13px;
+    color: var(--ui-text-secondary);
 }
 
 .author {
-    margin: 0 0 4px;
+    margin: 0 0 2px;
     line-height: 1.2;
 
     small {
-        font-size: 12px;
+        font-size: 11px;
+        color: var(--ui-text-secondary);
     }
 }
 
 .affiliations {
-    margin: 0 0 6px;
+    margin: 0 0 5px;
     line-height: 1.2;
 
     small {
-        font-size: 12px;
-        color: #4a5865;
+        font-size: 11px;
+        color: #566473;
     }
 }
 
@@ -916,9 +924,9 @@ h1 {
     }
 }
 
-@media (min-width: 1280px) {
+@media (min-width: 1024px) {
     .classifier-layout {
-        grid-template-columns: minmax(0, 1fr) clamp(320px, 25vw, 460px);
+        grid-template-columns: minmax(0, 1fr) clamp(260px, 22vw, 340px);
         align-items: stretch;
     }
 
@@ -971,15 +979,15 @@ h1 {
 
 .statusbar {
     margin: 0 0 6px;
-    background: #f7f7f7;
+    background: var(--ui-surface-subtle);
     padding: 3px 5px;
-    color: #5b5858;
+    color: var(--ui-text-secondary);
     text-transform: uppercase;
-    font-size: 12px;
-    font-weight: 400;
+    font-size: 11px;
+    font-weight: 500;
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 4px;
     min-width: 0;
     white-space: nowrap;
     overflow: hidden;
