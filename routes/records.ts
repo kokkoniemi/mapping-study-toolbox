@@ -99,6 +99,15 @@ const parseStatusQuery = (value: unknown): RecordStatus | undefined => {
   throw badRequest(`status must be one of: ${VALID_STATUSES_TEXT.join(", ")}`);
 };
 
+const parseImportIdQuery = (value: unknown): number | undefined => {
+  const importId = parseString(value, "importId", { optional: true, trim: true });
+  if (importId === undefined || importId.length === 0) {
+    return undefined;
+  }
+
+  return parseInteger(importId, "importId", { min: 1 });
+};
+
 const parseStatusBody = (value: unknown): RecordStatus | undefined => {
   if (value === undefined) {
     return undefined;
@@ -227,6 +236,7 @@ export const listing = async (req: Request, res: Response) => {
     max: RECORD_LIST_DEFAULT_MAX,
   });
   const status = parseStatusQuery(req.query.status);
+  const importId = parseImportIdQuery(req.query.importId);
   const withDetails = parseBooleanQuery(req.query.withDetails, "withDetails");
   const search = parseString(req.query.search, "search", {
     optional: true,
@@ -238,6 +248,10 @@ export const listing = async (req: Request, res: Response) => {
 
   if (status !== undefined) {
     where.status = status;
+  }
+
+  if (importId !== undefined) {
+    where.importId = importId;
   }
 
   if (search !== undefined && search.length > 0) {

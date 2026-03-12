@@ -113,6 +113,28 @@ describe("routes/records", () => {
     expect(res.send).toHaveBeenCalledWith({ count: 2, records: [{ id: 1 }, { id: 2 }] });
   });
 
+  it("listing applies importId filter", async () => {
+    dbMock.Record.count.mockResolvedValue(1);
+    dbMock.Record.findAll.mockResolvedValue([{ id: 10 }]);
+
+    const req = {
+      query: { importId: "42" },
+    } as unknown as Request;
+    const res = mockResponse();
+
+    await listing(req, res);
+
+    expect(dbMock.Record.count).toHaveBeenCalledTimes(1);
+    const where = dbMock.Record.count.mock.calls[0]?.[0]?.where as Record<string, unknown>;
+    expect(where.importId).toBe(42);
+    expect(dbMock.Record.findAll).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ importId: 42 }),
+      }),
+    );
+    expect(res.send).toHaveBeenCalledWith({ count: 1, records: [{ id: 10 }] });
+  });
+
   it("update rejects invalid status", async () => {
     const req = {
       params: { id: "1" },

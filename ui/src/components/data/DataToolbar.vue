@@ -9,6 +9,16 @@
       </select>
     </div>
 
+    <div class="data-toolbar__group">
+      <label>Import</label>
+      <select :value="importFilter" @change="emitImportFilterChange">
+        <option value="">All imports</option>
+        <option v-for="option in importFilterOptions" :key="option.value" :value="option.value">
+          {{ option.label }}
+        </option>
+      </select>
+    </div>
+
     <div class="data-toolbar__group data-toolbar__group--search">
       <label>Search</label>
       <input
@@ -33,22 +43,30 @@
 import type { StatusFilter } from "@shared/contracts";
 
 type StatusOption = { label: string; value: StatusFilter };
+type ImportFilterOption = { label: string; value: string };
 
 defineProps<{
   statusFilter: StatusFilter;
   statusOptions: StatusOption[];
+  importFilter: string;
+  importFilterOptions: ImportFilterOption[];
   searchInput: string;
   showFullText: boolean;
 }>();
 
 const emit = defineEmits<{
   "status-filter-change": [value: StatusFilter];
+  "import-filter-change": [value: string];
   "search-input": [value: string];
   "show-full-text-change": [value: boolean];
 }>();
 
 const emitStatusFilterChange = (event: Event) => {
   emit("status-filter-change", (event.target as HTMLSelectElement).value as StatusFilter);
+};
+
+const emitImportFilterChange = (event: Event) => {
+  emit("import-filter-change", (event.target as HTMLSelectElement).value);
 };
 
 const emitSearchInput = (event: Event) => {

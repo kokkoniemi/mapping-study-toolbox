@@ -57,6 +57,7 @@ interface DefaultState {
   currentItemId: number | null;
   statusFilter: StatusFilter;
   searchFilter: string;
+  dataImportFilterId: number | null;
   nick: string | null;
   loading: boolean;
   mappingQuestions: MappingQuestion[];
@@ -112,6 +113,7 @@ export const defaultStore = defineStore("default", {
     currentItemId: null,
     statusFilter: "",
     searchFilter: "",
+    dataImportFilterId: null,
     nick: null,
     loading: false,
     mappingQuestions: [],
@@ -276,6 +278,13 @@ export const defaultStore = defineStore("default", {
       await this.fetchPageItems({ search: payload });
     },
 
+    async setDataImportFilter(payload: number | null) {
+      this.dataImportFilterId = payload;
+      if (this.tab === "data") {
+        await this.loadInitialData();
+      }
+    },
+
     resetDataFeed() {
       this.dataItems = [];
       this.dataOffset = 0;
@@ -301,6 +310,7 @@ export const defaultStore = defineStore("default", {
           limit: this.dataLimit,
           ...(this.statusFilter !== "" ? { status: this.statusFilter } : {}),
           ...(this.searchFilter !== "" ? { search: this.searchFilter } : {}),
+          ...(this.dataImportFilterId !== null ? { importId: this.dataImportFilterId } : {}),
         });
 
         const normalized = items.data.records.map(normalizeRecordItem);

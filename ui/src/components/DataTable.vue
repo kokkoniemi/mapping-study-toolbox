@@ -264,8 +264,8 @@
               <li
                 class="import-wizard__step-item"
                 :class="{
-                  'import-wizard__step-item--active': importWizardCurrentStep === 1,
-                  'import-wizard__step-item--done': !!importFile,
+                  'import-wizard__step-item--active': importWizardStep === 1,
+                  'import-wizard__step-item--done': importWizardStep > 1,
                 }"
               >
                 1. Select file
@@ -273,159 +273,231 @@
               <li
                 class="import-wizard__step-item"
                 :class="{
-                  'import-wizard__step-item--active': importWizardCurrentStep === 2,
-                  'import-wizard__step-item--done': !!importPreview,
+                  'import-wizard__step-item--active': importWizardStep === 2,
+                  'import-wizard__step-item--done': importWizardStep > 2,
                 }"
               >
-                2. Preview and map fields
+                2. Review preview
               </li>
               <li
                 class="import-wizard__step-item"
                 :class="{
-                  'import-wizard__step-item--active': importWizardCurrentStep === 3,
-                  'import-wizard__step-item--done': importPreviewReady,
+                  'import-wizard__step-item--active': importWizardStep === 3,
+                  'import-wizard__step-item--done': importWizardStep > 3,
                 }"
               >
                 3. Import
               </li>
+              <li
+                class="import-wizard__step-item"
+                :class="{ 'import-wizard__step-item--active': importWizardStep === 4 }"
+              >
+                4. Complete
+              </li>
             </ol>
-            <button type="button" @click="backToImportHistory">Back to history</button>
-            <button type="button" :disabled="!importFile && !importPreview" @click="clearImportSelection">Reset wizard</button>
           </aside>
 
-          <div class="import-wizard__body">
-            <section class="import-wizard__card">
-              <h4>Step 1: Choose file and source</h4>
-              <div class="import-tools__top">
-                <label class="import-tools__label import-tools__label--file">
-                  <span>File</span>
-                  <input
-                    type="file"
-                    accept=".csv,.bib,.bibtex,.txt,text/csv,text/plain,application/x-bibtex"
-                    @change="onImportFileChange"
-                  />
-                </label>
+          <div class="import-wizard__panel">
+            <div class="import-wizard__body">
+              <section v-if="importWizardStep === 1" class="import-wizard__card">
+                <h4>Step 1: Choose file and source</h4>
+                <div class="import-tools__top">
+                  <label class="import-tools__label import-tools__label--file">
+                    <span>File</span>
+                    <input
+                      type="file"
+                      accept=".csv,.bib,.bibtex,.txt,text/csv,text/plain,application/x-bibtex"
+                      @change="onImportFileChange"
+                    />
+                  </label>
 
-                <label class="import-tools__label">
-                  <span>Source</span>
-                  <select :value="importSource" :disabled="importPreviewLoading || importApplyLoading" @change="onImportSourceChange">
-                    <option v-for="option in importSourceOptions" :key="option.value" :value="option.value">
-                      {{ option.label }}
-                    </option>
-                  </select>
-                </label>
-
-                <label v-if="requiresCustomDatabaseName" class="import-tools__label">
-                  <span>Database name</span>
-                  <input
-                    :value="importDatabaseName"
-                    type="text"
-                    placeholder="e.g. IEEE_XPLORE"
-                    :disabled="importPreviewLoading || importApplyLoading"
-                    @input="onImportDatabaseNameInput"
-                  />
-                </label>
-
-                <div class="import-tools__actions import-tools__actions--inline">
-                  <button type="button" :disabled="!canPreviewImport" @click="previewImportFile">
-                    {{ importPreviewLoading ? "Previewing..." : "Run preview" }}
-                  </button>
-                </div>
-              </div>
-            </section>
-
-            <section class="import-wizard__card">
-              <h4>Step 2: Review preview</h4>
-              <p v-if="importPreview && !importPreviewReady" class="import-tools__warning">
-                Preview is outdated. Run Preview again before importing.
-              </p>
-
-              <section v-if="showImportCsvMapping" class="import-tools__mapping">
-                <h4>Column mapping</h4>
-                <p class="import-tools__mapping-hint">
-                  Confirm or adjust guessed mappings. Empty means “not mapped”.
-                </p>
-                <div class="import-tools__mapping-grid">
-                  <label
-                    v-for="field in importCsvFieldOptions"
-                    :key="field.key"
-                    class="import-tools__mapping-field"
-                  >
-                    <span>{{ field.label }}</span>
-                    <select
-                      :value="importCsvMapping[field.key] ?? ''"
-                      :disabled="importPreviewLoading || importApplyLoading"
-                      @change="onImportCsvMappingChange(field.key, $event)"
-                    >
-                      <option value="">(Not mapped)</option>
-                      <option v-for="column in importCsvColumns" :key="`${field.key}-${column}`" :value="column">
-                        {{ column }}
+                  <label class="import-tools__label">
+                    <span>Source</span>
+                    <select :value="importSource" :disabled="importPreviewLoading || importApplyLoading" @change="onImportSourceChange">
+                      <option v-for="option in importSourceOptions" :key="option.value" :value="option.value">
+                        {{ option.label }}
                       </option>
                     </select>
+                  </label>
+
+                  <label v-if="requiresCustomDatabaseName" class="import-tools__label">
+                    <span>Database name</span>
+                    <input
+                      :value="importDatabaseName"
+                      type="text"
+                      placeholder="e.g. IEEE_XPLORE"
+                      :disabled="importPreviewLoading || importApplyLoading"
+                      @input="onImportDatabaseNameInput"
+                    />
                   </label>
                 </div>
               </section>
 
-              <div v-if="importPreview" class="import-tools__summary">
-                <span>{{ importPreview.detectedSource }} / {{ importPreview.detectedFormat }}</span>
-                <span>Database {{ importPreview.databaseLabel }}</span>
-                <span>Total {{ importPreview.total }}</span>
-                <span>New {{ importPreview.newRecords }}</span>
-                <span>Duplicates {{ importPreview.duplicates }}</span>
-                <span>Invalid {{ importPreview.invalid }}</span>
-              </div>
+              <section v-else-if="importWizardStep === 2" class="import-wizard__card">
+                <h4>Step 2: Review preview</h4>
+                <p v-if="importPreview && !importPreviewReady" class="import-tools__warning">
+                  Preview is outdated. Run Preview again before continuing.
+                </p>
 
-              <ul v-if="importPreview?.warnings?.length" class="import-tools__warnings">
-                <li v-for="warning in importPreview.warnings" :key="warning">{{ warning }}</li>
-              </ul>
+                <section v-if="showImportCsvMapping" class="import-tools__mapping">
+                  <h4>Column mapping</h4>
+                  <p class="import-tools__mapping-hint">
+                    Confirm or adjust guessed mappings. Empty means “not mapped”.
+                  </p>
+                  <div class="import-tools__mapping-grid">
+                    <label
+                      v-for="field in importCsvFieldOptions"
+                      :key="field.key"
+                      class="import-tools__mapping-field"
+                    >
+                      <span>{{ field.label }}</span>
+                      <select
+                        :value="importCsvMapping[field.key] ?? ''"
+                        :disabled="importPreviewLoading || importApplyLoading"
+                        @change="onImportCsvMappingChange(field.key, $event)"
+                      >
+                        <option value="">(Not mapped)</option>
+                        <option v-for="column in importCsvColumns" :key="`${field.key}-${column}`" :value="column">
+                          {{ column }}
+                        </option>
+                      </select>
+                    </label>
+                  </div>
+                </section>
 
-              <div v-if="importPreview" class="import-tools__table-wrap">
-                <table class="import-tools__table">
-                  <thead>
-                    <tr>
-                      <th>#</th>
-                      <th>Status</th>
-                      <th>Title</th>
-                      <th>Author</th>
-                      <th>Year</th>
-                      <th>DOI</th>
-                      <th>Duplicate</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="row in importPreview.records" :key="`${row.rowNumber}-${row.title ?? ''}`">
-                      <td>{{ row.rowNumber }}</td>
-                      <td>
-                        <span class="import-tools__status" :class="`import-tools__status--${row.status}`">
-                          {{ row.status }}
-                        </span>
-                      </td>
-                      <td>{{ row.title || "-" }}</td>
-                      <td>{{ row.author || "-" }}</td>
-                      <td>{{ row.year ?? "-" }}</td>
-                      <td>{{ row.doi || "-" }}</td>
-                      <td>
-                        <span v-if="row.duplicateReason">
-                          {{ row.duplicateReason }}
-                          <template v-if="row.duplicateRecordId">(#{{ row.duplicateRecordId }})</template>
-                        </span>
-                        <span v-else>-</span>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-              <p v-else class="import-tools__empty">Choose a file and run Preview to continue.</p>
-            </section>
+                <div v-if="importPreview" class="import-tools__summary">
+                  <span>{{ importPreview.detectedSource }} / {{ importPreview.detectedFormat }}</span>
+                  <span>Database {{ importPreview.databaseLabel }}</span>
+                  <span>Total {{ importPreview.total }}</span>
+                  <span>New {{ importPreview.newRecords }}</span>
+                  <span>Duplicates {{ importPreview.duplicates }}</span>
+                  <span>Invalid {{ importPreview.invalid }}</span>
+                </div>
 
-            <section class="import-wizard__card">
-              <h4>Step 3: Import</h4>
-              <div class="import-tools__actions import-tools__actions--end">
-                <button type="button" class="data-tools__primary" :disabled="!canCreateImport" @click="createImportFile">
-                  {{ importApplyLoading ? "Importing..." : "Import records" }}
-                </button>
+                <ul v-if="importPreview?.warnings?.length" class="import-tools__warnings">
+                  <li v-for="warning in importPreview.warnings" :key="warning">{{ warning }}</li>
+                </ul>
+
+                <div v-if="importPreview" class="import-tools__table-wrap">
+                  <table class="import-tools__table">
+                    <thead>
+                      <tr>
+                        <th>#</th>
+                        <th>Status</th>
+                        <th>Title</th>
+                        <th>Author</th>
+                        <th>Year</th>
+                        <th>DOI</th>
+                        <th>Duplicate</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="row in importPreview.records" :key="`${row.rowNumber}-${row.title ?? ''}`">
+                        <td>{{ row.rowNumber }}</td>
+                        <td>
+                          <span class="import-tools__status" :class="`import-tools__status--${row.status}`">
+                            {{ row.status }}
+                          </span>
+                        </td>
+                        <td>{{ row.title || "-" }}</td>
+                        <td>{{ row.author || "-" }}</td>
+                        <td>{{ row.year ?? "-" }}</td>
+                        <td>{{ row.doi || "-" }}</td>
+                        <td>
+                          <span v-if="row.duplicateReason">
+                            {{ row.duplicateReason }}
+                            <template v-if="row.duplicateRecordId">(#{{ row.duplicateRecordId }})</template>
+                          </span>
+                          <span v-else>-</span>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <p v-else class="import-tools__empty">Choose a file and run Preview to continue.</p>
+              </section>
+
+              <section v-else-if="importWizardStep === 3" class="import-wizard__card">
+                <h4>Step 3: Import</h4>
+                <div v-if="importPreview" class="import-tools__summary">
+                  <span>{{ importPreview.detectedSource }} / {{ importPreview.detectedFormat }}</span>
+                  <span>Database {{ importPreview.databaseLabel }}</span>
+                  <span>Total {{ importPreview.total }}</span>
+                  <span>New {{ importPreview.newRecords }}</span>
+                  <span>Duplicates {{ importPreview.duplicates }}</span>
+                  <span>Invalid {{ importPreview.invalid }}</span>
+                </div>
+                <ul v-if="importPreview?.warnings?.length" class="import-tools__warnings">
+                  <li v-for="warning in importPreview.warnings" :key="warning">{{ warning }}</li>
+                </ul>
+              </section>
+
+              <section v-else class="import-wizard__card">
+                <h4>Step 4: Complete</h4>
+                <p class="import-tools__message">
+                  Import #{{ lastImportResult?.importId }} complete.
+                </p>
+                <p v-if="canPromptImportEnrichment" class="import-tools__empty">
+                  Enrich {{ importedCreatedCount }} imported record{{ importedCreatedCount === 1 ? "" : "s" }} now?
+                </p>
+                <p v-else class="import-tools__empty">
+                  No new records were created in this import.
+                </p>
+              </section>
+            </div>
+
+            <footer class="import-wizard__footer">
+              <div class="import-wizard__footer-meta">
+                Step {{ importWizardStep }} of 4
               </div>
-            </section>
+              <div class="import-wizard__footer-actions">
+                <button type="button" :disabled="!importFile && !importPreview" @click="clearImportSelection">Reset</button>
+
+                <template v-if="importWizardStep === 1">
+                  <button type="button" @click="backToImportHistory">Cancel</button>
+                  <button type="button" class="data-tools__primary" :disabled="!canPreviewImport" @click="previewImportAndContinue">
+                    {{ importPreviewLoading ? "Previewing..." : "Next" }}
+                  </button>
+                </template>
+
+                <template v-else-if="importWizardStep === 2">
+                  <button type="button" :disabled="importPreviewLoading || importApplyLoading" @click="importWizardStep = 1">Back</button>
+                  <button type="button" :disabled="!canPreviewImport" @click="previewImportFile">
+                    {{ importPreviewLoading ? "Previewing..." : "Refresh Preview" }}
+                  </button>
+                  <button
+                    type="button"
+                    class="data-tools__primary"
+                    :disabled="!importPreviewReady || !importPreview"
+                    @click="importWizardStep = 3"
+                  >
+                    Next
+                  </button>
+                </template>
+
+                <template v-else-if="importWizardStep === 3">
+                  <button type="button" :disabled="importApplyLoading" @click="importWizardStep = 2">Back</button>
+                  <button type="button" @click="backToImportHistory">Cancel</button>
+                  <button type="button" class="data-tools__primary" :disabled="!canCreateImport" @click="createImportFile">
+                    {{ importApplyLoading ? "Importing..." : "Import" }}
+                  </button>
+                </template>
+
+                <template v-else>
+                  <button type="button" @click="startNewImport">Import Another</button>
+                  <button v-if="!canPromptImportEnrichment" type="button" @click="backToImportHistory">Close</button>
+                  <button
+                    v-if="canPromptImportEnrichment"
+                    type="button"
+                    class="data-tools__primary"
+                    @click="startEnrichmentForImportedRecords"
+                  >
+                    Enrich Imported
+                  </button>
+                  <button v-if="canPromptImportEnrichment" type="button" @click="declineImportEnrichment">Not Now</button>
+                </template>
+              </div>
+            </footer>
           </div>
         </div>
       </div>
@@ -448,9 +520,12 @@
       <DataToolbar
         :statusFilter="statusFilter"
         :statusOptions="statusOptions"
+        :importFilter="importFilterValue"
+        :importFilterOptions="importFilterOptions"
         :searchInput="searchInput"
         :showFullText="!dataCellsTruncated"
         @status-filter-change="onStatusFilterChange"
+        @import-filter-change="onImportFilterChange"
         @search-input="onSearchInput"
         @show-full-text-change="onShowFullTextChange"
       />
@@ -544,6 +619,7 @@ type AnchorRect = {
 };
 type DataToolsTab = "enrichment" | "forums" | "imports";
 type ImportViewMode = "history" | "wizard";
+type ImportWizardStep = 1 | 2 | 3 | 4;
 type ConfidenceChip = {
   label: string;
   score: number;
@@ -569,6 +645,7 @@ const {
   dataCellsTruncated,
   statusFilter,
   searchFilter,
+  dataImportFilterId,
   mappingQuestions,
   cellStates,
 } = storeToRefs(store);
@@ -627,6 +704,8 @@ const importHistoryTotal = ref(0);
 const importHistoryLoading = ref(false);
 const importDeleteLoadingId = ref<number | null>(null);
 const importViewMode = ref<ImportViewMode>("history");
+const importWizardStep = ref<ImportWizardStep>(1);
+const lastImportResult = ref<{ importId: number; createdRecordIds: number[] } | null>(null);
 
 const {
   enrichmentRunning,
@@ -709,14 +788,25 @@ const importCsvColumns = computed(() => importPreview.value?.csvColumns ?? []);
 const showImportCsvMapping = computed(
   () => importPreview.value?.detectedFormat === "csv" && importCsvColumns.value.length > 0,
 );
-const importWizardCurrentStep = computed(() => {
-  if (!importFile.value) {
-    return 1;
+const importedCreatedCount = computed(() => lastImportResult.value?.createdRecordIds.length ?? 0);
+const canPromptImportEnrichment = computed(() => importedCreatedCount.value > 0);
+const importFilterValue = computed(() =>
+  dataImportFilterId.value === null ? "" : String(dataImportFilterId.value),
+);
+const importFilterOptions = computed<Array<{ label: string; value: string }>>(() => {
+  const byId = new Map<number, string>();
+  for (const entry of importHistory.value) {
+    const fileName = entry.fileName?.trim() ? entry.fileName : "(no file name)";
+    byId.set(entry.id, `#${entry.id} ${fileName}`);
   }
-  if (!importPreview.value || !importPreviewReady.value) {
-    return 2;
+
+  if (dataImportFilterId.value !== null && !byId.has(dataImportFilterId.value)) {
+    byId.set(dataImportFilterId.value, `#${dataImportFilterId.value}`);
   }
-  return 3;
+
+  return [...byId.entries()]
+    .sort((left, right) => right[0] - left[0])
+    .map(([id, label]) => ({ value: String(id), label }));
 });
 const totalCountLabel = computed(() => {
   if (dataLoading.value && dataTotal.value <= 0) {
@@ -1308,6 +1398,10 @@ const selectAllLoadedRecords = () => {
 };
 
 const syncSelectionToLoadedRecords = () => {
+  if (dataImportFilterId.value !== null) {
+    return;
+  }
+
   const loadedIds = new Set(dataItems.value.map((item) => item.id));
   selectedRecordIds.value = selectedRecordIds.value.filter((id) => loadedIds.has(id));
 };
@@ -1548,6 +1642,33 @@ const onStatusFilterChange = (value: StatusFilter) => {
   void store.setStatusFilter(value);
 };
 
+const parseImportFilterValue = (value: string): number | null => {
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return null;
+  }
+
+  const parsed = Number.parseInt(trimmed, 10);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    return null;
+  }
+
+  return parsed;
+};
+
+const applyImportFilter = async (importId: number | null, preserveSelection = false) => {
+  if (!preserveSelection) {
+    selectedRecordIds.value = [];
+  }
+
+  await store.setDataImportFilter(importId);
+};
+
+const onImportFilterChange = (value: string) => {
+  closeMappingEditor();
+  void applyImportFilter(parseImportFilterValue(value), false);
+};
+
 const onShowFullTextChange = (showFullText: boolean) => {
   closeMappingEditor();
   store.setDataCellsTruncated(!showFullText);
@@ -1692,6 +1813,9 @@ const markImportPreviewStale = (reason?: string) => {
     return;
   }
   importPreviewReady.value = false;
+  if (importWizardStep.value > 2) {
+    importWizardStep.value = 2;
+  }
   if (reason) {
     importMessage.value = reason;
   }
@@ -1707,6 +1831,8 @@ const clearImportSelection = () => {
   importPreviewReady.value = false;
   importError.value = "";
   importMessage.value = "";
+  importWizardStep.value = 1;
+  lastImportResult.value = null;
 };
 
 const resetImportDraftKeepMessage = () => {
@@ -1717,6 +1843,7 @@ const resetImportDraftKeepMessage = () => {
   importPreview.value = null;
   importCsvMapping.value = {};
   importPreviewReady.value = false;
+  importWizardStep.value = 1;
 };
 
 const startNewImport = () => {
@@ -1760,6 +1887,8 @@ const onImportFileChange = (event: Event) => {
   importPreviewReady.value = false;
   importError.value = "";
   importMessage.value = "";
+  importWizardStep.value = 1;
+  lastImportResult.value = null;
 };
 
 const onImportSourceChange = (event: Event) => {
@@ -1807,7 +1936,7 @@ const buildImportPayload = (fileName: string, content: string) => {
 
 const previewImportFile = async () => {
   if (!importFile.value) {
-    return;
+    return false;
   }
 
   importPreviewLoading.value = true;
@@ -1824,10 +1953,19 @@ const previewImportFile = async () => {
       importSource.value = response.data.detectedSource;
     }
     importPreviewReady.value = true;
+    return true;
   } catch (error) {
     importError.value = getApiErrorMessage(error);
+    return false;
   } finally {
     importPreviewLoading.value = false;
+  }
+};
+
+const previewImportAndContinue = async () => {
+  const succeeded = await previewImportFile();
+  if (succeeded) {
+    importWizardStep.value = 2;
   }
 };
 
@@ -1854,20 +1992,45 @@ const createImportFile = async () => {
     const content = await readFileAsText(importFile.value);
     const response = await importApi.create(buildImportPayload(importFile.value.name, content));
 
-    importPreview.value = response.data.summary;
-    importCsvMapping.value = response.data.summary.appliedCsvMapping
-      ? { ...response.data.summary.appliedCsvMapping }
-      : {};
-    importPreviewReady.value = true;
+    const createdRecordIds = [...new Set(response.data.createdRecordIds)];
+    lastImportResult.value = {
+      importId: response.data.import.id,
+      createdRecordIds,
+    };
     importMessage.value = `Import #${response.data.import.id} created. Imported ${response.data.createdRecordIds.length} records.`;
     await Promise.all([loadImportHistory(), store.loadInitialData(), store.fetchPageItems()]);
-    importViewMode.value = "history";
     resetImportDraftKeepMessage();
+    importWizardStep.value = 4;
   } catch (error) {
     importError.value = getApiErrorMessage(error);
   } finally {
     importApplyLoading.value = false;
   }
+};
+
+const startEnrichmentForImportedRecords = async () => {
+  const result = lastImportResult.value;
+  if (!result || result.createdRecordIds.length === 0) {
+    return;
+  }
+
+  closeMappingEditor();
+  toolsTab.value = "enrichment";
+  store.statusFilter = "";
+  store.searchFilter = "";
+  searchInput.value = "";
+  await applyImportFilter(result.importId, true);
+  selectedRecordIds.value = [...result.createdRecordIds];
+  importViewMode.value = "history";
+  importMessage.value = `Import #${result.importId} ready for enrichment (${result.createdRecordIds.length} selected).`;
+};
+
+const declineImportEnrichment = () => {
+  const result = lastImportResult.value;
+  if (result) {
+    importMessage.value = `Import #${result.importId} complete. Use the import filter in Enrichment when ready.`;
+  }
+  backToImportHistory();
 };
 
 const removeImport = async (importId: number) => {
@@ -1881,6 +2044,9 @@ const removeImport = async (importId: number) => {
   try {
     const response = await importApi.delete(importId);
     importMessage.value = `Import #${response.data.importId} deleted with ${response.data.deletedRecords} records.`;
+    if (dataImportFilterId.value === importId) {
+      await applyImportFilter(null, false);
+    }
     await Promise.all([loadImportHistory(), store.loadInitialData(), store.fetchPageItems()]);
   } catch (error) {
     importError.value = getApiErrorMessage(error);
@@ -1953,7 +2119,7 @@ onMounted(async () => {
   window.addEventListener("resize", updateViewportSize);
   window.addEventListener("keydown", onWindowKeyDown);
 
-  await Promise.all([store.fetchMappingQuestions(), store.loadInitialData()]);
+  await Promise.all([store.fetchMappingQuestions(), store.loadInitialData(), loadImportHistory()]);
 
   await nextTick();
   mountGridSizing();
@@ -2640,67 +2806,116 @@ onUnmounted(() => {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(200px, 240px) minmax(0, 1fr);
-  gap: 10px;
+  grid-template-columns: minmax(210px, 240px) minmax(0, 1fr);
   align-items: stretch;
+  border: 1px solid #e5e9ef;
+  background: #fff;
 
   &__steps {
-    border: 1px solid #ededed;
-    background: #fafafa;
-    padding: 10px;
+    border-right: 1px solid #e5e9ef;
+    background: linear-gradient(180deg, #f7f9fc 0%, #f1f5fa 100%);
+    padding: 12px;
     display: flex;
     flex-direction: column;
     gap: 10px;
     min-height: 0;
+    box-sizing: border-box;
 
     h4 {
       margin: 0;
       font-size: 14px;
-      color: #425a6a;
+      color: #3f556b;
     }
   }
 
   &__step-list {
     margin: 0;
-    padding-left: 18px;
+    padding: 0;
+    list-style: none;
     display: flex;
     flex-direction: column;
     gap: 8px;
-    font-size: 12px;
-    color: #666;
   }
 
   &__step-item {
+    position: relative;
+    padding: 8px 10px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: #637285;
+    font-size: 12px;
     font-weight: 500;
+    line-height: 1.3;
+    transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
 
     &--active {
-      color: #2f4fc6;
-      font-weight: 700;
+      color: #2f4259;
+      background: #fff;
+      border-color: #d4dde8;
+      box-shadow: inset 3px 0 0 #4f75c6;
     }
 
     &--done {
-      color: #2f6f3f;
+      color: #3c5f46;
     }
+  }
+
+  &__panel {
+    min-width: 0;
+    min-height: 0;
+    display: grid;
+    grid-template-rows: minmax(0, 1fr) auto;
   }
 
   &__body {
     min-height: 0;
     overflow: auto;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    padding-right: 2px;
+    display: block;
+    padding: 12px;
+    background: #fff;
   }
 
   &__card {
-    border: 1px solid #ededed;
+    border: 1px solid #e7ecf2;
     background: #fff;
-    padding: 10px;
+    padding: 12px;
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    box-sizing: border-box;
 
     h4 {
-      margin: 0 0 8px;
+      margin: 0;
       font-size: 14px;
-      color: #425a6a;
+      color: #41596f;
+    }
+  }
+
+  &__footer {
+    border-top: 1px solid #e5e9ef;
+    background: #f7f9fc;
+    padding: 10px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  &__footer-meta {
+    font-size: 12px;
+    color: #667588;
+    white-space: nowrap;
+  }
+
+  &__footer-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+
+    button {
+      min-width: 96px;
     }
   }
 }
@@ -2733,13 +2948,26 @@ onUnmounted(() => {
     min-height: 0;
   }
 
-  .import-tools__actions {
-    margin-left: 0;
-    width: 100%;
-  }
-
   .import-wizard {
     grid-template-columns: 1fr;
+
+    &__steps {
+      border-right: 0;
+      border-bottom: 1px solid #e5e9ef;
+    }
+
+    &__footer {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    &__footer-meta {
+      white-space: normal;
+    }
+
+    &__footer-actions {
+      justify-content: flex-end;
+    }
   }
 }
 </style>
