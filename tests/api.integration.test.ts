@@ -143,6 +143,26 @@ describeWhenSocketAllowed("API integration", () => {
     });
   });
 
+  it("POST /api/records/export returns csv attachment", async () => {
+    dbMock.Record.findAll.mockResolvedValue([{ id: 1, title: "Exported record" }]);
+
+    const app = createApp();
+    const response = await request(app)
+      .post("/api/records/export")
+      .send({
+        format: "csv",
+        scope: "all_filtered",
+        fields: ["id", "title"],
+        filters: {},
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.headers["content-type"]).toContain("text/csv");
+    expect(response.headers["content-disposition"]).toContain("attachment;");
+    expect(response.text).toContain("\"ID\",\"Title\"");
+    expect(response.text).toContain("\"1\",\"Exported record\"");
+  });
+
   it("PUT /api/records/:id with invalid status returns standardized validation error", async () => {
     const app = createApp();
 

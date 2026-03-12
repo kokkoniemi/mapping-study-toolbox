@@ -29,6 +29,7 @@ router.get("/records", records.listing);
 router.get("/records/:id", records.get);
 router.patch("/records/:id", records.patch);
 router.put("/records/:id", records.update);
+router.post("/records/export", records.exportRecords);
 router.post("/records/enrichment-jobs", enrichmentRateLimit, records.createEnrichment);
 router.get("/records/enrichment-jobs/:jobId", records.getEnrichment);
 router.post("/records/enrichment-jobs/:jobId/cancel", enrichmentRateLimit, records.cancelEnrichment);

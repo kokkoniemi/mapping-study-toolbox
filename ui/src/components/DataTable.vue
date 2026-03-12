@@ -13,6 +13,14 @@
         <button
           type="button"
           class="data-tools__tab"
+          :class="{ 'data-tools__tab--active': toolsTab === 'export' }"
+          @click="onExportTabOpen"
+        >
+          Export
+        </button>
+        <button
+          type="button"
+          class="data-tools__tab"
           :class="{ 'data-tools__tab--active': toolsTab === 'forums' }"
           @click="onForumsTabOpen"
         >
@@ -99,6 +107,84 @@
             Enrich selected
           </button>
         </div>
+      </div>
+
+      <div v-else-if="toolsTab === 'export'" class="data-tools__panel data-tools__panel--export">
+        <div class="data-tools__group">
+          <label class="data-tools__label">
+            <span>Scope</span>
+          </label>
+          <select :value="exportScope" @change="onExportScopeChange" :disabled="exportRunning || selectAllMatchingRunning">
+            <option value="all_filtered">Current filtered set</option>
+            <option value="selected">Selected records</option>
+          </select>
+        </div>
+
+        <div class="data-tools__group">
+          <label class="data-tools__label">
+            <span>Format</span>
+          </label>
+          <select :value="exportFormat" @change="onExportFormatChange" :disabled="exportRunning">
+            <option value="csv">CSV</option>
+            <option value="bibtex">BibTeX</option>
+          </select>
+        </div>
+
+        <div class="export-tools__fields">
+          <div class="export-tools__fields-header">
+            <label class="data-tools__label">Fields</label>
+            <div class="export-tools__field-actions">
+              <button type="button" :disabled="exportRunning" @click="selectAllExportFields">All</button>
+              <button type="button" :disabled="exportRunning" @click="clearExportFields">None</button>
+            </div>
+          </div>
+          <div class="export-tools__field-list">
+            <label
+              v-for="field in exportFieldOptions"
+              :key="field.key"
+              class="export-tools__field-item"
+            >
+              <input
+                type="checkbox"
+                :checked="isExportFieldSelected(field.key)"
+                :disabled="exportRunning"
+                @change="onExportFieldToggle(field.key, $event)"
+              />
+              <span>{{ field.label }}</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="data-tools__actions export-tools__actions">
+          <button type="button" @click="selectAllLoadedRecords" :disabled="!dataItems.length || exportRunning || selectAllMatchingRunning">
+            Select loaded
+          </button>
+          <button
+            type="button"
+            @click="selectAllMatchingFilters"
+            :disabled="!dataTotal || exportRunning || selectAllMatchingRunning || dataLoading"
+          >
+            {{ selectAllMatchingRunning ? selectAllProgressText : "Select all matching filters" }}
+          </button>
+          <button
+            type="button"
+            @click="clearSelectedRecords"
+            :disabled="selectedRecordCount === 0 || exportRunning || selectAllMatchingRunning"
+          >
+            Clear selection
+          </button>
+          <button
+            type="button"
+            class="data-tools__primary"
+            :disabled="!canExportRecords || selectAllMatchingRunning"
+            @click="exportRecordsFile"
+          >
+            {{ exportRunning ? "Exporting..." : "Export" }}
+          </button>
+        </div>
+
+        <p v-if="exportError" class="export-tools__error">{{ exportError }}</p>
+        <p v-else-if="exportMessage" class="export-tools__message">{{ exportMessage }}</p>
       </div>
 
       <div v-else-if="toolsTab === 'forums'" class="data-tools__panel data-tools__panel--forums data-tools__panel--workspace">
@@ -505,6 +591,7 @@
 
     <template v-if="showDataGrid">
       <EnrichmentStatus
+        v-if="toolsTab === 'enrichment'"
         :selectedRecordCount="selectedRecordCount"
         :enrichmentRunning="enrichmentRunning"
         :enrichmentStopping="enrichmentStopping"
@@ -580,6 +667,9 @@ import type {
   CsvImportMapping,
   EnrichmentMode,
   EnrichmentProvider,
+  ExportFormat,
+  ExportRequestPayload,
+  ExportScope,
   ForumDuplicateGroup,
   ForumDuplicateItem,
   ForumMergeResponse,
@@ -601,7 +691,7 @@ import { useDataGrid, type DataGridExpose } from "../composables/useDataGrid";
 import { useEnrichmentJob } from "../composables/useEnrichmentJob";
 import { decodeHtmlEntities, debounce } from "../helpers/utils";
 import { defaultStore } from "../stores/default";
-import { forums, imports as importApi, type MappingOption, type RecordItem, type RecordStatus } from "../helpers/api";
+import { forums, imports as importApi, records, type MappingOption, type RecordItem, type RecordStatus } from "../helpers/api";
 import { getApiErrorMessage } from "../helpers/errors";
 
 type GridRow = Record<string, string | number | boolean> & { __recordId: number };
@@ -617,7 +707,7 @@ type AnchorRect = {
   width: number;
   height: number;
 };
-type DataToolsTab = "enrichment" | "forums" | "imports";
+type DataToolsTab = "enrichment" | "export" | "forums" | "imports";
 type ImportViewMode = "history" | "wizard";
 type ImportWizardStep = 1 | 2 | 3 | 4;
 type ConfidenceChip = {
@@ -626,8 +716,47 @@ type ConfidenceChip = {
   level: "high" | "medium" | "low";
   tooltip: string;
 };
+type ExportFieldOption = {
+  key: string;
+  label: string;
+};
 
 const statusOptions = STATUS_FILTER_OPTIONS;
+const exportCsvBaseFieldOptions: ExportFieldOption[] = [
+  { key: "id", label: "ID" },
+  { key: "title", label: "Title" },
+  { key: "author", label: "Author" },
+  { key: "year", label: "Year" },
+  { key: "status", label: "Status" },
+  { key: "abstract", label: "Abstract" },
+  { key: "comment", label: "Comment" },
+  { key: "doi", label: "DOI" },
+  { key: "url", label: "URL" },
+  { key: "alternateUrls", label: "Alternate URLs" },
+  { key: "databases", label: "Databases" },
+  { key: "forumName", label: "Forum Name" },
+  { key: "forumIssn", label: "Forum ISSN" },
+  { key: "forumPublisher", label: "Forum Publisher" },
+  { key: "forumJufoLevel", label: "Forum Jufo Level" },
+  { key: "citationCount", label: "Citation Count" },
+  { key: "referenceCount", label: "Reference Count" },
+  { key: "topicNames", label: "Topic Names" },
+  { key: "createdAt", label: "Created At" },
+  { key: "updatedAt", label: "Updated At" },
+];
+const exportBibtexFieldOptions: ExportFieldOption[] = [
+  { key: "title", label: "Title" },
+  { key: "author", label: "Author" },
+  { key: "year", label: "Year" },
+  { key: "journal", label: "Journal" },
+  { key: "publisher", label: "Publisher" },
+  { key: "issn", label: "ISSN" },
+  { key: "doi", label: "DOI" },
+  { key: "url", label: "URL" },
+  { key: "abstract", label: "Abstract" },
+  { key: "keywords", label: "Keywords" },
+  { key: "note", label: "Note" },
+];
 const editableSources = new Set<string>([
   "edit",
   "CopyPaste.paste",
@@ -655,7 +784,19 @@ const searchInput = ref(searchFilter.value);
 const selectedRecordIds = ref<number[]>([]);
 const isUnmounted = ref(false);
 const toolsTab = ref<DataToolsTab>("enrichment");
-const showDataGrid = computed(() => toolsTab.value === "enrichment");
+const showDataGrid = computed(() => toolsTab.value === "enrichment" || toolsTab.value === "export");
+const exportScope = ref<ExportScope>("all_filtered");
+const exportFormat = ref<ExportFormat>("csv");
+const exportSelectedCsvFields = ref<string[]>([]);
+const exportSelectedBibtexFields = ref<string[]>(exportBibtexFieldOptions.map((field) => field.key));
+const exportCsvFieldsTouched = ref(false);
+const exportBibtexFieldsTouched = ref(false);
+const exportRunning = ref(false);
+const exportError = ref("");
+const exportMessage = ref("");
+const selectAllMatchingRunning = ref(false);
+const selectAllProgressLoaded = ref(0);
+const selectAllProgressTotal = ref(0);
 const importSourceOptions: Array<{ value: ImportSource; label: string }> = [
   { value: "auto", label: "Auto detect" },
   { value: "scopus", label: "Scopus" },
@@ -741,6 +882,33 @@ const viewportSize = ref({
 const loadedCount = computed(() => dataItems.value.length);
 const selectedRecordCount = computed(() => selectedRecordIds.value.length);
 const selectedRecordIdSet = computed(() => new Set(selectedRecordIds.value));
+const exportMappingFieldOptions = computed<ExportFieldOption[]>(() =>
+  mappingQuestions.value.map((question) => ({
+    key: `mappingQuestion:${question.id}`,
+    label: question.title?.trim().length ? question.title : `Mapping Question ${question.id}`,
+  })),
+);
+const exportCsvFieldOptions = computed<ExportFieldOption[]>(() => [
+  ...exportCsvBaseFieldOptions,
+  ...exportMappingFieldOptions.value,
+]);
+const exportFieldOptions = computed<ExportFieldOption[]>(() =>
+  exportFormat.value === "csv" ? exportCsvFieldOptions.value : exportBibtexFieldOptions,
+);
+const exportSelectedFields = computed<string[]>(() =>
+  exportFormat.value === "csv" ? exportSelectedCsvFields.value : exportSelectedBibtexFields.value,
+);
+const exportSelectedFieldSet = computed(() => new Set(exportSelectedFields.value));
+const canExportRecords = computed(
+  () =>
+    !exportRunning.value
+    && exportSelectedFields.value.length > 0
+    && (exportScope.value !== "selected" || selectedRecordCount.value > 0),
+);
+const selectAllProgressText = computed(() => {
+  const totalLabel = selectAllProgressTotal.value > 0 ? String(selectAllProgressTotal.value) : "...";
+  return `Loading ${selectAllProgressLoaded.value} / ${totalLabel}`;
+});
 const selectedForumGroup = computed(
   () => forumGroups.value.find((group) => group.key === selectedForumGroupKey.value) ?? null,
 );
@@ -1397,6 +1565,137 @@ const selectAllLoadedRecords = () => {
   selectedRecordIds.value = dataItems.value.map((item) => item.id);
 };
 
+const setSelectedExportFields = (fields: string[]) => {
+  if (exportFormat.value === "csv") {
+    exportSelectedCsvFields.value = fields;
+    exportCsvFieldsTouched.value = true;
+    return;
+  }
+  exportSelectedBibtexFields.value = fields;
+  exportBibtexFieldsTouched.value = true;
+};
+
+const selectAllExportFields = () => {
+  setSelectedExportFields(exportFieldOptions.value.map((field) => field.key));
+};
+
+const clearExportFields = () => {
+  setSelectedExportFields([]);
+};
+
+const isExportFieldSelected = (fieldKey: string) => exportSelectedFieldSet.value.has(fieldKey);
+
+const onExportFieldToggle = (fieldKey: string, event: Event) => {
+  const checked = (event.target as HTMLInputElement).checked;
+  if (checked) {
+    if (!exportSelectedFieldSet.value.has(fieldKey)) {
+      setSelectedExportFields([...exportSelectedFields.value, fieldKey]);
+    }
+    return;
+  }
+
+  setSelectedExportFields(exportSelectedFields.value.filter((field) => field !== fieldKey));
+};
+
+const onExportScopeChange = (event: Event) => {
+  exportScope.value = (event.target as HTMLSelectElement).value as ExportScope;
+};
+
+const onExportFormatChange = (event: Event) => {
+  exportFormat.value = (event.target as HTMLSelectElement).value as ExportFormat;
+};
+
+const selectAllMatchingFilters = async () => {
+  if (selectAllMatchingRunning.value || exportRunning.value || dataTotal.value <= 0) {
+    return;
+  }
+
+  selectAllMatchingRunning.value = true;
+  exportError.value = "";
+  exportMessage.value = "";
+  selectAllProgressLoaded.value = dataItems.value.length;
+  selectAllProgressTotal.value = dataTotal.value;
+
+  try {
+    let iterationGuard = 0;
+    while (dataHasMore.value && iterationGuard < 1000) {
+      iterationGuard += 1;
+      const loadedBefore = dataItems.value.length;
+      await store.loadMoreData();
+      selectAllProgressLoaded.value = dataItems.value.length;
+      selectAllProgressTotal.value = dataTotal.value;
+      if (dataItems.value.length === loadedBefore) {
+        break;
+      }
+    }
+
+    selectedRecordIds.value = dataItems.value.map((item) => item.id);
+    exportMessage.value = `Selected ${selectedRecordIds.value.length} records matching current filters.`;
+  } catch (error) {
+    exportError.value = getApiErrorMessage(error);
+  } finally {
+    selectAllMatchingRunning.value = false;
+  }
+};
+
+const buildExportFilters = (): NonNullable<ExportRequestPayload["filters"]> => {
+  const filters: NonNullable<ExportRequestPayload["filters"]> = {};
+  if (statusFilter.value !== "") {
+    filters.status = statusFilter.value;
+  }
+  const trimmedSearch = searchFilter.value.trim();
+  if (trimmedSearch.length > 0) {
+    filters.search = trimmedSearch;
+  }
+  if (dataImportFilterId.value !== null) {
+    filters.importId = dataImportFilterId.value;
+  }
+  return filters;
+};
+
+const triggerFileDownload = (blob: Blob, fileName: string) => {
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = objectUrl;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(objectUrl);
+};
+
+const exportRecordsFile = async () => {
+  if (!canExportRecords.value || selectAllMatchingRunning.value) {
+    return;
+  }
+
+  exportRunning.value = true;
+  exportError.value = "";
+  exportMessage.value = "";
+
+  const payload: ExportRequestPayload = {
+    format: exportFormat.value,
+    scope: exportScope.value,
+    fields: [...exportSelectedFields.value],
+  };
+
+  if (exportScope.value === "selected") {
+    payload.recordIds = [...selectedRecordIds.value];
+  } else {
+    payload.filters = buildExportFilters();
+  }
+
+  try {
+    const response = await records.exportFile(payload);
+    triggerFileDownload(response.blob, response.filename);
+    exportMessage.value = `Export complete (${response.filename}).`;
+  } catch (error) {
+    exportError.value = getApiErrorMessage(error);
+  } finally {
+    exportRunning.value = false;
+  }
+};
+
 const syncSelectionToLoadedRecords = () => {
   if (dataImportFilterId.value !== null) {
     return;
@@ -1685,6 +1984,10 @@ const onModeChange = (event: Event) => {
 
 const onForceRefreshChange = (event: Event) => {
   enrichmentForceRefresh.value = (event.target as HTMLInputElement).checked;
+};
+
+const onExportTabOpen = () => {
+  toolsTab.value = "export";
 };
 
 const onForumsTabOpen = () => {
@@ -2064,6 +2367,32 @@ const onImportsTabOpen = () => {
 };
 
 watch(
+  () => exportCsvFieldOptions.value.map((field) => field.key),
+  (nextKeys) => {
+    const available = new Set(nextKeys);
+    if (!exportCsvFieldsTouched.value) {
+      exportSelectedCsvFields.value = [...nextKeys];
+      return;
+    }
+    exportSelectedCsvFields.value = exportSelectedCsvFields.value.filter((field) => available.has(field));
+  },
+  { immediate: true },
+);
+
+watch(
+  () => exportBibtexFieldOptions.map((field) => field.key),
+  (nextKeys) => {
+    const available = new Set(nextKeys);
+    if (!exportBibtexFieldsTouched.value) {
+      exportSelectedBibtexFields.value = [...nextKeys];
+      return;
+    }
+    exportSelectedBibtexFields.value = exportSelectedBibtexFields.value.filter((field) => available.has(field));
+  },
+  { immediate: true },
+);
+
+watch(
   () => searchFilter.value,
   (value) => {
     searchInput.value = value;
@@ -2236,6 +2565,13 @@ onUnmounted(() => {
     gap: 10px;
   }
 
+  &__panel--export {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(160px, 220px)) minmax(260px, 1fr) auto;
+    align-items: start;
+    gap: 10px 12px;
+  }
+
   &__group {
     display: flex;
     flex-direction: column;
@@ -2326,6 +2662,69 @@ onUnmounted(() => {
       border-color: #7894d8 !important;
       background: #ecf2ff !important;
     }
+  }
+}
+
+.export-tools {
+  &__fields {
+    min-width: 0;
+    border: 1px solid #ededed;
+    background: #fafafa;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  &__fields-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  &__field-actions {
+    display: inline-flex;
+    gap: 6px;
+  }
+
+  &__field-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 6px 10px;
+    max-height: 180px;
+    overflow: auto;
+    scrollbar-gutter: stable;
+  }
+
+  &__field-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: #505050;
+    min-width: 0;
+  }
+
+  &__actions {
+    margin-left: 0;
+    align-self: end;
+    justify-self: end;
+  }
+
+  &__error,
+  &__message {
+    grid-column: 1 / -1;
+    margin: 0;
+    font-size: 12px;
+  }
+
+  &__error {
+    color: #8f2a2a;
+  }
+
+  &__message {
+    color: #395c3f;
   }
 }
 
@@ -2938,6 +3337,14 @@ onUnmounted(() => {
     margin-left: 0;
     width: 100%;
     justify-content: flex-start;
+  }
+
+  .data-tools__panel--export {
+    grid-template-columns: 1fr;
+  }
+
+  .export-tools__actions {
+    justify-self: auto;
   }
 
   .forum-tools__content {

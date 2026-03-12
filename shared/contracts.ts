@@ -259,3 +259,20 @@ export type DeleteImportResponse = {
   deletedImport: boolean;
   deletedRecords: number;
 };
+
+export type ExportFormat = "csv" | "bibtex";
+export type ExportScope = "selected" | "all_filtered";
+
+export type ExportFilters = {
+  status?: StatusFilter;
+  search?: string;
+  importId?: number;
+};
+
+export type ExportRequestPayload = {
+  format: ExportFormat;
+  scope: ExportScope;
+  fields: string[];
+  recordIds?: number[];
+  filters?: ExportFilters;
+};

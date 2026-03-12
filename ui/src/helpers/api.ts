@@ -3,6 +3,7 @@ import type {
   EnrichmentMode,
   EnrichmentJobSnapshot,
   EnrichmentProvenanceMap,
+  ExportRequestPayload as SharedExportRequestPayload,
   ForumDuplicatesIndexResponse as SharedForumDuplicatesIndexResponse,
   ImportCreateResponse as SharedImportCreateResponse,
   ImportPreviewPayload as SharedImportPreviewPayload,
@@ -38,6 +39,12 @@ export type HttpResponse<T> = {
 type RequestOptions<TBody> = {
   params?: QueryParams | undefined;
   data?: TBody | undefined;
+};
+export type FileDownloadResponse = {
+  blob: Blob;
+  filename: string;
+  contentType: string;
+  status: number;
 };
 
 export class HttpError<T = unknown> extends Error {
@@ -147,6 +154,75 @@ const request = async <TResponse = unknown, TBody = unknown>(
   }
 
   throw lastError;
+};
+
+const parseFilenameFromDisposition = (disposition: string | null, fallback: string) => {
+  if (!disposition) {
+    return fallback;
+  }
+
+  const utf8Match = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8Match?.[1]) {
+    try {
+      return decodeURIComponent(utf8Match[1]);
+    } catch {
+      // Ignore malformed value and continue to quoted fallback.
+    }
+  }
+
+  const quotedMatch = disposition.match(/filename="([^"]+)"/i);
+  if (quotedMatch?.[1]) {
+    return quotedMatch[1];
+  }
+
+  return fallback;
+};
+
+const requestFile = async <TBody = unknown>(
+  method: Exclude<HttpMethod, "GET">,
+  path: string,
+  data: TBody,
+): Promise<FileDownloadResponse> => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(buildUrl(path), {
+      method,
+      headers: {
+        Accept: "*/*",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(data),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      const contentType = response.headers.get("content-type") || "";
+      let payload: unknown;
+      if (contentType.includes("application/json")) {
+        const text = await response.text();
+        payload = text.length > 0 ? JSON.parse(text) : undefined;
+      } else {
+        payload = await response.text();
+      }
+      throw new HttpError(`HTTP ${response.status} for ${method} ${path}`, response.status, payload);
+    }
+
+    const blob = await response.blob();
+    const contentType = response.headers.get("content-type") || "application/octet-stream";
+    const fallbackName = "records-export";
+    const filename = parseFilenameFromDisposition(response.headers.get("content-disposition"), fallbackName);
+
+    return {
+      blob,
+      filename,
+      contentType,
+      status: response.status,
+    };
+  } finally {
+    clearTimeout(timeoutId);
+  }
 };
 
 export const http = {
@@ -289,6 +365,7 @@ export type ImportPreviewResponse = SharedImportPreviewResponse;
 export type ImportCreateResponse = SharedImportCreateResponse;
 export type ImportsIndexResponse = SharedImportsIndexResponse;
 export type DeleteImportResponse = SharedDeleteImportResponse;
+export type ExportRequestPayload = SharedExportRequestPayload;
 
 type UpdateRecordPayload = Record<string, unknown>;
 type SaveMappingOptionPayload = {
@@ -318,6 +395,7 @@ export const records = {
     http.put<RecordItem, UpdateRecordPayload>(`records/${id}`, data, { params }),
   patch: (id: number, data: PatchRecordPayload, params?: QueryParams) =>
     http.patch<RecordItem, PatchRecordPayload>(`records/${id}`, data, { params }),
+  exportFile: (data: ExportRequestPayload) => requestFile<ExportRequestPayload>("POST", "records/export", data),
   mappingOptions: {
     save: (id: number, data: SaveMappingOptionPayload, params?: QueryParams) =>
       http.post<MappingOption, SaveMappingOptionPayload>(`records/${id}/mapping-options`, data, {

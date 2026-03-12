@@ -21,6 +21,7 @@ const dbMock = vi.hoisted(() => ({
   },
   MappingQuestion: {
     findByPk: vi.fn(),
+    findAll: vi.fn(),
   },
   RecordMappingOption: {
     create: vi.fn(),
@@ -44,6 +45,7 @@ import {
   cancelEnrichment,
   createEnrichment,
   createOption,
+  exportRecords,
   getEnrichment,
   listing,
   removeOption,
@@ -55,6 +57,7 @@ const mockResponse = () => {
   const res = {
     send: vi.fn(),
     status: vi.fn(),
+    setHeader: vi.fn(),
   } as unknown as Response;
 
   (res.status as unknown as ReturnType<typeof vi.fn>).mockReturnValue(res);
@@ -68,6 +71,7 @@ describe("routes/records", () => {
     dbMock.Record.findByPk.mockReset();
     dbMock.MappingOption.findByPk.mockReset();
     dbMock.MappingQuestion.findByPk.mockReset();
+    dbMock.MappingQuestion.findAll.mockReset();
     dbMock.RecordMappingOption.create.mockReset();
     dbMock.RecordMappingOption.destroy.mockReset();
     dbMock.RecordMappingOption.findOne.mockReset();
@@ -133,6 +137,152 @@ describe("routes/records", () => {
       }),
     );
     expect(res.send).toHaveBeenCalledWith({ count: 1, records: [{ id: 10 }] });
+  });
+
+  it("exportRecords returns csv for selected records", async () => {
+    dbMock.MappingQuestion.findAll.mockResolvedValue([{ id: 7, title: "Study focus" }]);
+    dbMock.Record.findAll.mockResolvedValue([
+      {
+        id: 1,
+        title: "Example paper",
+        MappingOptions: [{ title: "Pedagogical use", mappingQuestionId: 7 }],
+      },
+    ]);
+
+    const req = {
+      body: {
+        format: "csv",
+        scope: "selected",
+        fields: ["id", "title", "mappingQuestion:7"],
+        recordIds: [1],
+      },
+    } as unknown as Request;
+    const res = mockResponse();
+
+    await exportRecords(req, res);
+
+    expect(dbMock.MappingQuestion.findAll).toHaveBeenCalledWith({
+      where: { id: [7] },
+      attributes: ["id", "title"],
+    });
+    expect(dbMock.Record.findAll).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: [1] },
+        include: expect.arrayContaining([
+          expect.objectContaining({ association: "Forum" }),
+          expect.objectContaining({ association: "MappingOptions" }),
+        ]),
+      }),
+    );
+    expect(res.setHeader).toHaveBeenCalledWith("Content-Type", "text/csv; charset=utf-8");
+    expect(res.setHeader).toHaveBeenCalledWith(
+      "Content-Disposition",
+      expect.stringContaining("records-export-"),
+    );
+    const csv = (res.send as unknown as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as string;
+    expect(csv).toContain("\"ID\",\"Title\",\"Study focus\"");
+    expect(csv).toContain("\"1\",\"Example paper\",\"Pedagogical use\"");
+  });
+
+  it("exportRecords returns bibtex for selected records", async () => {
+    dbMock.Record.findAll.mockResolvedValue([
+      {
+        id: 4,
+        title: "Example paper",
+        author: "Ada Lovelace",
+        year: 2024,
+        Forum: { name: "Journal of Testing" },
+      },
+    ]);
+
+    const req = {
+      body: {
+        format: "bibtex",
+        scope: "selected",
+        fields: ["title", "author", "year", "journal"],
+        recordIds: [4],
+      },
+    } as unknown as Request;
+    const res = mockResponse();
+
+    await exportRecords(req, res);
+
+    expect(res.setHeader).toHaveBeenCalledWith("Content-Type", "application/x-bibtex; charset=utf-8");
+    const bibtex = (res.send as unknown as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as string;
+    expect(bibtex).toContain("@article{lovelace2024_4,");
+    expect(bibtex).toContain("title = {Example paper}");
+    expect(bibtex).toContain("journal = {Journal of Testing}");
+  });
+
+  it("exportRecords rejects selected scope without recordIds", async () => {
+    const req = {
+      body: {
+        format: "csv",
+        scope: "selected",
+        fields: ["id"],
+      },
+    } as unknown as Request;
+    const res = mockResponse();
+
+    await expect(exportRecords(req, res)).rejects.toBeInstanceOf(ApiError);
+    expect(dbMock.Record.findAll).not.toHaveBeenCalled();
+  });
+
+  it("exportRecords rejects all_filtered scope without filters", async () => {
+    const req = {
+      body: {
+        format: "csv",
+        scope: "all_filtered",
+        fields: ["id"],
+      },
+    } as unknown as Request;
+    const res = mockResponse();
+
+    await expect(exportRecords(req, res)).rejects.toBeInstanceOf(ApiError);
+    expect(dbMock.Record.findAll).not.toHaveBeenCalled();
+  });
+
+  it("exportRecords rejects BibTeX mapping fields", async () => {
+    const req = {
+      body: {
+        format: "bibtex",
+        scope: "selected",
+        fields: ["title", "mappingQuestion:7"],
+        recordIds: [1],
+      },
+    } as unknown as Request;
+    const res = mockResponse();
+
+    await expect(exportRecords(req, res)).rejects.toBeInstanceOf(ApiError);
+    expect(dbMock.Record.findAll).not.toHaveBeenCalled();
+  });
+
+  it("exportRecords applies all_filtered filters to query", async () => {
+    dbMock.Record.findAll.mockResolvedValue([]);
+
+    const req = {
+      body: {
+        format: "csv",
+        scope: "all_filtered",
+        fields: ["id"],
+        filters: {
+          status: "included",
+          search: "teamwork",
+          importId: 11,
+        },
+      },
+    } as unknown as Request;
+    const res = mockResponse();
+
+    await exportRecords(req, res);
+
+    const where = dbMock.Record.findAll.mock.calls[0]?.[0]?.where as Record<PropertyKey, unknown>;
+    expect(where.status).toBe("included");
+    expect(where.importId).toBe(11);
+    const symbolKeys = Object.getOwnPropertySymbols(where);
+    expect(symbolKeys.length).toBe(1);
+    expect((where[symbolKeys[0] as symbol] as unknown[]).length).toBe(4);
+    expect(res.send).toHaveBeenCalled();
   });
 
   it("update rejects invalid status", async () => {
