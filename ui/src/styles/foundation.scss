@@ -161,3 +161,54 @@ button:disabled {
   cursor: default;
   background: #f4f6f8;
 }
+
+.ui-tab-button {
+  min-height: 0;
+  margin: 0;
+  padding: 5px 10px;
+  border: 0 solid transparent;
+  border-width: 1px 1px 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ui-text-muted);
+  transform: translateY(1px);
+
+  &:hover:not(:disabled) {
+    background: var(--ui-surface-subtle);
+    border-color: var(--ui-border-subtle);
+  }
+
+  &--active {
+    border-color: var(--ui-border-subtle);
+    border-bottom-color: #fff;
+    background: #fff;
+    color: var(--ui-text-primary);
+  }
+}
+
+.ui-section-header {
+  margin: 0;
+  background: var(--ui-surface-subtle);
+  padding: 3px 5px;
+  color: var(--ui-text-secondary);
+  text-transform: uppercase;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.ui-status-message {
+  margin: 0;
+  font-size: 12px;
+
+  &--error {
+    color: #8f2a2a;
+  }
+
+  &--success {
+    color: #395c3f;
+  }
+
+  &--neutral {
+    color: var(--ui-text-secondary);
+  }
+}
