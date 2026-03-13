@@ -15,9 +15,30 @@
         />
 
         <div v-if="tab === 'inc-exc'" class="inclusion-actions">
-          <button class="action action--exclude" :class="[status === 'excluded' && 'action--selected']" @click="emit('exclude')">Exclude</button>
-          <button class="action action--uncertain" :class="[status === 'uncertain' && 'action--selected']" @click="emit('uncertain')">Uncertain</button>
-          <button class="action action--include" :class="[status === 'included' && 'action--selected']" @click="emit('include')">Include</button>
+          <button
+            class="action action--exclude"
+            :class="[status === 'excluded' && 'action--selected']"
+            :aria-pressed="status === 'excluded'"
+            @click="emit('exclude')"
+          >
+            Exclude
+          </button>
+          <button
+            class="action action--uncertain"
+            :class="[status === 'uncertain' && 'action--selected']"
+            :aria-pressed="status === 'uncertain'"
+            @click="emit('uncertain')"
+          >
+            Uncertain
+          </button>
+          <button
+            class="action action--include"
+            :class="[status === 'included' && 'action--selected']"
+            :aria-pressed="status === 'included'"
+            @click="emit('include')"
+          >
+            Include
+          </button>
         </div>
 
         <slot />

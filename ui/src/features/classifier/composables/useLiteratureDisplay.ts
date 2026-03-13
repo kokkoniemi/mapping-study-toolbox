@@ -141,7 +141,7 @@ export const useLiteratureDisplay = (currentItem: Ref<RecordItem | null>) => {
     return decodeHtmlEntities(currentItem.value?.author ?? "");
   });
 
-  const affiliationsDisplay = computed(() => {
+  const affiliations = computed(() => {
     const values: string[] = [];
     const seen = new Set<string>();
 
@@ -169,8 +169,10 @@ export const useLiteratureDisplay = (currentItem: Ref<RecordItem | null>) => {
       pushUnique(affiliation);
     }
 
-    return values.join("; ");
+    return values;
   });
+
+  const affiliationsDisplay = computed(() => affiliations.value.join("; "));
 
   const topicDisplayItems = computed<TopicDisplayItem[]>(() => {
     const topics = currentItem.value?.openAlexTopicItems ?? [];
@@ -242,6 +244,7 @@ export const useLiteratureDisplay = (currentItem: Ref<RecordItem | null>) => {
     referenceDisplayItems,
     citationDisplayItems,
     authorDisplay,
+    affiliations,
     affiliationsDisplay,
     topicDisplayItems,
     enrichmentBadges,

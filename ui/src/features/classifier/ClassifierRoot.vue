@@ -14,7 +14,7 @@
           :title="currentItem.title"
           :authorDisplay="authorDisplay"
           :year="currentItem.year"
-          :affiliationsDisplay="affiliationsDisplay"
+          :affiliations="affiliations"
           :url="currentItem.url"
           :forumName="forumName"
           :jufoLevel="currentItem.Forum?.jufoLevel ?? null"
@@ -81,7 +81,7 @@ import { useLiteratureDisplay } from "./composables/useLiteratureDisplay";
 import "./styles.scss";
 
 const store = defaultStore();
-const { pageItems, pageLength, page, statusFilter, tab, moveLock, currentItem } = storeToRefs(store);
+const { pageItems, pageLength, page, tab, moveLock, currentItem } = storeToRefs(store);
 const classifierRef = ref<HTMLElement | null>(null);
 const classifierMainRef = ref<HTMLElement | null>(null);
 
@@ -92,7 +92,7 @@ const {
   referenceDisplayItems,
   citationDisplayItems,
   authorDisplay,
-  affiliationsDisplay,
+  affiliations,
   topicDisplayItems,
   enrichmentBadges,
   createdFormatted,
@@ -105,14 +105,6 @@ const {
   toggleTopicsVisibility,
   resetVisibility,
 } = useLiteratureDisplay(currentItem);
-
-const nextFlag = computed(() => {
-  const status = currentItem.value?.status;
-  if (status === undefined) {
-    return false;
-  }
-  return (status === null && statusFilter.value === "null") || status === statusFilter.value;
-});
 
 const setNextItem = (skip = false) => {
   if (skip || !currentItem.value) {
@@ -147,17 +139,14 @@ const setPrevItem = async () => {
 
 const setExcluded = async () => {
   await store.setItemStatus("excluded");
-  setNextItem(nextFlag.value);
 };
 
 const setUncertain = async () => {
   await store.setItemStatus("uncertain");
-  setNextItem(nextFlag.value);
 };
 
 const setIncluded = async () => {
   await store.setItemStatus("included");
-  setNextItem(nextFlag.value);
 };
 
 const { onCommentInput, onCommentFocus, onCommentBlur } = useCommentEditing({

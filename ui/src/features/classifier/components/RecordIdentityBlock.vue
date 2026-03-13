@@ -9,8 +9,18 @@
         </template>
       </small>
     </p>
-    <p v-if="affiliationsDisplay.length > 0" class="affiliations">
-      <small>Affiliations: {{ affiliationsDisplay }}</small>
+    <p v-if="affiliations.length > 0" class="affiliations">
+      <small>
+        Affiliations: {{ visibleAffiliationsText }}<span v-if="hasHiddenAffiliations">...</span>
+        <button
+          v-if="canToggleAffiliations"
+          type="button"
+          class="affiliations__toggle"
+          @click="toggleAffiliations"
+        >
+          {{ showAllAffiliations ? "Hide" : "Show all" }}
+        </button>
+      </small>
     </p>
     <p class="forum">
       <template v-if="url">
@@ -35,6 +45,8 @@
 </template>
 
 <script setup lang="ts">
+import { computed, ref, watch } from "vue";
+
 type EnrichmentBadge = {
   label: string;
   level: "low" | "medium" | "high";
@@ -42,14 +54,36 @@ type EnrichmentBadge = {
   tooltip: string;
 };
 
-defineProps<{
+const MAX_COLLAPSED_AFFILIATIONS = 3;
+
+const props = defineProps<{
   title: string;
   authorDisplay: string;
   year: number | null | undefined;
-  affiliationsDisplay: string;
+  affiliations: string[];
   url: string | null;
   forumName: string;
   jufoLevel: number | null;
   enrichmentBadges: EnrichmentBadge[];
 }>();
+
+const showAllAffiliations = ref(false);
+
+const canToggleAffiliations = computed(() => props.affiliations.length > MAX_COLLAPSED_AFFILIATIONS);
+const hasHiddenAffiliations = computed(() => canToggleAffiliations.value && !showAllAffiliations.value);
+const visibleAffiliations = computed(() =>
+  hasHiddenAffiliations.value ? props.affiliations.slice(0, MAX_COLLAPSED_AFFILIATIONS) : props.affiliations,
+);
+const visibleAffiliationsText = computed(() => visibleAffiliations.value.join("; "));
+
+const toggleAffiliations = () => {
+  showAllAffiliations.value = !showAllAffiliations.value;
+};
+
+watch(
+  () => props.affiliations,
+  () => {
+    showAllAffiliations.value = false;
+  },
+);
 </script>
