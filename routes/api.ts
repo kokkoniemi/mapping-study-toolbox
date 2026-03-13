@@ -5,6 +5,9 @@ import * as records from "./records";
 import * as mappingQuestions from "./mappingQuestions";
 import * as forums from "./forums";
 import * as imports from "./imports";
+import * as users from "./users";
+import * as assessments from "./assessments";
+import * as snapshots from "./snapshots";
 
 const router = Router();
 const parsePositiveInteger = (value: string | undefined, fallback: number) => {
@@ -23,6 +26,23 @@ const enrichmentRateLimit = createRateLimitMiddleware({
 router.get("/health", (_req, res) => {
   res.send({ status: "ok" });
 });
+
+// USER PROFILES
+router.get("/users", users.listing);
+router.post("/users", users.create);
+router.patch("/users/:id", users.update);
+
+// USER ASSESSMENTS
+router.get("/assessments/records", assessments.listRecords);
+router.get("/assessments", assessments.listing);
+router.post("/assessments/compare", assessments.compare);
+router.get("/assessments/:recordId", assessments.get);
+router.put("/assessments/:recordId", assessments.upsert);
+router.put("/assessments/:recordId/resolve", assessments.resolve);
+
+// SNAPSHOTS
+router.get("/snapshots/export", snapshots.exportUserSnapshot);
+router.post("/snapshots/import", snapshots.importUserSnapshot);
 
 // RECORDS
 router.get("/records", records.listing);

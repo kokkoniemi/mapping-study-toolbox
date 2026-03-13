@@ -34,6 +34,14 @@
         >
           Import
         </button>
+        <button
+          type="button"
+          class="data-tools__tab"
+          :class="{ 'data-tools__tab--active': toolsTab === 'compare' }"
+          @click="onCompareTabOpen"
+        >
+          Compare
+        </button>
       </div>
 
       <EnrichmentPanel
@@ -106,7 +114,7 @@
       />
 
       <ImportPanel
-        v-else
+        v-else-if="toolsTab === 'imports'"
         :importViewMode="importViewMode"
         :importWizardStep="importWizardStep"
         :importHistoryTotal="importHistoryTotal"
@@ -148,6 +156,20 @@
         @create-import-file="createImportFile"
         @start-enrichment-for-imported="startEnrichmentForImportedRecords"
         @decline-import-enrichment="declineImportEnrichment"
+      />
+
+      <ComparePanel
+        v-else
+        :profiles="activeProfiles"
+        :compareUserIds="compareUserIds"
+        :compareLoading="compareLoading"
+        :compareError="compareError"
+        :pairwise="comparePairwise"
+        :disagreements="compareDisagreements"
+        :resolvingRecordId="resolvingRecordId"
+        @update-users="onCompareUsersUpdate"
+        @run-compare="runAssessmentCompare"
+        @resolve-record="resolveComparedRecord"
       />
     </section>
 
@@ -224,6 +246,8 @@ import type {
   ImportPreviewResponse,
   ImportSource,
   ImportSummary,
+  PairwiseAgreement,
+  AssessmentDisagreementItem,
   StatusFilter,
 } from "@shared/contracts";
 import type { CellChange } from "handsontable/common";
@@ -240,10 +264,12 @@ import EnrichmentPanel from "./panels/EnrichmentPanel.vue";
 import ExportPanel from "./panels/ExportPanel.vue";
 import ForumsPanel from "./panels/ForumsPanel.vue";
 import ImportPanel from "./panels/ImportPanel.vue";
+import ComparePanel from "./panels/ComparePanel.vue";
 import { useRecordSelection } from "./composables/useRecordSelection";
 import RecordsGridWorkspace from "./RecordsGridWorkspace.vue";
 import "./styles.scss";
 import {
+  assessments,
   forums,
   imports as importApi,
   records,
@@ -252,6 +278,7 @@ import {
   type RecordStatus,
 } from "../../helpers/api";
 import { getApiErrorMessage } from "../../helpers/errors";
+import { useUserProfilesStore } from "../../stores/userProfiles";
 
 type GridRow = Record<string, string | number | boolean> & { __recordId: number };
 type MappingEditorState = {
@@ -323,6 +350,7 @@ const editableSources = new Set<string>([
 
 const store = defaultStore();
 const dataToolsStore = useDataToolsStore();
+const userProfilesStore = useUserProfilesStore();
 const {
   dataItems,
   dataTotal,
@@ -347,6 +375,7 @@ const {
   importViewMode,
   importWizardStep,
 } = storeToRefs(dataToolsStore);
+const { activeProfiles } = storeToRefs(userProfilesStore);
 
 const dataGridRef = ref<DataGridExpose | null>(null);
 const searchInput = ref(searchFilter.value);
@@ -406,6 +435,12 @@ const importHistoryTotal = ref(0);
 const importHistoryLoading = ref(false);
 const importDeleteLoadingId = ref<number | null>(null);
 const lastImportResult = ref<{ importId: number; createdRecordIds: number[] } | null>(null);
+const compareUserIds = ref<number[]>([]);
+const comparePairwise = ref<PairwiseAgreement[]>([]);
+const compareDisagreements = ref<AssessmentDisagreementItem[]>([]);
+const compareLoading = ref(false);
+const compareError = ref("");
+const resolvingRecordId = ref<number | null>(null);
 
 const {
   enrichmentRunning,
@@ -1903,6 +1938,72 @@ const onImportsTabOpen = () => {
     void loadImportHistory();
   }
 };
+
+const onCompareTabOpen = () => {
+  toolsTab.value = "compare";
+  if (compareUserIds.value.length === 0) {
+    compareUserIds.value = activeProfiles.value.slice(0, 2).map((profile) => profile.id);
+  }
+};
+
+const onCompareUsersUpdate = (userIds: number[]) => {
+  compareUserIds.value = [...new Set(userIds)].sort((left, right) => left - right);
+};
+
+const runAssessmentCompare = async () => {
+  if (compareUserIds.value.length < 2) {
+    compareError.value = "Select at least two users to compare.";
+    return;
+  }
+
+  compareLoading.value = true;
+  compareError.value = "";
+  try {
+    const response = await assessments.compare(compareUserIds.value);
+    comparePairwise.value = response.data.pairwise;
+    compareDisagreements.value = response.data.disagreements;
+  } catch (error) {
+    compareError.value = getApiErrorMessage(error);
+  } finally {
+    compareLoading.value = false;
+  }
+};
+
+const resolveComparedRecord = async (payload: {
+  recordId: number;
+  status: RecordStatus;
+  comment: string | null;
+  mappingOptionIds: number[];
+}) => {
+  resolvingRecordId.value = payload.recordId;
+  compareError.value = "";
+
+  try {
+    await assessments.resolve(payload.recordId, {
+      status: payload.status,
+      comment: payload.comment,
+      mappingOptionIds: payload.mappingOptionIds,
+    });
+    await runAssessmentCompare();
+    await Promise.all([store.fetchPageItems(), store.loadInitialData()]);
+  } catch (error) {
+    compareError.value = getApiErrorMessage(error);
+  } finally {
+    resolvingRecordId.value = null;
+  }
+};
+
+watch(
+  () => activeProfiles.value.map((profile) => profile.id),
+  (ids) => {
+    const allowed = new Set(ids);
+    compareUserIds.value = compareUserIds.value.filter((id) => allowed.has(id));
+    if (compareUserIds.value.length === 0 && ids.length >= 2) {
+      compareUserIds.value = ids.slice(0, 2);
+    }
+  },
+  { immediate: true },
+);
 
 watch(
   () => exportCsvFieldOptions.value.map((field) => field.key),

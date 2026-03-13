@@ -93,6 +93,9 @@ const requiredModelNames = [
   "MappingOption",
   "RecordMappingOption",
   "Import",
+  "UserProfile",
+  "RecordAssessment",
+  "RecordAssessmentOption",
 ] as const;
 
 requiredModelNames.forEach((name) => {

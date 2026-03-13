@@ -260,6 +260,104 @@ export type DeleteImportResponse = {
   deletedRecords: number;
 };
 
+export type UserProfile = {
+  id: number;
+  name: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type UserProfilesIndexResponse = {
+  count: number;
+  users: UserProfile[];
+};
+
+export type CreateUserProfilePayload = {
+  name: string;
+};
+
+export type UpdateUserProfilePayload = Partial<{
+  name: string;
+  isActive: boolean;
+}>;
+
+export type AssessmentSelection = {
+  recordId: number;
+  userId: number;
+  status: RecordStatus;
+  comment: string | null;
+  mappingOptionIds: number[];
+  updatedAt: string;
+};
+
+export type AssessmentSelectionResponse = {
+  assessment: AssessmentSelection | null;
+};
+
+export type AssessmentSelectionBatchResponse = {
+  count: number;
+  assessments: AssessmentSelection[];
+};
+
+export type UpsertAssessmentSelectionPayload = {
+  userId: number;
+  status?: RecordStatus;
+  comment?: string | null;
+  mappingOptionIds?: number[];
+};
+
+export type AssessmentSnapshot = {
+  version: 1;
+  exportedAt: string;
+  user: {
+    id: number;
+    name: string;
+  };
+  assessments: AssessmentSelection[];
+};
+
+export type AssessmentSnapshotImportResponse = {
+  total: number;
+  created: number;
+  updated: number;
+  skipped: number;
+  userId: number;
+};
+
+export type PairwiseAgreement = {
+  userIdA: number;
+  userIdB: number;
+  sharedCount: number;
+  agreementPercent: number;
+  kappa: number;
+};
+
+export type AssessmentDisagreementItem = {
+  recordId: number;
+  values: Array<{
+    userId: number;
+    status: RecordStatus;
+    comment: string | null;
+    mappingOptionIds: number[];
+  }>;
+  statusDisagreement: boolean;
+  mappingDisagreement: boolean;
+  commentDisagreement: boolean;
+};
+
+export type AssessmentCompareResponse = {
+  users: UserProfile[];
+  pairwise: PairwiseAgreement[];
+  disagreements: AssessmentDisagreementItem[];
+};
+
+export type AssessmentResolvePayload = Partial<{
+  status: RecordStatus;
+  comment: string | null;
+  mappingOptionIds: number[];
+}>;
+
 export type ExportFormat = "csv" | "bibtex";
 export type ExportScope = "selected" | "all_filtered";
 

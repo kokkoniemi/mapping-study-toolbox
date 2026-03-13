@@ -179,6 +179,50 @@ export type ImportCreationAttributes = Partial<ImportAttributes>;
 export type ImportModel = BaseModel<ImportAttributes, ImportCreationAttributes>;
 export type ImportModelStatic = AssociableModel<ImportModel>;
 
+export interface UserProfileAttributes {
+  id: number;
+  name: string;
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export type UserProfileCreationAttributes = Partial<UserProfileAttributes>;
+export type UserProfileModel = BaseModel<UserProfileAttributes, UserProfileCreationAttributes>;
+export type UserProfileModelStatic = AssociableModel<UserProfileModel>;
+
+export interface RecordAssessmentAttributes {
+  id: number;
+  recordId: number;
+  userId: number;
+  status: RecordStatus;
+  comment: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export type RecordAssessmentCreationAttributes = Partial<RecordAssessmentAttributes>;
+export type RecordAssessmentModel = BaseModel<
+  RecordAssessmentAttributes,
+  RecordAssessmentCreationAttributes
+>;
+export type RecordAssessmentModelStatic = AssociableModel<RecordAssessmentModel>;
+
+export interface RecordAssessmentOptionAttributes {
+  id: number;
+  recordAssessmentId: number;
+  mappingOptionId: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export type RecordAssessmentOptionCreationAttributes = Partial<RecordAssessmentOptionAttributes>;
+export type RecordAssessmentOptionModel = BaseModel<
+  RecordAssessmentOptionAttributes,
+  RecordAssessmentOptionCreationAttributes
+>;
+export type RecordAssessmentOptionModelStatic = AssociableModel<RecordAssessmentOptionModel>;
+
 export interface DbModels {
   Record: RecordModelStatic;
   Forum: ForumModelStatic;
@@ -186,6 +230,9 @@ export interface DbModels {
   MappingOption: MappingOptionModelStatic;
   RecordMappingOption: RecordMappingOptionModelStatic;
   Import: ImportModelStatic;
+  UserProfile: UserProfileModelStatic;
+  RecordAssessment: RecordAssessmentModelStatic;
+  RecordAssessmentOption: RecordAssessmentOptionModelStatic;
   sequelize: Sequelize;
   Sequelize: typeof SequelizeModule;
 }

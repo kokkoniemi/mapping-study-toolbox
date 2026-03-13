@@ -12,31 +12,73 @@
       </TabButton>
     </ul>
 
-    <input
-      type="text"
-      :class="['nickname-input', !nickname && 'empty']"
-      placeholder="Nickname"
-      :value="nickname"
-      @input="onNicknameInput"
-    />
+    <div class="profile-controls">
+      <label for="activeProfileSelect" class="profile-controls__label">Profile</label>
+      <select
+        id="activeProfileSelect"
+        class="profile-controls__select"
+        :value="activeProfileId ?? ''"
+        :disabled="loading"
+        @change="onProfileChange"
+      >
+        <option value="" disabled>{{ loading ? "Loading..." : "Select profile" }}</option>
+        <option v-for="profile in profiles" :key="profile.id" :value="profile.id">
+          {{ profile.name }}
+        </option>
+      </select>
+      <button type="button" class="profile-controls__button" @click="emit('manage-profiles')">
+        Manage
+      </button>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import type { TabMode } from "../../stores/types";
+import type { UserProfile } from "../../helpers/api";
 import TabButton from "../../components/ui/TabButton.vue";
 
 defineProps<{
   tab: TabMode;
-  nickname: string;
+  profiles: UserProfile[];
+  activeProfileId: number | null;
+  loading: boolean;
 }>();
 
 const emit = defineEmits<{
   "update-tab": [value: TabMode];
-  "update-nickname": [value: string];
+  "profile-change": [value: number | null];
+  "manage-profiles": [];
 }>();
 
-const onNicknameInput = (event: Event) => {
-  emit("update-nickname", (event.target as HTMLInputElement).value);
+const onProfileChange = (event: Event) => {
+  const rawValue = (event.target as HTMLSelectElement).value;
+  if (rawValue.length === 0) {
+    emit("profile-change", null);
+    return;
+  }
+  emit("profile-change", Number.parseInt(rawValue, 10));
 };
 </script>
+
+<style scoped lang="scss">
+.profile-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.profile-controls__label {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.profile-controls__select {
+  min-width: 180px;
+}
+
+.profile-controls__button {
+  white-space: nowrap;
+}
+</style>

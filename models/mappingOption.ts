@@ -22,6 +22,13 @@ const defineMappingOption: ModelFactory<MappingOptionModelStatic> = (
   MappingOption.associate = (models: DbModels) => {
     MappingOption.belongsTo(models.MappingQuestion);
     MappingOption.belongsToMany(models.Record, { through: models.RecordMappingOption });
+    MappingOption.belongsToMany(models.RecordAssessment, {
+      as: "AssessmentRecords",
+      through: models.RecordAssessmentOption,
+      foreignKey: "mappingOptionId",
+      otherKey: "recordAssessmentId",
+    });
+    MappingOption.hasMany(models.RecordAssessmentOption, { foreignKey: "mappingOptionId" });
   };
 
   return MappingOption;

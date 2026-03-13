@@ -230,6 +230,32 @@ UI dev server runs on http://localhost:8080 and calls backend API at http://loca
   - title + first author family + year compatibility
 - Import history is shown in the same panel and supports deleting an import together with its imported records.
 
+### Local multi-user assessment workflow (no server auth)
+- This mode is designed for local-first collaboration where each reviewer runs the tool on their own computer.
+- User profiles are managed in-app (name + active/inactive), and review decisions are stored per user in separate assessment tables.
+- Canonical `Record.status/comment/MappingOptions` are now treated as resolved/final outputs.
+- Reviewer actions (`include/exclude`, mapping keyword selections, comments) are written to per-user assessments.
+- Data tab has a `Compare` tools panel for:
+  - pairwise agreement percentage
+  - pairwise Cohen's Kappa
+  - disagreement listing (status, mapping selections, comments)
+  - manual resolution into canonical record fields
+
+#### Snapshot exchange via Git (fixed filename per user)
+- Export one deterministic snapshot file per user:
+```shell
+npm run snapshots:export -- --user-id 1 --out ./snapshots/user-1.json
+```
+- If the snapshot content did not change, the file is not rewritten (clean git history).
+- Import a snapshot from another user:
+```shell
+npm run snapshots:import -- --in ./snapshots/user-2.json
+```
+- Generate markdown compare report from local DB:
+```shell
+npm run assessments:compare -- --users 1,2 --out ./reports/compare-1-2.md
+```
+
 ### Where to put `OPENALEX_API_KEY`
 - Docker: add `OPENALEX_API_KEY` under `services.backend.environment` in `docker-compose.yml` (or use `${OPENALEX_API_KEY}` with a local `.env` file).
 - Local non-docker: export env var before starting backend, for example:

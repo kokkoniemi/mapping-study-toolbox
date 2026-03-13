@@ -1,5 +1,15 @@
 import type {
+  AssessmentCompareResponse as SharedAssessmentCompareResponse,
+  AssessmentResolvePayload as SharedAssessmentResolvePayload,
+  AssessmentSelection as SharedAssessmentSelection,
+  AssessmentSelectionBatchResponse as SharedAssessmentSelectionBatchResponse,
+  AssessmentSelectionResponse as SharedAssessmentSelectionResponse,
+  AssessmentSnapshot as SharedAssessmentSnapshot,
+  AssessmentSnapshotImportResponse as SharedAssessmentSnapshotImportResponse,
   CreateEnrichmentJobPayload,
+  CreateUserProfilePayload as SharedCreateUserProfilePayload,
+  UpdateUserProfilePayload as SharedUpdateUserProfilePayload,
+  UpsertAssessmentSelectionPayload as SharedUpsertAssessmentSelectionPayload,
   EnrichmentMode,
   EnrichmentJobSnapshot,
   EnrichmentProvenanceMap,
@@ -18,6 +28,8 @@ import type {
   PatchRecordPayload,
   RecordStatus,
   RecordsIndexResponse as SharedRecordsIndexResponse,
+  UserProfile as SharedUserProfile,
+  UserProfilesIndexResponse as SharedUserProfilesIndexResponse,
 } from "@shared/contracts";
 
 export type { CreateEnrichmentJobPayload, EnrichmentMode, PatchRecordPayload, RecordStatus };
@@ -366,6 +378,18 @@ export type ImportCreateResponse = SharedImportCreateResponse;
 export type ImportsIndexResponse = SharedImportsIndexResponse;
 export type DeleteImportResponse = SharedDeleteImportResponse;
 export type ExportRequestPayload = SharedExportRequestPayload;
+export type UserProfile = SharedUserProfile;
+export type UserProfilesIndexResponse = SharedUserProfilesIndexResponse;
+export type CreateUserProfilePayload = SharedCreateUserProfilePayload;
+export type UpdateUserProfilePayload = SharedUpdateUserProfilePayload;
+export type AssessmentSelection = SharedAssessmentSelection;
+export type AssessmentSelectionResponse = SharedAssessmentSelectionResponse;
+export type AssessmentSelectionBatchResponse = SharedAssessmentSelectionBatchResponse;
+export type UpsertAssessmentSelectionPayload = SharedUpsertAssessmentSelectionPayload;
+export type AssessmentCompareResponse = SharedAssessmentCompareResponse;
+export type AssessmentResolvePayload = SharedAssessmentResolvePayload;
+export type AssessmentSnapshot = SharedAssessmentSnapshot;
+export type AssessmentSnapshotImportResponse = SharedAssessmentSnapshotImportResponse;
 
 type UpdateRecordPayload = Record<string, unknown>;
 type SaveMappingOptionPayload = {
@@ -465,4 +489,42 @@ export const mappingQuestions = {
         params,
       }),
   },
+};
+
+export const userProfiles = {
+  index: (params?: QueryParams) => http.get<UserProfilesIndexResponse>("users", { params }),
+  create: (data: CreateUserProfilePayload, params?: QueryParams) =>
+    http.post<UserProfile, CreateUserProfilePayload>("users", data, { params }),
+  update: (id: number, data: UpdateUserProfilePayload, params?: QueryParams) =>
+    http.patch<UserProfile, UpdateUserProfilePayload>(`users/${id}`, data, { params }),
+};
+
+export const assessments = {
+  recordsIndex: (userId: number, params?: QueryParams) =>
+    http.get<RecordsIndexResponse>("assessments/records", {
+      params: { ...(params ?? {}), userId },
+    }),
+  index: (userId: number, recordIds: number[], params?: QueryParams) =>
+    http.get<AssessmentSelectionBatchResponse>("assessments", {
+      params: { ...(params ?? {}), userId, recordIds },
+    }),
+  get: (recordId: number, userId: number, params?: QueryParams) =>
+    http.get<AssessmentSelectionResponse>(`assessments/${recordId}`, {
+      params: { ...(params ?? {}), userId },
+    }),
+  upsert: (recordId: number, data: UpsertAssessmentSelectionPayload, params?: QueryParams) =>
+    http.put<AssessmentSelectionResponse, UpsertAssessmentSelectionPayload>(`assessments/${recordId}`, data, { params }),
+  compare: (userIds: number[], params?: QueryParams) =>
+    http.post<AssessmentCompareResponse, { userIds: number[] }>("assessments/compare", { userIds }, { params }),
+  resolve: (recordId: number, data: AssessmentResolvePayload, params?: QueryParams) =>
+    http.put<RecordItem, AssessmentResolvePayload>(`assessments/${recordId}/resolve`, data, { params }),
+};
+
+export const snapshots = {
+  exportUser: (userId: number, params?: QueryParams) =>
+    http.get<AssessmentSnapshot>("snapshots/export", {
+      params: { ...(params ?? {}), userId },
+    }),
+  importSnapshot: (snapshot: AssessmentSnapshot, params?: QueryParams) =>
+    http.post<AssessmentSnapshotImportResponse, AssessmentSnapshot>("snapshots/import", snapshot, { params }),
 };

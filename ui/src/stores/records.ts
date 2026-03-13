@@ -2,6 +2,7 @@ import { defineStore } from "pinia";
 import type { PatchRecordPayload, RecordStatus } from "@shared/contracts";
 
 import {
+  assessments,
   mappingQuestions,
   records,
   type QueryParams,
@@ -11,6 +12,7 @@ import { getApiErrorMessage } from "../helpers/errors";
 import { useFiltersStore } from "./filters";
 import { useMappingStore } from "./mapping";
 import { useUiStore } from "./ui";
+import { useUserProfilesStore } from "./userProfiles";
 import type {
   CellState,
   RecordArrayField,
@@ -118,6 +120,7 @@ export const useRecordsStore = defineStore("records", {
       }
     },
     async hydrateRecordDetails(recordId: number) {
+      const userProfilesStore = useUserProfilesStore();
       if (this.detailLoadingIds.includes(recordId)) {
         return;
       }
@@ -139,7 +142,26 @@ export const useRecordsStore = defineStore("records", {
       this.detailLoadingIds = [...this.detailLoadingIds, recordId];
       try {
         const detail = await records.get(recordId);
-        this.updateRecordInPage(recordId, normalizeRecordItem(detail.data));
+        const normalized = normalizeRecordItem(detail.data);
+        if (userProfilesStore.activeProfileId) {
+          const selection = await assessments.get(recordId, userProfilesStore.activeProfileId);
+          const mappingStore = useMappingStore();
+          const allOptions = mappingStore.mappingQuestions.flatMap((question) => question.MappingOptions ?? []);
+          const selectedIds = selection.data.assessment?.mappingOptionIds ?? [];
+          const selectedOptions = selectedIds
+            .map((id) => allOptions.find((item) => item.id === id) ?? normalized.MappingOptions.find((item) => item.id === id))
+            .filter((item): item is NonNullable<typeof item> => Boolean(item));
+
+          this.updateRecordInPage(recordId, {
+            ...normalized,
+            status: selection.data.assessment?.status ?? null,
+            comment: selection.data.assessment?.comment ?? null,
+            MappingOptions: selectedOptions,
+          });
+          return;
+        }
+
+        this.updateRecordInPage(recordId, normalized);
       } catch (error) {
         console.error(error);
       } finally {
@@ -159,19 +181,25 @@ export const useRecordsStore = defineStore("records", {
     },
     async loadMoreData() {
       const filtersStore = useFiltersStore();
+      const userProfilesStore = useUserProfilesStore();
+      const activeProfileId = userProfilesStore.activeProfileId;
       if (this.dataLoading || !this.dataHasMore) {
         return;
       }
 
       this.dataLoading = true;
       try {
-        const items = await records.index({
+        const params = {
           offset: this.dataOffset,
           limit: this.dataLimit,
           ...(filtersStore.statusFilter !== "" ? { status: filtersStore.statusFilter } : {}),
           ...(filtersStore.searchFilter !== "" ? { search: filtersStore.searchFilter } : {}),
           ...(filtersStore.dataImportFilterId !== null ? { importId: filtersStore.dataImportFilterId } : {}),
-        });
+        };
+
+        const items = activeProfileId
+          ? await assessments.recordsIndex(activeProfileId, params)
+          : await records.index(params);
 
         const normalized = items.data.records.map(normalizeRecordItem);
         const existingIds = new Set(this.dataItems.map((item) => item.id));
@@ -187,16 +215,21 @@ export const useRecordsStore = defineStore("records", {
     },
     async fetchPageItems(where: QueryParams = {}) {
       const filtersStore = useFiltersStore();
+      const userProfilesStore = useUserProfilesStore();
+      const activeProfileId = userProfilesStore.activeProfileId;
       const { page, pageLength, statusFilter, searchFilter } = filtersStore;
       const currentItem = this.currentItem;
 
-      const items = await records.index({
+      const params = {
         offset: (page - 1) * pageLength,
         limit: pageLength,
         ...where,
         ...(statusFilter !== "" ? { status: statusFilter } : {}),
         ...(searchFilter !== "" ? { search: searchFilter } : {}),
-      });
+      };
+      const items = activeProfileId
+        ? await assessments.recordsIndex(activeProfileId, params)
+        : await records.index(params);
 
       this.pageItems = items.data.records.map(normalizeRecordItem);
       this.itemCount = items.data.count;
@@ -209,15 +242,24 @@ export const useRecordsStore = defineStore("records", {
       }
     },
     async setItemStatus(payload: RecordStatus) {
-      const uiStore = useUiStore();
       const filtersStore = useFiltersStore();
+      const userProfilesStore = useUserProfilesStore();
       const currentItem = this.currentItem;
       if (!currentItem) {
         return;
       }
-
-      const item = await records.update(currentItem.id, { status: payload, editedBy: uiStore.nick });
-      const normalized = normalizeRecordItem(item.data);
+      const normalized = userProfilesStore.activeProfileId
+        ? normalizeRecordItem({
+          ...currentItem,
+          status: (await assessments.upsert(currentItem.id, {
+            userId: userProfilesStore.activeProfileId,
+            status: payload,
+          })).data.assessment?.status ?? null,
+        })
+        : normalizeRecordItem((await records.update(currentItem.id, {
+          status: payload,
+          editedBy: useUiStore().nick,
+        })).data);
       const index = this.pageItems.findIndex((entry) => entry.id === currentItem.id);
       if (index < 0) {
         return;
@@ -239,7 +281,7 @@ export const useRecordsStore = defineStore("records", {
       this.setCurrentItem(nextItem);
     },
     async setItemComment(id: number, payload: string) {
-      const uiStore = useUiStore();
+      const userProfilesStore = useUserProfilesStore();
       const pageIndex = this.pageItems.findIndex((item) => item.id === id);
       const dataIndex = this.dataItems.findIndex((item) => item.id === id);
       if (pageIndex < 0 && dataIndex < 0) {
@@ -264,10 +306,18 @@ export const useRecordsStore = defineStore("records", {
         }
       }
 
-      await records.update(id, { comment: payload || null, editedBy: uiStore.nick });
+      if (userProfilesStore.activeProfileId) {
+        await assessments.upsert(id, {
+          userId: userProfilesStore.activeProfileId,
+          comment: payload || null,
+        });
+      } else {
+        await records.update(id, { comment: payload || null, editedBy: useUiStore().nick });
+      }
     },
     async patchRecord(recordId: number, patch: PatchRecordPayload, editedBy?: string | null) {
-      const uiStore = useUiStore();
+      void editedBy;
+      const userProfilesStore = useUserProfilesStore();
       if (Object.keys(patch).length === 0) {
         return;
       }
@@ -279,14 +329,51 @@ export const useRecordsStore = defineStore("records", {
       }
 
       const payload: PatchRecordPayload = { ...patch };
-      const effectiveEditedBy = editedBy ?? uiStore.nick;
-      if (effectiveEditedBy && effectiveEditedBy.trim() !== "" && !("editedBy" in payload)) {
-        payload.editedBy = effectiveEditedBy;
+      const assessmentPayload: {
+        status?: RecordStatus;
+        comment?: string | null;
+      } = {};
+
+      if (userProfilesStore.activeProfileId && "status" in payload) {
+        assessmentPayload.status = payload.status;
+        delete payload.status;
+      }
+      if (userProfilesStore.activeProfileId && "comment" in payload) {
+        assessmentPayload.comment = payload.comment;
+        delete payload.comment;
       }
 
       try {
-        const response = await records.patch(recordId, payload);
-        this.updateRecordInPage(recordId, response.data);
+        if (
+          userProfilesStore.activeProfileId
+          && (assessmentPayload.status !== undefined || assessmentPayload.comment !== undefined)
+        ) {
+          const assessmentResponse = await assessments.upsert(recordId, {
+            userId: userProfilesStore.activeProfileId,
+            ...assessmentPayload,
+          });
+          const current =
+            this.pageItems.find((item) => item.id === recordId)
+            ?? this.dataItems.find((item) => item.id === recordId);
+          if (current) {
+            this.updateRecordInPage(recordId, {
+              ...current,
+              status: assessmentResponse.data.assessment?.status ?? null,
+              comment: assessmentResponse.data.assessment?.comment ?? null,
+            });
+          }
+        }
+
+        if (Object.keys(payload).length > 0) {
+          if (!userProfilesStore.activeProfileId && !("editedBy" in payload)) {
+            const nick = useUiStore().nick;
+            if (nick && nick.trim().length > 0) {
+              payload.editedBy = nick;
+            }
+          }
+          const response = await records.patch(recordId, payload);
+          this.updateRecordInPage(recordId, response.data);
+        }
 
         for (const field of fields) {
           this.clearCellDraft(recordId, field);
@@ -303,20 +390,64 @@ export const useRecordsStore = defineStore("records", {
       }
     },
     async setRecordArrayField(recordId: number, field: RecordArrayField, values: string[]) {
-      await this.patchRecord(recordId, { [field]: values }, useUiStore().nick);
+      await this.patchRecord(recordId, { [field]: values });
     },
     async linkRecordMappingOption(recordId: number, mappingQuestionId: number, mappingOptionId: number) {
+      const userProfilesStore = useUserProfilesStore();
       const field = `mapping:${mappingQuestionId}`;
       this.setCellSaving(recordId, field, true);
       this.setCellError(recordId, field, null);
 
       try {
-        const option = await records.mappingOptions.save(recordId, {
-          mappingQuestionId,
-          mappingOptionId,
+        if (!userProfilesStore.activeProfileId) {
+          const option = await records.mappingOptions.save(recordId, {
+            mappingQuestionId,
+            mappingOptionId,
+          });
+          const appendOption = (items: RecordItem[]) => {
+            const index = items.findIndex((item) => item.id === recordId);
+            if (index < 0) {
+              return null;
+            }
+            const current = items[index];
+            if (!current) {
+              return null;
+            }
+            if (current.MappingOptions.some((item) => item.id === option.data.id)) {
+              return null;
+            }
+            const nextItems = [...items];
+            nextItems[index] = {
+              ...current,
+              MappingOptions: [...current.MappingOptions, option.data],
+            };
+            return nextItems;
+          };
+          const nextPageItems = appendOption(this.pageItems);
+          if (nextPageItems) {
+            this.pageItems = nextPageItems;
+          }
+          const nextDataItems = appendOption(this.dataItems);
+          if (nextDataItems) {
+            this.dataItems = nextDataItems;
+          }
+          return;
+        }
+
+        const current =
+          this.pageItems.find((item) => item.id === recordId)
+          ?? this.dataItems.find((item) => item.id === recordId);
+        if (!current) {
+          return;
+        }
+        const mappingOptionIds = [...new Set([...current.MappingOptions.map((item) => item.id), mappingOptionId])];
+
+        const selection = await assessments.upsert(recordId, {
+          userId: userProfilesStore.activeProfileId,
+          mappingOptionIds,
         });
 
-        const appendOption = (items: RecordItem[]) => {
+        const applySelection = (items: RecordItem[]) => {
           const index = items.findIndex((item) => item.id === recordId);
           if (index < 0) {
             return null;
@@ -325,24 +456,27 @@ export const useRecordsStore = defineStore("records", {
           if (!current) {
             return null;
           }
-          const exists = current.MappingOptions.some((item) => item.id === option.data.id);
-          if (exists) {
-            return null;
-          }
+          const mappingStore = useMappingStore();
+          const allOptions = mappingStore.mappingQuestions.flatMap((question) => question.MappingOptions ?? []);
+          const selectedIds = selection.data.assessment?.mappingOptionIds ?? [];
+          const selectedOptions = selectedIds
+            .map((id) => allOptions.find((item) => item.id === id) ?? current.MappingOptions.find((item) => item.id === id))
+            .filter((item): item is NonNullable<typeof item> => Boolean(item));
+
           const nextItems = [...items];
           nextItems[index] = {
             ...current,
-            MappingOptions: [...current.MappingOptions, option.data],
+            MappingOptions: selectedOptions,
           };
           return nextItems;
         };
 
-        const nextPageItems = appendOption(this.pageItems);
+        const nextPageItems = applySelection(this.pageItems);
         if (nextPageItems) {
           this.pageItems = nextPageItems;
         }
 
-        const nextDataItems = appendOption(this.dataItems);
+        const nextDataItems = applySelection(this.dataItems);
         if (nextDataItems) {
           this.dataItems = nextDataItems;
         }
@@ -354,6 +488,7 @@ export const useRecordsStore = defineStore("records", {
       }
     },
     async unlinkRecordMappingOption(recordId: number, mappingOptionId: number) {
+      const userProfilesStore = useUserProfilesStore();
       const record =
         this.pageItems.find((item) => item.id === recordId)
         ?? this.dataItems.find((item) => item.id === recordId);
@@ -367,7 +502,40 @@ export const useRecordsStore = defineStore("records", {
       this.setCellError(recordId, field, null);
 
       try {
-        await records.mappingOptions.delete(recordId, mappingOptionId);
+        if (!userProfilesStore.activeProfileId) {
+          await records.mappingOptions.delete(recordId, mappingOptionId);
+          const removeOption = (items: RecordItem[]) => {
+            const index = items.findIndex((item) => item.id === recordId);
+            if (index < 0) {
+              return null;
+            }
+            const current = items[index];
+            if (!current) {
+              return null;
+            }
+            const nextItems = [...items];
+            nextItems[index] = {
+              ...current,
+              MappingOptions: current.MappingOptions.filter((item) => item.id !== mappingOptionId),
+            };
+            return nextItems;
+          };
+          const nextPageItems = removeOption(this.pageItems);
+          if (nextPageItems) {
+            this.pageItems = nextPageItems;
+          }
+          const nextDataItems = removeOption(this.dataItems);
+          if (nextDataItems) {
+            this.dataItems = nextDataItems;
+          }
+          return;
+        }
+
+        const nextIds = record.MappingOptions.filter((item) => item.id !== mappingOptionId).map((item) => item.id);
+        const selection = await assessments.upsert(recordId, {
+          userId: userProfilesStore.activeProfileId,
+          mappingOptionIds: nextIds,
+        });
         const removeOption = (items: RecordItem[]) => {
           const index = items.findIndex((item) => item.id === recordId);
           if (index < 0) {
@@ -379,10 +547,17 @@ export const useRecordsStore = defineStore("records", {
             return null;
           }
 
+          const mappingStore = useMappingStore();
+          const allOptions = mappingStore.mappingQuestions.flatMap((question) => question.MappingOptions ?? []);
+          const selectedIds = selection.data.assessment?.mappingOptionIds ?? [];
+          const selectedOptions = selectedIds
+            .map((id) => allOptions.find((item) => item.id === id) ?? current.MappingOptions.find((item) => item.id === id))
+            .filter((item): item is NonNullable<typeof item> => Boolean(item));
+
           const nextItems = [...items];
           nextItems[index] = {
             ...current,
-            MappingOptions: current.MappingOptions.filter((item) => item.id !== mappingOptionId),
+            MappingOptions: selectedOptions,
           };
           return nextItems;
         };
@@ -426,4 +601,3 @@ export const useRecordsStore = defineStore("records", {
     },
   },
 });
-
