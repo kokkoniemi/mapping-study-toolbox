@@ -72,6 +72,7 @@ npm run ui:install
 3. (Optional) customize DB config in `db-config.json`:
    - by default, runtime + migrations use sqlite `./db.sqlite3` with logging disabled
    - in test environment, sqlite is always `:memory:`
+   - optional override: set `DB_CONFIG_PATH` to use another `db-config.json` location
 4. Run local migrations:
 ```shell
 npm run migrate
@@ -115,6 +116,14 @@ GUI tabs:
 npm run ui:dev
 ```
 UI dev server runs on http://localhost:8080 and calls backend API at http://localhost:3000/api/.
+
+### DB config resolution
+- Runtime and migrations share the same DB config resolver.
+- For `NODE_ENV !== test`:
+  - use `DB_CONFIG_PATH` when provided, otherwise `./db-config.json`
+  - if config file is missing, fallback defaults are used (`sqlite`, `./db.sqlite3`, `logging: false`)
+- For `NODE_ENV === test`:
+  - DB is always `sqlite` with `:memory:` storage (file config ignored)
 
 ### Data tab backend endpoint
 - `PATCH /api/records/:id` for partial record updates used by the Data tab.

@@ -94,4 +94,27 @@ describe("resolveDbConfig", () => {
       ).toThrow("DB config file not found");
     });
   });
+
+  it("uses DB_CONFIG_PATH override when provided", () => {
+    withTempDir((directory) => {
+      const customConfigPath = path.join(directory, "custom-db-config.json");
+      fs.writeFileSync(
+        customConfigPath,
+        JSON.stringify({
+          dialect: "sqlite",
+          storage: "./override.sqlite3",
+          logging: false,
+        }),
+        "utf8",
+      );
+
+      const resolved = resolveDbConfig({
+        env: "development",
+        cwd: directory,
+        configPath: "./custom-db-config.json",
+      });
+      expect(resolved.sourcePath).toBe(customConfigPath);
+      expect(resolved.config.storage).toBe("./override.sqlite3");
+    });
+  });
 });

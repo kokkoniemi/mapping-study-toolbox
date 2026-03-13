@@ -16,5 +16,8 @@ if [ ! -d node_modules ] || [ "$LOCK_HASH" != "$INSTALLED_HASH" ]; then
   printf "%s" "$LOCK_HASH" > node_modules/.package-lock.hash
 fi
 
+# Keep snapshots directory in the mounted workspace for local/release workflows.
+mkdir -p snapshots
+
 npm run migrate
 exec node --watch --import tsx server.ts

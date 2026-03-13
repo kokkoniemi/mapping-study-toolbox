@@ -80,18 +80,8 @@ const resolveConfigPath = ({
     return explicitPath;
   }
 
-  const searchPaths = [
-    path.resolve(cwd, "db-config.json"),
-    path.resolve(path.dirname(process.execPath), "db-config.json"),
-  ];
-
-  for (const candidate of [...new Set(searchPaths)]) {
-    if (fs.existsSync(candidate)) {
-      return candidate;
-    }
-  }
-
-  return null;
+  const defaultPath = path.resolve(cwd, "db-config.json");
+  return fs.existsSync(defaultPath) ? defaultPath : null;
 };
 
 const selectConfigForEnv = (fileConfig: DbConfigFile, env: string): DbConfig => {
