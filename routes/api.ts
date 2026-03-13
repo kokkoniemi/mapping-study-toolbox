@@ -42,7 +42,10 @@ router.put("/assessments/:recordId/resolve", assessments.resolve);
 
 // SNAPSHOTS
 router.get("/snapshots/export", snapshots.exportUserSnapshot);
+router.post("/snapshots/save", snapshots.saveUserSnapshot);
 router.post("/snapshots/import", snapshots.importUserSnapshot);
+router.get("/snapshots/pending", snapshots.pendingSnapshotUploads);
+router.post("/snapshots/upload", snapshots.uploadSnapshotFiles);
 
 // RECORDS
 router.get("/records", records.listing);

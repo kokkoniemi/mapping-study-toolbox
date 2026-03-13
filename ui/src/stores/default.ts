@@ -128,8 +128,8 @@ export const defaultStore = defineStore("default", () => {
   const fetchPageItems = async (where = {}) => recordsStore.fetchPageItems(where);
   const setItemStatus = async (payload: RecordStatus) => recordsStore.setItemStatus(payload);
   const setItemComment = async (id: number, payload: string) => recordsStore.setItemComment(id, payload);
-  const patchRecord = async (recordId: number, patch: PatchRecordPayload, editedBy?: string | null) =>
-    recordsStore.patchRecord(recordId, patch, editedBy);
+  const patchRecord = async (recordId: number, patch: PatchRecordPayload) =>
+    recordsStore.patchRecord(recordId, patch);
   const setRecordArrayField = async (recordId: number, field: RecordArrayField, values: string[]) =>
     recordsStore.setRecordArrayField(recordId, field, values);
   const linkRecordMappingOption = async (recordId: number, mappingQuestionId: number, mappingOptionId: number) =>
@@ -248,4 +248,3 @@ export const defaultStore = defineStore("default", () => {
     setEnrichmentMode,
   };
 });
-

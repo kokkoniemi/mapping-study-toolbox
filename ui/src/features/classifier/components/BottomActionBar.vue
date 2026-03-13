@@ -19,7 +19,7 @@
             class="action action--exclude"
             :class="[status === 'excluded' && 'action--selected']"
             :aria-pressed="status === 'excluded'"
-            @click="emit('exclude')"
+            @click="onDecisionClick('exclude', $event)"
           >
             Exclude
           </button>
@@ -27,7 +27,7 @@
             class="action action--uncertain"
             :class="[status === 'uncertain' && 'action--selected']"
             :aria-pressed="status === 'uncertain'"
-            @click="emit('uncertain')"
+            @click="onDecisionClick('uncertain', $event)"
           >
             Uncertain
           </button>
@@ -35,7 +35,7 @@
             class="action action--include"
             :class="[status === 'included' && 'action--selected']"
             :aria-pressed="status === 'included'"
-            @click="emit('include')"
+            @click="onDecisionClick('include', $event)"
           >
             Include
           </button>
@@ -65,4 +65,19 @@ const emit = defineEmits<{
   uncertain: [];
   include: [];
 }>();
+
+const onDecisionClick = (decision: "exclude" | "uncertain" | "include", event: MouseEvent) => {
+  switch (decision) {
+    case "exclude":
+      emit("exclude");
+      break;
+    case "uncertain":
+      emit("uncertain");
+      break;
+    case "include":
+      emit("include");
+      break;
+  }
+  (event.currentTarget as HTMLButtonElement | null)?.blur();
+};
 </script>

@@ -319,7 +319,8 @@ describe("defaultStore", () => {
 
     expect(apiMocks.recordsUpdate).toHaveBeenCalledWith(1, {
       status: "included",
-      editedBy: "mk",
+      resolvedBy: "mk",
+      resolvedByUserId: null,
     });
     expect(store.pageItems[0]?.status).toBe("included");
     expect(store.currentItemId).toBe(1);
@@ -365,7 +366,8 @@ describe("defaultStore", () => {
     expect(store.pageItems[0]?.comment).toBe("");
     expect(apiMocks.recordsUpdate).toHaveBeenCalledWith(1, {
       comment: null,
-      editedBy: "mk",
+      resolvedBy: "mk",
+      resolvedByUserId: null,
     });
   });
 
@@ -384,7 +386,8 @@ describe("defaultStore", () => {
 
     expect(apiMocks.recordsPatch).toHaveBeenCalledWith(42, {
       title: "After",
-      editedBy: "mk",
+      resolvedBy: "mk",
+      resolvedByUserId: null,
     });
     expect(store.pageItems[0]?.title).toBe("After");
     expect(store.getCellState(42, "title")).toMatchObject({
@@ -405,9 +408,13 @@ describe("defaultStore", () => {
 
     await store.setRecordArrayField(9, "databases", ["scopus", "wos"]);
 
-    expect(apiMocks.recordsPatch).toHaveBeenCalledWith(9, {
-      databases: ["scopus", "wos"],
-    });
+    expect(apiMocks.recordsPatch).toHaveBeenCalledWith(
+      9,
+      expect.objectContaining({
+        databases: ["scopus", "wos"],
+        resolvedByUserId: null,
+      }),
+    );
     expect(store.pageItems[0]?.databases).toEqual(["scopus", "wos"]);
   });
 

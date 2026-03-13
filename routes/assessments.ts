@@ -32,7 +32,8 @@ const LIST_RECORD_ATTRIBUTES = [
   "forumId",
   "doi",
   "citationCount",
-  "editedBy",
+  "resolvedBy",
+  "resolvedByUserId",
   "comment",
   "crossrefEnrichedAt",
   "crossrefLastError",
@@ -101,6 +102,24 @@ const parseUserId = (req: Request, body?: Record<string, unknown>) => {
   }
 
   throw badRequest("userId is required (query, body, or x-user-profile-id header)");
+};
+
+const parseOptionalUserId = (req: Request, body?: Record<string, unknown>) => {
+  const headerValue = req.headers?.["x-user-profile-id"];
+  const headerText = Array.isArray(headerValue) ? headerValue[0] : headerValue;
+  if (typeof headerText === "string" && headerText.trim().length > 0) {
+    return parseInteger(headerText.trim(), "x-user-profile-id", { min: 1 });
+  }
+
+  if (req.query?.userId !== undefined) {
+    return parseInteger(req.query.userId, "userId", { min: 1 });
+  }
+
+  if (body && body.userId !== undefined) {
+    return parseInteger(body.userId, "userId", { min: 1 });
+  }
+
+  return undefined;
 };
 
 const ensureUser = async (userId: number) => {
@@ -350,7 +369,8 @@ export const listRecords = async (req: Request, res: Response) => {
       ...plain,
       status: assessment?.assessment.status ?? null,
       comment: assessment?.assessment.comment ?? null,
-      editedBy: assessment ? user.name : null,
+      resolvedBy: assessment ? user.name : null,
+      resolvedByUserId: assessment ? user.id : null,
       MappingOptions: assessment?.mappingOptions ?? [],
     };
   }) as Array<Record<string, unknown>>;
@@ -493,26 +513,47 @@ export const compare = async (req: Request, res: Response) => {
     include: [
       {
         association: "AssessmentMappingOptions",
-        attributes: ["id"],
+        attributes: ["id", "title", "position", "color", "mappingQuestionId"],
         through: { attributes: [] },
       },
     ],
   });
+  const mappingQuestionRows = await db.MappingQuestion.findAll({
+    attributes: ["id", "title", "position"],
+    order: [["position", "ASC"], ["id", "ASC"]],
+  });
 
+  const mappingOptionQuestionIdByOptionId = new Map<number, number>();
   const assessments: ComparableAssessment[] = assessmentRows.map((row) => {
-    const serialized = serializeAssessment(row).assessment;
+    const serialized = serializeAssessment(row);
+    for (const option of serialized.mappingOptions) {
+      if (option.mappingQuestionId === null || option.mappingQuestionId === undefined) {
+        continue;
+      }
+      mappingOptionQuestionIdByOptionId.set(option.id, option.mappingQuestionId);
+    }
     return {
-      recordId: serialized.recordId,
-      userId: serialized.userId,
-      status: serialized.status,
-      comment: serialized.comment,
-      mappingOptionIds: serialized.mappingOptionIds,
+      recordId: serialized.assessment.recordId,
+      userId: serialized.assessment.userId,
+      status: serialized.assessment.status,
+      comment: serialized.assessment.comment,
+      mappingOptionIds: serialized.assessment.mappingOptionIds,
     };
   });
 
   return res.send({
     users,
-    pairwise: buildPairwiseAgreement(assessments, selectedIds),
+    pairwise: buildPairwiseAgreement(assessments, selectedIds, {
+      mappingQuestions: mappingQuestionRows.map((row) => {
+        const plain = toPlainObject<{ id: number; title: string | null; position: number | null }>(row);
+        return {
+          id: plain.id,
+          title: plain.title,
+          position: plain.position,
+        };
+      }),
+      mappingOptionQuestionIdByOptionId,
+    }),
     disagreements: buildDisagreements(assessments, selectedIds),
   });
 };
@@ -520,7 +561,7 @@ export const compare = async (req: Request, res: Response) => {
 export const resolve = async (req: Request, res: Response) => {
   const recordId = parseInteger(req.params.recordId, "recordId", { min: 1 });
   const body = parseObject(req.body, "body");
-  assertAllowedKeys(body, ["status", "comment", "mappingOptionIds"], "resolve body");
+  assertAllowedKeys(body, ["status", "comment", "mappingOptionIds", "userId"], "resolve body");
 
   const status = body.status === undefined
     ? undefined
@@ -537,6 +578,8 @@ export const resolve = async (req: Request, res: Response) => {
       min: 1,
       maxItems: 5000,
     });
+  const resolverUserId = parseOptionalUserId(req, body);
+  const resolverUser = resolverUserId === undefined ? null : await ensureUser(resolverUserId);
 
   if (status === undefined && comment === undefined && mappingOptionIds === undefined) {
     throw badRequest("resolve body must include at least one field");
@@ -553,6 +596,10 @@ export const resolve = async (req: Request, res: Response) => {
   }
   if (comment !== undefined) {
     updates.comment = comment;
+  }
+  if (resolverUser) {
+    updates.resolvedBy = resolverUser.name;
+    updates.resolvedByUserId = resolverUser.id;
   }
   if (Object.keys(updates).length > 0) {
     await record.update(updates);

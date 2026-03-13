@@ -6,6 +6,10 @@ import type {
   AssessmentSelectionResponse as SharedAssessmentSelectionResponse,
   AssessmentSnapshot as SharedAssessmentSnapshot,
   AssessmentSnapshotImportResponse as SharedAssessmentSnapshotImportResponse,
+  AssessmentSnapshotAutoImportSummary as SharedAssessmentSnapshotAutoImportSummary,
+  AssessmentSnapshotPendingResponse as SharedAssessmentSnapshotPendingResponse,
+  AssessmentSnapshotSavePayload as SharedAssessmentSnapshotSavePayload,
+  AssessmentSnapshotSaveResponse as SharedAssessmentSnapshotSaveResponse,
   CreateEnrichmentJobPayload,
   CreateUserProfilePayload as SharedCreateUserProfilePayload,
   UpdateUserProfilePayload as SharedUpdateUserProfilePayload,
@@ -359,6 +363,8 @@ export interface RecordItem {
   updatedAt: string;
   status: RecordStatus;
   comment: string | null;
+  resolvedBy?: string | null;
+  resolvedByUserId?: number | null;
   Forum?: Forum | null;
   MappingOptions: MappingOption[];
   [key: string]: unknown;
@@ -390,6 +396,10 @@ export type AssessmentCompareResponse = SharedAssessmentCompareResponse;
 export type AssessmentResolvePayload = SharedAssessmentResolvePayload;
 export type AssessmentSnapshot = SharedAssessmentSnapshot;
 export type AssessmentSnapshotImportResponse = SharedAssessmentSnapshotImportResponse;
+export type AssessmentSnapshotAutoImportSummary = SharedAssessmentSnapshotAutoImportSummary;
+export type AssessmentSnapshotPendingResponse = SharedAssessmentSnapshotPendingResponse;
+export type AssessmentSnapshotSavePayload = SharedAssessmentSnapshotSavePayload;
+export type AssessmentSnapshotSaveResponse = SharedAssessmentSnapshotSaveResponse;
 
 type UpdateRecordPayload = Record<string, unknown>;
 type SaveMappingOptionPayload = {
@@ -527,4 +537,10 @@ export const snapshots = {
     }),
   importSnapshot: (snapshot: AssessmentSnapshot, params?: QueryParams) =>
     http.post<AssessmentSnapshotImportResponse, AssessmentSnapshot>("snapshots/import", snapshot, { params }),
+  pendingUploads: (params?: QueryParams) =>
+    http.get<AssessmentSnapshotPendingResponse>("snapshots/pending", { params }),
+  uploadSnapshots: (params?: QueryParams) =>
+    http.post<AssessmentSnapshotAutoImportSummary>("snapshots/upload", undefined, { params }),
+  saveUser: (data: AssessmentSnapshotSavePayload, params?: QueryParams) =>
+    http.post<AssessmentSnapshotSaveResponse, AssessmentSnapshotSavePayload>("snapshots/save", data, { params }),
 };

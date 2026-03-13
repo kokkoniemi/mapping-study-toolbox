@@ -110,7 +110,8 @@ export type PatchRecordPayload = Partial<{
   databases: string[];
   alternateUrls: string[];
   openAlexTopicItems: OpenAlexTopicPatchItem[] | null;
-  editedBy: string;
+  resolvedBy: string | null;
+  resolvedByUserId: number | null;
 }>;
 
 export type CreateEnrichmentJobPayload = {
@@ -325,12 +326,58 @@ export type AssessmentSnapshotImportResponse = {
   userId: number;
 };
 
+export type AssessmentSnapshotSavePayload = {
+  userId: number;
+};
+
+export type AssessmentSnapshotAutoImportItem = {
+  file: string;
+  userId: number;
+  userName?: string;
+  total: number;
+  created: number;
+  updated: number;
+  skipped: number;
+};
+
+export type AssessmentSnapshotAutoImportSummary = {
+  scannedFiles: number;
+  importedSnapshots: number;
+  total: number;
+  created: number;
+  updated: number;
+  skipped: number;
+  errors: string[];
+  imports: AssessmentSnapshotAutoImportItem[];
+};
+
+export type AssessmentSnapshotSaveResponse = {
+  userId: number;
+  path: string;
+  changed: boolean;
+  savedAt: string;
+  importSync?: AssessmentSnapshotAutoImportSummary;
+};
+
+export type AssessmentSnapshotPendingResponse = {
+  scannedFiles: number;
+  pendingSnapshots: number;
+  errors: string[];
+  items: AssessmentSnapshotAutoImportItem[];
+};
+
 export type PairwiseAgreement = {
   userIdA: number;
   userIdB: number;
+  metricType: "status" | "mapping_question" | "mapping_all" | "status_mapping_all";
+  metricKey: string;
+  metricLabel: string;
+  mappingQuestionId: number | null;
   sharedCount: number;
   agreementPercent: number;
   kappa: number;
+  kappaCi95Lower: number | null;
+  kappaCi95Upper: number | null;
 };
 
 export type AssessmentDisagreementItem = {
@@ -343,7 +390,6 @@ export type AssessmentDisagreementItem = {
   }>;
   statusDisagreement: boolean;
   mappingDisagreement: boolean;
-  commentDisagreement: boolean;
 };
 
 export type AssessmentCompareResponse = {

@@ -237,8 +237,8 @@ UI dev server runs on http://localhost:8080 and calls backend API at http://loca
 - Reviewer actions (`include/exclude`, mapping keyword selections, comments) are written to per-user assessments.
 - Data tab has a `Compare` tools panel for:
   - pairwise agreement percentage
-  - pairwise Cohen's Kappa
-  - disagreement listing (status, mapping selections, comments)
+  - pairwise Cohen's Kappa (+ 95% CI)
+  - disagreement listing (status + mapping; comments shown side-by-side for context)
   - manual resolution into canonical record fields
 
 #### Snapshot exchange via Git (fixed filename per user)

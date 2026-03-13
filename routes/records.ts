@@ -51,7 +51,8 @@ const LIST_RECORD_ATTRIBUTES = [
   "forumId",
   "doi",
   "citationCount",
-  "editedBy",
+  "resolvedBy",
+  "resolvedByUserId",
   "comment",
   "crossrefEnrichedAt",
   "crossrefLastError",
@@ -841,19 +842,27 @@ export const get = async (req: Request, res: Response) => {
   return res.send(record);
 };
 
-// only enable updating the status or comment of the record
+// only enable updating review fields of the record
 export const update = async (req: Request, res: Response) => {
   const id = parseInteger(req.params.id, "id", { min: 1 });
   const body = parseObject(req.body, "body");
 
-  assertAllowedKeys(body, ["status", "editedBy", "comment", "MappingOptions"], "record update body");
+  assertAllowedKeys(
+    body,
+    ["status", "resolvedBy", "resolvedByUserId", "comment", "MappingOptions"],
+    "record update body",
+  );
 
   const status = parseStatusBody(body.status);
-  const editedBy = parseString(body.editedBy, "editedBy", {
-    optional: true,
+  const resolvedBy = parseOptionalNullableString(body.resolvedBy, "resolvedBy", {
     trim: true,
     maxLength: 120,
   });
+  const resolvedByUserId = body.resolvedByUserId === undefined
+    ? undefined
+    : body.resolvedByUserId === null
+      ? null
+      : parseInteger(body.resolvedByUserId, "resolvedByUserId", { min: 1 });
   const comment = parseOptionalNullableString(body.comment, "comment", {
     trim: false,
     maxLength: 10000,
@@ -868,7 +877,8 @@ export const update = async (req: Request, res: Response) => {
     ...(status !== undefined ? { status } : {}),
     ...(comment !== undefined ? { comment } : {}),
     ...(body.MappingOptions !== undefined ? { MappingOptions: body.MappingOptions } : {}),
-    ...(editedBy !== undefined ? { editedBy } : {}),
+    ...(resolvedBy !== undefined ? { resolvedBy } : {}),
+    ...(resolvedByUserId !== undefined ? { resolvedByUserId } : {}),
   });
 
   return res.send(record);
@@ -891,7 +901,8 @@ export const patch = async (req: Request, res: Response) => {
       "databases",
       "alternateUrls",
       "openAlexTopicItems",
-      "editedBy",
+      "resolvedBy",
+      "resolvedByUserId",
     ],
     "record patch body",
   );
@@ -970,12 +981,25 @@ export const patch = async (req: Request, res: Response) => {
     updates.openAlexTopicItems = parseOpenAlexTopicItems(body.openAlexTopicItems);
   }
 
-  if ("editedBy" in body) {
-    updates.editedBy = parseString(body.editedBy, "editedBy", {
+  if ("resolvedBy" in body) {
+    const value = parseOptionalNullableString(body.resolvedBy, "resolvedBy", {
       trim: true,
-      allowEmpty: false,
       maxLength: 120,
     });
+    if (value === undefined) {
+      throw badRequest("resolvedBy is required");
+    }
+    updates.resolvedBy = value;
+  }
+
+  if ("resolvedByUserId" in body) {
+    if (body.resolvedByUserId === null) {
+      updates.resolvedByUserId = null;
+    } else {
+      updates.resolvedByUserId = parseInteger(body.resolvedByUserId, "resolvedByUserId", {
+        min: 1,
+      });
+    }
   }
 
   if (Object.keys(updates).length === 0) {

@@ -1,8 +1,15 @@
+import fs from "node:fs";
+import path from "node:path";
 import type { Request, Response } from "express";
 
 import { badRequest, notFound } from "../lib/http";
 import db from "../models";
-import type { RecordStatus } from "../shared/contracts";
+import type {
+  AssessmentSnapshotAutoImportItem,
+  AssessmentSnapshotAutoImportSummary,
+  AssessmentSnapshotImportResponse,
+  RecordStatus,
+} from "../shared/contracts";
 import { RECORD_STATUS_VALUES } from "../shared/contracts";
 import {
   assertAllowedKeys,
@@ -15,6 +22,7 @@ import {
 
 const VALID_STATUSES: readonly RecordStatus[] = RECORD_STATUS_VALUES;
 const VALID_STATUSES_TEXT = ["null", "uncertain", "excluded", "included"] as const;
+const SNAPSHOTS_DIR = path.resolve(process.cwd(), "snapshots");
 
 const toPlainObject = <T extends Record<string, unknown>>(value: unknown): T => {
   if (value && typeof value === "object") {
@@ -78,10 +86,39 @@ const parseUserId = (req: Request) => {
   throw badRequest("userId is required (query or x-user-profile-id header)");
 };
 
-export const exportUserSnapshot = async (req: Request, res: Response) => {
-  const userId = parseUserId(req);
-  const user = await ensureUser(userId);
+type SnapshotPayload = {
+  version: 1;
+  exportedAt: string;
+  user: {
+    id: number;
+    name: string;
+  };
+  assessments: Array<{
+    recordId: number;
+    userId: number;
+    status: RecordStatus;
+    comment: string | null;
+    mappingOptionIds: number[];
+    updatedAt: string;
+  }>;
+};
 
+type ParsedSnapshotAssessment = {
+  recordId: number;
+  status: RecordStatus;
+  comment: string | null;
+  mappingOptionIds: number[];
+  updatedAt: string | null;
+};
+
+type ParsedSnapshotImportPayload = {
+  userId: number;
+  userName: string;
+  assessments: ParsedSnapshotAssessment[];
+};
+
+const buildSnapshotPayload = async (userId: number): Promise<SnapshotPayload> => {
+  const user = await ensureUser(userId);
   const assessments = await db.RecordAssessment.findAll({
     where: { userId },
     include: [
@@ -94,7 +131,7 @@ export const exportUserSnapshot = async (req: Request, res: Response) => {
     order: [["recordId", "ASC"]],
   });
 
-  const payload = {
+  return {
     version: 1 as const,
     exportedAt: new Date().toISOString(),
     user: {
@@ -103,79 +140,157 @@ export const exportUserSnapshot = async (req: Request, res: Response) => {
     },
     assessments: assessments.map((assessment) => serializeAssessment(assessment)),
   };
-
-  return res.send(payload);
 };
 
-export const importUserSnapshot = async (req: Request, res: Response) => {
-  const body = parseObject(req.body, "body");
-  assertAllowedKeys(body, ["version", "exportedAt", "user", "assessments"], "snapshot body");
+const stableSnapshot = (payload: SnapshotPayload) => ({
+  version: 1 as const,
+  user: {
+    id: payload.user.id,
+    name: payload.user.name,
+  },
+  assessments: payload.assessments
+    .map((item) => ({
+      recordId: item.recordId,
+      userId: item.userId,
+      status: item.status ?? null,
+      comment: item.comment ?? null,
+      mappingOptionIds: [...new Set(item.mappingOptionIds)].sort((left, right) => left - right),
+      updatedAt: item.updatedAt,
+    }))
+    .sort((left, right) => left.recordId - right.recordId),
+});
 
-  const version = parseInteger(body.version, "version", { min: 1, max: 1 });
+const parseSnapshotImportPayload = (value: unknown, contextLabel: string): ParsedSnapshotImportPayload => {
+  const body = parseObject(value, contextLabel);
+  assertAllowedKeys(body, ["version", "exportedAt", "user", "assessments"], contextLabel);
+
+  const version = parseInteger(body.version, `${contextLabel}.version`, { min: 1, max: 1 });
   if (version !== 1) {
     throw badRequest("Only snapshot version 1 is supported");
   }
 
-  const userObject = parseObject(body.user, "user");
-  assertAllowedKeys(userObject, ["id", "name"], "snapshot user");
+  const userObject = parseObject(body.user, `${contextLabel}.user`);
+  assertAllowedKeys(userObject, ["id", "name"], `${contextLabel}.user`);
 
-  const userId = parseInteger(userObject.id, "user.id", { min: 1 });
-  const userName = parseString(userObject.name, "user.name", { trim: true, allowEmpty: false, maxLength: 120 });
+  const userId = parseInteger(userObject.id, `${contextLabel}.user.id`, { min: 1 });
+  const userName = parseString(userObject.name, `${contextLabel}.user.name`, {
+    trim: true,
+    allowEmpty: false,
+    maxLength: 120,
+  });
   if (userName === undefined) {
     throw badRequest("user.name is required");
   }
 
-  let user = await db.UserProfile.findByPk(userId);
-  if (!user) {
-    user = await db.UserProfile.findOne({ where: { name: userName } });
-  }
-  if (!user) {
-    user = await db.UserProfile.create({ name: userName, isActive: true });
-  } else if (user.name !== userName) {
-    await user.update({ name: userName });
-  }
-
   if (!Array.isArray(body.assessments)) {
-    throw badRequest("assessments must be an array");
+    throw badRequest(`${contextLabel}.assessments must be an array`);
   }
 
-  const normalized = body.assessments.map((item, index) => {
-    const row = parseObject(item, `assessments[${index}]`);
-    assertAllowedKeys(row, ["recordId", "status", "comment", "mappingOptionIds", "updatedAt", "userId"], `assessments[${index}]`);
+  const assessments = body.assessments.map((item, index) => {
+    const rowLabel = `${contextLabel}.assessments[${index}]`;
+    const row = parseObject(item, rowLabel);
+    assertAllowedKeys(row, ["recordId", "status", "comment", "mappingOptionIds", "updatedAt", "userId"], rowLabel);
 
-    const recordId = parseInteger(row.recordId, `assessments[${index}].recordId`, { min: 1 });
+    const recordId = parseInteger(row.recordId, `${rowLabel}.recordId`, { min: 1 });
     const status = parseStatus(row.status);
-    const comment = parseOptionalNullableString(row.comment, `assessments[${index}].comment`, {
+    const comment = parseOptionalNullableString(row.comment, `${rowLabel}.comment`, {
       trim: false,
       maxLength: 10000,
     }) ?? null;
+    const updatedAt = parseString(row.updatedAt, `${rowLabel}.updatedAt`, {
+      optional: true,
+      trim: true,
+      allowEmpty: false,
+      maxLength: 80,
+    }) ?? null;
     const mappingOptionIds = row.mappingOptionIds === undefined
       ? []
-      : parseIntegerArray(row.mappingOptionIds, `assessments[${index}].mappingOptionIds`, { min: 1, maxItems: 5000 }) ?? [];
+      : parseIntegerArray(row.mappingOptionIds, `${rowLabel}.mappingOptionIds`, { min: 1, maxItems: 5000 }) ?? [];
 
     return {
       recordId,
       status,
       comment,
       mappingOptionIds: [...new Set(mappingOptionIds)].sort((left, right) => left - right),
+      updatedAt,
     };
   });
 
-  const recordIds = [...new Set(normalized.map((item) => item.recordId))];
+  return {
+    userId,
+    userName,
+    assessments,
+  };
+};
+
+const parseTimestamp = (value: string | null) => {
+  if (!value) {
+    return null;
+  }
+  const parsed = Date.parse(value);
+  if (!Number.isFinite(parsed)) {
+    return null;
+  }
+  return parsed;
+};
+
+type SnapshotImportResult = AssessmentSnapshotImportResponse & {
+  userName: string;
+};
+
+const importSnapshotPayload = async (
+  payload: ParsedSnapshotImportPayload,
+  options?: { dryRun?: boolean },
+): Promise<SnapshotImportResult> => {
+  const dryRun = Boolean(options?.dryRun);
+  let user = await db.UserProfile.findByPk(payload.userId);
+  if (!user) {
+    user = await db.UserProfile.findOne({ where: { name: payload.userName } });
+  }
+  if (!user && !dryRun) {
+    user = await db.UserProfile.create({ name: payload.userName, isActive: true });
+  } else if (user && user.name !== payload.userName && !dryRun) {
+    await user.update({ name: payload.userName });
+  }
+
+  const recordIds = [...new Set(payload.assessments.map((item) => item.recordId))];
   const existingRecords = await db.Record.findAll({ where: { id: recordIds }, attributes: ["id"] });
   const existingRecordIds = new Set(existingRecords.map((record) => record.id));
 
-  const allMappingOptionIds = [...new Set(normalized.flatMap((item) => item.mappingOptionIds))];
+  const allMappingOptionIds = [...new Set(payload.assessments.flatMap((item) => item.mappingOptionIds))];
   const mappingOptions = allMappingOptionIds.length === 0
     ? []
     : await db.MappingOption.findAll({ where: { id: allMappingOptionIds }, attributes: ["id"] });
   const existingMappingOptionIds = new Set(mappingOptions.map((option) => option.id));
 
+  const currentByRecord = new Map<number, ReturnType<typeof serializeAssessment>>();
+  if (user) {
+    const existingAssessments = await db.RecordAssessment.findAll({
+      where: {
+        userId: user.id,
+        recordId: recordIds,
+      },
+      include: [
+        {
+          association: "AssessmentMappingOptions",
+          attributes: ["id"],
+          through: { attributes: [] },
+        },
+      ],
+    });
+    for (const current of existingAssessments) {
+      const serialized = serializeAssessment(current);
+      currentByRecord.set(serialized.recordId, serialized);
+    }
+  }
+
   let created = 0;
   let updated = 0;
   let skipped = 0;
+  const resolvedUserId = user?.id ?? payload.userId;
+  const resolvedUserName = user?.name ?? payload.userName;
 
-  for (const item of normalized) {
+  for (const item of payload.assessments) {
     if (!existingRecordIds.has(item.recordId)) {
       skipped += 1;
       continue;
@@ -185,75 +300,219 @@ export const importUserSnapshot = async (req: Request, res: Response) => {
       continue;
     }
 
-    const [assessment, wasCreated] = await db.RecordAssessment.findOrCreate({
-      where: { recordId: item.recordId, userId: user.id },
-      defaults: {
-        recordId: item.recordId,
-        userId: user.id,
-        status: item.status,
-        comment: item.comment,
-      },
-    });
+    const existing = currentByRecord.get(item.recordId);
+    if (!existing) {
+      if (dryRun) {
+        created += 1;
+        continue;
+      }
 
-    const current = await db.RecordAssessment.findByPk(assessment.id, {
-      include: [
-        {
-          association: "AssessmentMappingOptions",
-          attributes: ["id"],
-          through: { attributes: [] },
+      const [assessment, wasCreated] = await db.RecordAssessment.findOrCreate({
+        where: { recordId: item.recordId, userId: resolvedUserId },
+        defaults: {
+          recordId: item.recordId,
+          userId: resolvedUserId,
+          status: item.status,
+          comment: item.comment,
         },
-      ],
-    });
+      });
 
-    if (!current) {
+      if (wasCreated) {
+        if (item.mappingOptionIds.length > 0) {
+          await db.RecordAssessmentOption.bulkCreate(
+            item.mappingOptionIds.map((mappingOptionId) => ({
+              recordAssessmentId: assessment.id,
+              mappingOptionId,
+            })),
+          );
+        }
+        created += 1;
+      } else {
+        skipped += 1;
+      }
+      continue;
+    }
+
+    const sameStatus = existing.status === item.status;
+    const sameComment = (existing.comment ?? "") === (item.comment ?? "");
+    const sameMappings = existing.mappingOptionIds.length === item.mappingOptionIds.length
+      && existing.mappingOptionIds.every((id, index) => id === item.mappingOptionIds[index]);
+    if (sameStatus && sameComment && sameMappings) {
       skipped += 1;
       continue;
     }
 
-    const serialized = serializeAssessment(current);
-    const sameStatus = serialized.status === item.status;
-    const sameComment = (serialized.comment ?? "") === (item.comment ?? "");
-    const sameMappings = serialized.mappingOptionIds.length === item.mappingOptionIds.length
-      && serialized.mappingOptionIds.every((id, index) => id === item.mappingOptionIds[index]);
-
-    if (wasCreated) {
-      if (item.mappingOptionIds.length > 0) {
-        await db.RecordAssessmentOption.bulkCreate(
-          item.mappingOptionIds.map((mappingOptionId) => ({
-            recordAssessmentId: assessment.id,
-            mappingOptionId,
-          })),
-        );
-      }
-      created += 1;
+    const incomingUpdatedAt = parseTimestamp(item.updatedAt);
+    const currentUpdatedAt = parseTimestamp(existing.updatedAt);
+    const incomingIsNewer = incomingUpdatedAt !== null && (currentUpdatedAt === null || incomingUpdatedAt > currentUpdatedAt);
+    if (!incomingIsNewer) {
+      skipped += 1;
       continue;
-    } else if (!(sameStatus && sameComment && sameMappings)) {
-      await assessment.update({
-        status: item.status,
-        comment: item.comment,
-      });
-      await db.RecordAssessmentOption.destroy({
-        where: { recordAssessmentId: assessment.id },
-      });
-      if (item.mappingOptionIds.length > 0) {
-        await db.RecordAssessmentOption.bulkCreate(
-          item.mappingOptionIds.map((mappingOptionId) => ({
-            recordAssessmentId: assessment.id,
-            mappingOptionId,
-          })),
-        );
-      }
+    }
+
+    if (dryRun) {
       updated += 1;
-    } else {
-      skipped += 1;
+      continue;
     }
+
+    const assessment = await db.RecordAssessment.findOne({
+      where: { recordId: item.recordId, userId: resolvedUserId },
+    });
+    if (!assessment) {
+      skipped += 1;
+      continue;
+    }
+    await assessment.update({
+      status: item.status,
+      comment: item.comment,
+    });
+    await db.RecordAssessmentOption.destroy({
+      where: { recordAssessmentId: assessment.id },
+    });
+    if (item.mappingOptionIds.length > 0) {
+      await db.RecordAssessmentOption.bulkCreate(
+        item.mappingOptionIds.map((mappingOptionId) => ({
+          recordAssessmentId: assessment.id,
+          mappingOptionId,
+        })),
+      );
+    }
+    updated += 1;
   }
 
-  return res.send({
-    total: normalized.length,
+  return {
+    total: payload.assessments.length,
     created,
     updated,
     skipped,
-    userId: user.id,
+    userId: resolvedUserId,
+    userName: resolvedUserName,
+  };
+};
+
+const listSnapshotFiles = () => {
+  try {
+    return fs.readdirSync(SNAPSHOTS_DIR, { withFileTypes: true })
+      .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith(".json"))
+      .map((entry) => entry.name)
+      .sort((left, right) => left.localeCompare(right));
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === "ENOENT") {
+      return [];
+    }
+    throw error;
+  }
+};
+
+const importSnapshotsFromFiles = async (options?: {
+  excludeUserId?: number;
+  dryRun?: boolean;
+}): Promise<AssessmentSnapshotAutoImportSummary> => {
+  const files = listSnapshotFiles();
+  const imports: AssessmentSnapshotAutoImportItem[] = [];
+  const errors: string[] = [];
+  let total = 0;
+  let created = 0;
+  let updated = 0;
+  let skipped = 0;
+
+  for (const file of files) {
+    const fullPath = path.join(SNAPSHOTS_DIR, file);
+    try {
+      const raw = fs.readFileSync(fullPath, "utf8");
+      const parsedBody = JSON.parse(raw) as unknown;
+      const parsed = parseSnapshotImportPayload(parsedBody, `snapshot file ${file}`);
+      if (options?.excludeUserId !== undefined && parsed.userId === options.excludeUserId) {
+        continue;
+      }
+      const imported = await importSnapshotPayload(parsed, { dryRun: options?.dryRun });
+      imports.push({
+        file: path.relative(process.cwd(), fullPath),
+        userId: imported.userId,
+        userName: imported.userName,
+        total: imported.total,
+        created: imported.created,
+        updated: imported.updated,
+        skipped: imported.skipped,
+      });
+      total += imported.total;
+      created += imported.created;
+      updated += imported.updated;
+      skipped += imported.skipped;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      errors.push(`${file}: ${message}`);
+    }
+  }
+
+  return {
+    scannedFiles: files.length,
+    importedSnapshots: imports.length,
+    total,
+    created,
+    updated,
+    skipped,
+    errors,
+    imports,
+  };
+};
+
+export const exportUserSnapshot = async (req: Request, res: Response) => {
+  const userId = parseUserId(req);
+  return res.send(await buildSnapshotPayload(userId));
+};
+
+export const saveUserSnapshot = async (req: Request, res: Response) => {
+  const body = parseObject(req.body, "body");
+  assertAllowedKeys(body, ["userId"], "snapshot save body");
+  const userId = parseInteger(body.userId, "userId", { min: 1 });
+
+  const payload = await buildSnapshotPayload(userId);
+  const normalized = stableSnapshot(payload);
+  const output = `${JSON.stringify(normalized, null, 2)}\n`;
+  const outputPath = path.join(SNAPSHOTS_DIR, `user-${payload.user.id}.json`);
+
+  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+
+  let changed = true;
+  if (fs.existsSync(outputPath)) {
+    const current = fs.readFileSync(outputPath, "utf8");
+    if (current === output) {
+      changed = false;
+    }
+  }
+
+  if (changed) {
+    fs.writeFileSync(outputPath, output, "utf8");
+  }
+
+  return res.send({
+    userId: payload.user.id,
+    path: path.relative(process.cwd(), outputPath),
+    changed,
+    savedAt: new Date().toISOString(),
   });
+};
+
+export const pendingSnapshotUploads = async (_req: Request, res: Response) => {
+  const summary = await importSnapshotsFromFiles({ dryRun: true });
+  const items = summary.imports.filter((item) => item.created > 0 || item.updated > 0);
+  return res.send({
+    scannedFiles: summary.scannedFiles,
+    pendingSnapshots: items.length,
+    errors: summary.errors,
+    items,
+  });
+};
+
+export const uploadSnapshotFiles = async (_req: Request, res: Response) => {
+  return res.send(await importSnapshotsFromFiles());
+};
+
+export const importUserSnapshot = async (req: Request, res: Response) => {
+  const parsed = parseSnapshotImportPayload(req.body, "snapshot body");
+  const imported = await importSnapshotPayload(parsed);
+  const { userName: _userName, ...response } = imported;
+  return res.send(response);
 };

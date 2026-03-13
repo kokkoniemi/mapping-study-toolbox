@@ -161,6 +161,7 @@
       <ComparePanel
         v-else
         :profiles="activeProfiles"
+        :mappingQuestions="mappingQuestions"
         :compareUserIds="compareUserIds"
         :compareLoading="compareLoading"
         :compareError="compareError"
@@ -1983,7 +1984,7 @@ const resolveComparedRecord = async (payload: {
       status: payload.status,
       comment: payload.comment,
       mappingOptionIds: payload.mappingOptionIds,
-    });
+    }, userProfilesStore.activeProfileId ? { userId: userProfilesStore.activeProfileId } : undefined);
     await runAssessmentCompare();
     await Promise.all([store.fetchPageItems(), store.loadInitialData()]);
   } catch (error) {

@@ -3,7 +3,7 @@
     <div class="literature-list">
       <div class="literature-list__header">
         <h4>References ({{ referenceItems.length }})</h4>
-        <button type="button" class="literature-list__toggle" @click="emit('toggle-references')">
+        <button type="button" class="literature-list__toggle" @click="onToggleClick('toggle-references', $event)">
           {{ showReferences ? "Hide" : "Show" }}
         </button>
       </div>
@@ -29,7 +29,7 @@
     <div class="literature-list">
       <div class="literature-list__header">
         <h4>Citations ({{ citationItems.length }})</h4>
-        <button type="button" class="literature-list__toggle" @click="emit('toggle-citations')">
+        <button type="button" class="literature-list__toggle" @click="onToggleClick('toggle-citations', $event)">
           {{ showCitations ? "Hide" : "Show" }}
         </button>
       </div>
@@ -55,7 +55,7 @@
     <div class="literature-list">
       <div class="literature-list__header">
         <h4>Topics ({{ topicItems.length }})</h4>
-        <button type="button" class="literature-list__toggle" @click="emit('toggle-topics')">
+        <button type="button" class="literature-list__toggle" @click="onToggleClick('toggle-topics', $event)">
           {{ showTopics ? "Hide" : "Show" }}
         </button>
       </div>
@@ -106,5 +106,22 @@ const emit = defineEmits<{
   "toggle-citations": [];
   "toggle-topics": [];
 }>();
-</script>
 
+const onToggleClick = (
+  eventName: "toggle-references" | "toggle-citations" | "toggle-topics",
+  event: MouseEvent,
+) => {
+  switch (eventName) {
+    case "toggle-references":
+      emit("toggle-references");
+      break;
+    case "toggle-citations":
+      emit("toggle-citations");
+      break;
+    case "toggle-topics":
+      emit("toggle-topics");
+      break;
+  }
+  (event.currentTarget as HTMLButtonElement | null)?.blur();
+};
+</script>

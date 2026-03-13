@@ -230,6 +230,11 @@ const onSelectItem = (item: RecordItem) => {
       opacity: 1;
       border-left: none;
 
+      &:hover {
+        background: #3f6acc;
+        color: #fff;
+      }
+
       b {
         color: inherit;
       }
@@ -262,6 +267,10 @@ const onSelectItem = (item: RecordItem) => {
   user-select: none;
   font-size: 13px;
   font-weight: 600;
+
+  &--push-right {
+    margin-left: auto;
+  }
 
   &--disabled {
     opacity: 0.45;

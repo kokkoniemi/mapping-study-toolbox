@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { defineAsyncComponent, onMounted, ref } from "vue";
+import { computed, defineAsyncComponent, onMounted, ref, watch } from "vue";
 import { storeToRefs } from "pinia";
 
 import { useUiStore } from "../../stores/ui";
+import { useSnapshotsStore } from "../../stores/snapshots";
+import { useRecordsStore } from "../../stores/records";
 import { useUserProfilesStore } from "../../stores/userProfiles";
 import type { TabMode } from "../../stores/types";
 import TopTabsBar from "./TopTabsBar.vue";
@@ -12,16 +14,51 @@ import ClassifierRoot from "../classifier/ClassifierRoot.vue";
 const DataToolsRoot = defineAsyncComponent(() => import("../data-tools/DataToolsRoot.vue"));
 
 const uiStore = useUiStore();
+const snapshotsStore = useSnapshotsStore();
+const recordsStore = useRecordsStore();
 const userProfilesStore = useUserProfilesStore();
 const { tab } = storeToRefs(uiStore);
-const { activeProfileId, activeProfiles, loading: profilesLoading, error: profilesError, activeProfile, profiles } =
+const { activeProfileId, activeProfiles, loading: profilesLoading, error: profilesError, profiles } =
   storeToRefs(userProfilesStore);
+const {
+  activeSaving: snapshotSaving,
+  isActiveSynced: snapshotSynced,
+  pendingUploadCount: pendingUploadCount,
+  pendingErrors: pendingUploadErrors,
+  uploadFromFilesBusy: uploadFromFilesBusy,
+} = storeToRefs(snapshotsStore);
 const showProfileManager = ref(false);
 const newProfileName = ref("");
+const snapshotDisabled = computed(
+  () => profilesLoading.value || !activeProfileId.value || snapshotSaving.value || snapshotSynced.value,
+);
+const snapshotButtonLabel = computed(() => {
+  if (!activeProfileId.value) {
+    return "Sync snapshot";
+  }
+  return snapshotSynced.value ? "Snapshot synced" : "Sync snapshot";
+});
+const uploadSnapshotsDisabled = computed(() => profilesLoading.value || uploadFromFilesBusy.value || pendingUploadCount.value <= 0);
+const uploadSnapshotsLabel = computed(() =>
+  pendingUploadCount.value > 0 ? `Upload to database (${pendingUploadCount.value})` : "Upload to database");
 
 onMounted(async () => {
   await userProfilesStore.fetchProfiles();
+  await snapshotsStore.refreshPendingUploads();
 });
+
+watch(
+  activeProfileId,
+  async (value, previousValue) => {
+    const shouldReloadRecords = previousValue !== undefined && value !== previousValue;
+    snapshotsStore.setActiveUser(value);
+    await Promise.all([
+      snapshotsStore.refreshPendingUploads(),
+      ...(shouldReloadRecords ? [recordsStore.fetchPageItems(), recordsStore.loadInitialData()] : []),
+    ]);
+  },
+  { immediate: true },
+);
 
 const updateTab = (value: TabMode) => {
   uiStore.updateTab(value);
@@ -63,6 +100,17 @@ const toggleProfileActive = async (id: number, isActive: boolean) => {
     console.error(error);
   }
 };
+
+const saveSnapshot = async () => {
+  if (!activeProfileId.value) {
+    return;
+  }
+  await snapshotsStore.saveNow(activeProfileId.value);
+};
+
+const uploadSnapshots = async () => {
+  await snapshotsStore.uploadSnapshotsFromFiles();
+};
 </script>
 
 <template>
@@ -72,9 +120,13 @@ const toggleProfileActive = async (id: number, isActive: boolean) => {
       :profiles="activeProfiles"
       :activeProfileId="activeProfileId"
       :loading="profilesLoading"
+      :snapshotSaving="snapshotSaving"
+      :snapshotDisabled="snapshotDisabled"
+      :snapshotLabel="snapshotButtonLabel"
       @update-tab="updateTab"
       @profile-change="setActiveProfile"
       @manage-profiles="showProfileManager = !showProfileManager"
+      @save-snapshot="saveSnapshot"
     />
 
     <section v-if="showProfileManager" class="profile-manager">
@@ -97,19 +149,33 @@ const toggleProfileActive = async (id: number, isActive: boolean) => {
         <input v-model="newProfileName" type="text" placeholder="New profile name" />
         <button type="button" @click="createProfile">Create</button>
       </div>
+      <div class="profile-manager__upload">
+        <h4>Upload Snapshot Files</h4>
+        <p>
+          Imports newer assessment data from `snapshots/*.json` into the local database for each user.
+        </p>
+        <button
+          type="button"
+          class="profile-manager__upload-button"
+          :disabled="uploadSnapshotsDisabled"
+          @click="uploadSnapshots"
+        >
+          <span v-if="uploadFromFilesBusy" class="profile-manager__spinner" aria-hidden="true" />
+          {{ uploadSnapshotsLabel }}
+        </button>
+        <p v-if="pendingUploadErrors.length > 0" class="profile-manager__error">
+          {{ pendingUploadErrors.join(" | ") }}
+        </p>
+      </div>
     </section>
 
-    <div v-if="activeProfile && tab !== 'data'" class="main-container">
+    <div v-if="tab !== 'data'" class="main-container">
       <SidebarRoot />
       <ClassifierRoot />
     </div>
 
-    <div v-else-if="activeProfile" class="data-container">
+    <div v-else class="data-container">
       <DataToolsRoot />
-    </div>
-
-    <div v-else class="message">
-      Select or create an active profile to start reviewing records.
     </div>
   </div>
 </template>
@@ -165,11 +231,6 @@ const toggleProfileActive = async (id: number, isActive: boolean) => {
   margin: 0 0 clamp(6px, 1vh, 10px);
   font-size: 20px;
   min-width: 0;
-}
-
-.message {
-  padding: 100px 10px;
-  text-align: center;
 }
 
 .app-tabs {
@@ -270,8 +331,46 @@ body {
   flex: 1;
 }
 
+.profile-manager__upload {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--ui-border-subtle);
+}
+
+.profile-manager__upload h4 {
+  margin: 0 0 4px;
+  font-size: 14px;
+}
+
+.profile-manager__upload p {
+  margin: 0 0 8px;
+  color: var(--ui-text-secondary);
+  font-size: 12px;
+}
+
+.profile-manager__upload-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.profile-manager__spinner {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid rgba(0, 0, 0, 0.22);
+  border-top-color: rgba(0, 0, 0, 0.75);
+  animation: profile-manager-spin 0.75s linear infinite;
+}
+
 .profile-manager__error {
   color: #9c1d1d;
+}
+
+@keyframes profile-manager-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @media (max-width: 768px) {

@@ -11,6 +11,7 @@ import {
 import { getApiErrorMessage } from "../helpers/errors";
 import { useFiltersStore } from "./filters";
 import { useMappingStore } from "./mapping";
+import { useSnapshotsStore } from "./snapshots";
 import { useUiStore } from "./ui";
 import { useUserProfilesStore } from "./userProfiles";
 import type {
@@ -244,22 +245,28 @@ export const useRecordsStore = defineStore("records", {
     async setItemStatus(payload: RecordStatus) {
       const filtersStore = useFiltersStore();
       const userProfilesStore = useUserProfilesStore();
+      const snapshotsStore = useSnapshotsStore();
       const currentItem = this.currentItem;
       if (!currentItem) {
         return;
       }
-      const normalized = userProfilesStore.activeProfileId
+      const activeProfileId = userProfilesStore.activeProfileId;
+      const normalized = activeProfileId
         ? normalizeRecordItem({
           ...currentItem,
           status: (await assessments.upsert(currentItem.id, {
-            userId: userProfilesStore.activeProfileId,
+            userId: activeProfileId,
             status: payload,
           })).data.assessment?.status ?? null,
         })
         : normalizeRecordItem((await records.update(currentItem.id, {
           status: payload,
-          editedBy: useUiStore().nick,
+          resolvedBy: useUiStore().nick,
+          resolvedByUserId: null,
         })).data);
+      if (activeProfileId) {
+        snapshotsStore.scheduleAutoSave(activeProfileId);
+      }
       const index = this.pageItems.findIndex((entry) => entry.id === currentItem.id);
       if (index < 0) {
         return;
@@ -282,6 +289,7 @@ export const useRecordsStore = defineStore("records", {
     },
     async setItemComment(id: number, payload: string) {
       const userProfilesStore = useUserProfilesStore();
+      const snapshotsStore = useSnapshotsStore();
       const pageIndex = this.pageItems.findIndex((item) => item.id === id);
       const dataIndex = this.dataItems.findIndex((item) => item.id === id);
       if (pageIndex < 0 && dataIndex < 0) {
@@ -311,13 +319,18 @@ export const useRecordsStore = defineStore("records", {
           userId: userProfilesStore.activeProfileId,
           comment: payload || null,
         });
+        snapshotsStore.scheduleAutoSave(userProfilesStore.activeProfileId);
       } else {
-        await records.update(id, { comment: payload || null, editedBy: useUiStore().nick });
+        await records.update(id, {
+          comment: payload || null,
+          resolvedBy: useUiStore().nick,
+          resolvedByUserId: null,
+        });
       }
     },
-    async patchRecord(recordId: number, patch: PatchRecordPayload, editedBy?: string | null) {
-      void editedBy;
+    async patchRecord(recordId: number, patch: PatchRecordPayload) {
       const userProfilesStore = useUserProfilesStore();
+      const snapshotsStore = useSnapshotsStore();
       if (Object.keys(patch).length === 0) {
         return;
       }
@@ -344,7 +357,7 @@ export const useRecordsStore = defineStore("records", {
       }
 
       try {
-        if (
+      if (
           userProfilesStore.activeProfileId
           && (assessmentPayload.status !== undefined || assessmentPayload.comment !== undefined)
         ) {
@@ -352,6 +365,7 @@ export const useRecordsStore = defineStore("records", {
             userId: userProfilesStore.activeProfileId,
             ...assessmentPayload,
           });
+          snapshotsStore.scheduleAutoSave(userProfilesStore.activeProfileId);
           const current =
             this.pageItems.find((item) => item.id === recordId)
             ?? this.dataItems.find((item) => item.id === recordId);
@@ -365,10 +379,17 @@ export const useRecordsStore = defineStore("records", {
         }
 
         if (Object.keys(payload).length > 0) {
-          if (!userProfilesStore.activeProfileId && !("editedBy" in payload)) {
-            const nick = useUiStore().nick;
-            if (nick && nick.trim().length > 0) {
-              payload.editedBy = nick;
+          if (!("resolvedBy" in payload) && !("resolvedByUserId" in payload)) {
+            const activeProfile = userProfilesStore.activeProfile;
+            if (activeProfile) {
+              payload.resolvedBy = activeProfile.name;
+              payload.resolvedByUserId = activeProfile.id;
+            } else {
+              const nick = useUiStore().nick;
+              if (nick && nick.trim().length > 0) {
+                payload.resolvedBy = nick;
+              }
+              payload.resolvedByUserId = null;
             }
           }
           const response = await records.patch(recordId, payload);
@@ -394,6 +415,7 @@ export const useRecordsStore = defineStore("records", {
     },
     async linkRecordMappingOption(recordId: number, mappingQuestionId: number, mappingOptionId: number) {
       const userProfilesStore = useUserProfilesStore();
+      const snapshotsStore = useSnapshotsStore();
       const field = `mapping:${mappingQuestionId}`;
       this.setCellSaving(recordId, field, true);
       this.setCellError(recordId, field, null);
@@ -446,6 +468,7 @@ export const useRecordsStore = defineStore("records", {
           userId: userProfilesStore.activeProfileId,
           mappingOptionIds,
         });
+        snapshotsStore.scheduleAutoSave(userProfilesStore.activeProfileId);
 
         const applySelection = (items: RecordItem[]) => {
           const index = items.findIndex((item) => item.id === recordId);
@@ -489,6 +512,7 @@ export const useRecordsStore = defineStore("records", {
     },
     async unlinkRecordMappingOption(recordId: number, mappingOptionId: number) {
       const userProfilesStore = useUserProfilesStore();
+      const snapshotsStore = useSnapshotsStore();
       const record =
         this.pageItems.find((item) => item.id === recordId)
         ?? this.dataItems.find((item) => item.id === recordId);
@@ -536,6 +560,7 @@ export const useRecordsStore = defineStore("records", {
           userId: userProfilesStore.activeProfileId,
           mappingOptionIds: nextIds,
         });
+        snapshotsStore.scheduleAutoSave(userProfilesStore.activeProfileId);
         const removeOption = (items: RecordItem[]) => {
           const index = items.findIndex((item) => item.id === recordId);
           if (index < 0) {

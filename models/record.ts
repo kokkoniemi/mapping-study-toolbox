@@ -29,7 +29,8 @@ const defineRecord: ModelFactory<RecordModelStatic> = (sequelize: Sequelize, Dat
       openAlexAuthorAffiliations: DataTypes.JSON, // flattened affiliation names
       openAlexEnrichedAt: DataTypes.DATE,
       openAlexLastError: DataTypes.TEXT,
-      editedBy: DataTypes.STRING,
+      resolvedBy: DataTypes.STRING,
+      resolvedByUserId: DataTypes.INTEGER,
       comment: DataTypes.TEXT,
       importId: DataTypes.INTEGER,
     },

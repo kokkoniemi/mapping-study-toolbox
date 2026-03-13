@@ -16,7 +16,7 @@
           v-if="canToggleAffiliations"
           type="button"
           class="affiliations__toggle"
-          @click="toggleAffiliations"
+          @click="toggleAffiliations($event)"
         >
           {{ showAllAffiliations ? "Hide" : "Show all" }}
         </button>
@@ -76,8 +76,9 @@ const visibleAffiliations = computed(() =>
 );
 const visibleAffiliationsText = computed(() => visibleAffiliations.value.join("; "));
 
-const toggleAffiliations = () => {
+const toggleAffiliations = (event: MouseEvent) => {
   showAllAffiliations.value = !showAllAffiliations.value;
+  (event.currentTarget as HTMLButtonElement | null)?.blur();
 };
 
 watch(

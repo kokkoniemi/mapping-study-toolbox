@@ -13,6 +13,9 @@ const dbMock = vi.hoisted(() => ({
   MappingOption: {
     findAll: vi.fn(),
   },
+  MappingQuestion: {
+    findAll: vi.fn(),
+  },
   RecordAssessment: {
     findAll: vi.fn(),
     findOne: vi.fn(),
@@ -49,6 +52,7 @@ describe("routes/assessments", () => {
     dbMock.Record.findByPk.mockReset();
     dbMock.Record.findAll.mockReset();
     dbMock.MappingOption.findAll.mockReset();
+    dbMock.MappingQuestion.findAll.mockReset();
     dbMock.RecordAssessment.findAll.mockReset();
     dbMock.RecordAssessment.findOne.mockReset();
     dbMock.RecordAssessment.findByPk.mockReset();
@@ -59,7 +63,7 @@ describe("routes/assessments", () => {
     dbMock.RecordMappingOption.bulkCreate.mockReset();
   });
 
-  it("compare returns pairwise metrics and disagreements", async () => {
+  it("compare returns pairwise metrics (with CI) and ignores comment-only disagreements", async () => {
     dbMock.UserProfile.findAll.mockResolvedValue([
       { id: 1, name: "Alice", isActive: true },
       { id: 2, name: "Bob", isActive: true },
@@ -71,7 +75,7 @@ describe("routes/assessments", () => {
         status: "included",
         comment: "yes",
         updatedAt: "2026-01-01T00:00:00.000Z",
-        AssessmentMappingOptions: [{ id: 2 }],
+        AssessmentMappingOptions: [{ id: 2, mappingQuestionId: 1 }],
       },
       {
         recordId: 10,
@@ -79,8 +83,27 @@ describe("routes/assessments", () => {
         status: "excluded",
         comment: "no",
         updatedAt: "2026-01-01T00:00:00.000Z",
-        AssessmentMappingOptions: [{ id: 3 }],
+        AssessmentMappingOptions: [{ id: 3, mappingQuestionId: 1 }],
       },
+      {
+        recordId: 11,
+        userId: 1,
+        status: "included",
+        comment: "note from alice",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+        AssessmentMappingOptions: [{ id: 2, mappingQuestionId: 1 }],
+      },
+      {
+        recordId: 11,
+        userId: 2,
+        status: "included",
+        comment: "note from bob",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+        AssessmentMappingOptions: [{ id: 2, mappingQuestionId: 1 }],
+      },
+    ]);
+    dbMock.MappingQuestion.findAll.mockResolvedValue([
+      { id: 1, title: "Domain", position: 1 },
     ]);
 
     const req = {
@@ -93,8 +116,38 @@ describe("routes/assessments", () => {
     expect(res.send).toHaveBeenCalledWith(
       expect.objectContaining({
         users: expect.arrayContaining([expect.objectContaining({ id: 1 }), expect.objectContaining({ id: 2 })]),
-        pairwise: expect.arrayContaining([expect.objectContaining({ userIdA: 1, userIdB: 2, sharedCount: 1 })]),
+        pairwise: expect.arrayContaining([
+          expect.objectContaining({
+            userIdA: 1,
+            userIdB: 2,
+            metricType: "status",
+            sharedCount: 2,
+            kappaCi95Lower: expect.any(Number),
+            kappaCi95Upper: expect.any(Number),
+          }),
+          expect.objectContaining({
+            userIdA: 1,
+            userIdB: 2,
+            metricType: "mapping_question",
+            mappingQuestionId: 1,
+          }),
+          expect.objectContaining({
+            userIdA: 1,
+            userIdB: 2,
+            metricType: "mapping_all",
+          }),
+          expect.objectContaining({
+            userIdA: 1,
+            userIdB: 2,
+            metricType: "status_mapping_all",
+          }),
+        ]),
         disagreements: expect.arrayContaining([expect.objectContaining({ recordId: 10 })]),
+      }),
+    );
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        disagreements: expect.not.arrayContaining([expect.objectContaining({ recordId: 11 })]),
       }),
     );
   });

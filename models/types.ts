@@ -146,7 +146,8 @@ export interface RecordAttributes {
   openAlexLastError: string | null;
   forumId: number | null;
   importId: number | null;
-  editedBy: string | null;
+  resolvedBy: string | null;
+  resolvedByUserId: number | null;
   comment: string | null;
   createdAt: Date;
   updatedAt: Date;

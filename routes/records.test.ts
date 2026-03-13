@@ -302,7 +302,7 @@ describe("routes/records", () => {
 
     const req = {
       params: { id: "1" },
-      body: { status: "included", comment: "ok", editedBy: "mk" },
+      body: { status: "included", comment: "ok", resolvedBy: "mk", resolvedByUserId: 7 },
     } as unknown as Request;
     const res = mockResponse();
 
@@ -310,7 +310,12 @@ describe("routes/records", () => {
 
     expect(dbMock.Record.findByPk).toHaveBeenCalledWith(1, { include: ["Forum", "MappingOptions"] });
     expect(record.update).toHaveBeenCalledWith(
-      expect.objectContaining({ status: "included", comment: "ok", editedBy: "mk" }),
+      expect.objectContaining({
+        status: "included",
+        comment: "ok",
+        resolvedBy: "mk",
+        resolvedByUserId: 7,
+      }),
     );
     expect(res.send).toHaveBeenCalledWith(record);
   });

@@ -7,7 +7,11 @@
       <li class="pagination-item" :class="[page <= 1 && 'pagination-item--disabled']" @click="emit('move-page', page - 1)">
         ‹ Prev
       </li>
-      <li class="pagination-item" :class="[page >= maxPages && 'pagination-item--disabled']" @click="emit('move-page', page + 1)">
+      <li
+        class="pagination-item pagination-item--push-right"
+        :class="[page >= maxPages && 'pagination-item--disabled']"
+        @click="emit('move-page', page + 1)"
+      >
         Next ›
       </li>
       <li class="pagination-item" :class="[page >= maxPages && 'pagination-item--disabled']" @click="emit('move-page', maxPages)">
@@ -51,4 +55,3 @@ const emit = defineEmits<{
   "page-length-change": [event: Event];
 }>();
 </script>
-

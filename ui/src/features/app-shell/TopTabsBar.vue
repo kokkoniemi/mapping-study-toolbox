@@ -13,15 +13,15 @@
     </ul>
 
     <div class="profile-controls">
-      <label for="activeProfileSelect" class="profile-controls__label">Profile</label>
       <select
         id="activeProfileSelect"
         class="profile-controls__select"
-        :value="activeProfileId ?? ''"
+        :value="selectedProfileValue"
         :disabled="loading"
+        aria-label="Active profile"
         @change="onProfileChange"
       >
-        <option value="" disabled>{{ loading ? "Loading..." : "Select profile" }}</option>
+        <option :value="CANONICAL_VIEW_VALUE">Canonical (resolved data)</option>
         <option v-for="profile in profiles" :key="profile.id" :value="profile.id">
           {{ profile.name }}
         </option>
@@ -29,35 +29,59 @@
       <button type="button" class="profile-controls__button" @click="emit('manage-profiles')">
         Manage
       </button>
+      <button
+        type="button"
+        class="profile-controls__button profile-controls__button--save"
+        :disabled="snapshotDisabled"
+        @click="emit('save-snapshot')"
+      >
+        <span v-if="snapshotSaving" class="profile-controls__spinner" aria-hidden="true" />
+        {{ snapshotLabel }}
+      </button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { computed } from "vue";
 import type { TabMode } from "../../stores/types";
 import type { UserProfile } from "../../helpers/api";
 import TabButton from "../../components/ui/TabButton.vue";
 
-defineProps<{
+const CANONICAL_VIEW_VALUE = "canonical";
+
+const props = defineProps<{
   tab: TabMode;
   profiles: UserProfile[];
   activeProfileId: number | null;
   loading: boolean;
+  snapshotSaving: boolean;
+  snapshotDisabled: boolean;
+  snapshotLabel: string;
 }>();
+
+const selectedProfileValue = computed(() =>
+  props.activeProfileId === null ? CANONICAL_VIEW_VALUE : String(props.activeProfileId));
 
 const emit = defineEmits<{
   "update-tab": [value: TabMode];
   "profile-change": [value: number | null];
   "manage-profiles": [];
+  "save-snapshot": [];
 }>();
 
 const onProfileChange = (event: Event) => {
   const rawValue = (event.target as HTMLSelectElement).value;
-  if (rawValue.length === 0) {
+  if (rawValue === CANONICAL_VIEW_VALUE) {
     emit("profile-change", null);
     return;
   }
-  emit("profile-change", Number.parseInt(rawValue, 10));
+  const profileId = Number.parseInt(rawValue, 10);
+  if (Number.isNaN(profileId)) {
+    emit("profile-change", null);
+    return;
+  }
+  emit("profile-change", profileId);
 };
 </script>
 
@@ -69,16 +93,34 @@ const onProfileChange = (event: Event) => {
   margin-bottom: 6px;
 }
 
-.profile-controls__label {
-  font-size: 12px;
-  opacity: 0.8;
-}
-
 .profile-controls__select {
   min-width: 180px;
 }
 
 .profile-controls__button {
   white-space: nowrap;
+}
+
+.profile-controls__button--save {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 120px;
+  justify-content: center;
+}
+
+.profile-controls__spinner {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid rgba(0, 0, 0, 0.22);
+  border-top-color: rgba(0, 0, 0, 0.75);
+  animation: profile-save-spin 0.75s linear infinite;
+}
+
+@keyframes profile-save-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 </style>

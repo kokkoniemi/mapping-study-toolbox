@@ -44,9 +44,15 @@ const formatReport = (payload: {
   pairwise: Array<{
     userIdA: number;
     userIdB: number;
+    metricType: "status" | "mapping_question" | "mapping_all" | "status_mapping_all";
+    metricKey: string;
+    metricLabel: string;
+    mappingQuestionId: number | null;
     sharedCount: number;
     agreementPercent: number;
     kappa: number;
+    kappaCi95Lower: number | null;
+    kappaCi95Upper: number | null;
   }>;
   disagreements: Array<{ recordId: number }>;
 }) => {
@@ -60,11 +66,14 @@ const formatReport = (payload: {
   lines.push("");
   lines.push("## Pairwise Metrics");
   lines.push("");
-  lines.push("| User A | User B | Shared Records | Agreement % | Cohen's Kappa |");
-  lines.push("|---|---|---:|---:|---:|");
+  lines.push("| User A | User B | Metric | Shared Records | Agreement % | Cohen's Kappa | Kappa 95% CI |");
+  lines.push("|---|---|---|---:|---:|---:|---|");
   for (const pair of payload.pairwise) {
+    const kappaCi = pair.kappaCi95Lower === null || pair.kappaCi95Upper === null
+      ? "n/a"
+      : `[${pair.kappaCi95Lower.toFixed(4)}, ${pair.kappaCi95Upper.toFixed(4)}]`;
     lines.push(
-      `| ${nameById.get(pair.userIdA) ?? pair.userIdA} | ${nameById.get(pair.userIdB) ?? pair.userIdB} | ${pair.sharedCount} | ${pair.agreementPercent.toFixed(2)} | ${pair.kappa.toFixed(4)} |`,
+      `| ${nameById.get(pair.userIdA) ?? pair.userIdA} | ${nameById.get(pair.userIdB) ?? pair.userIdB} | ${pair.metricLabel} | ${pair.sharedCount} | ${pair.agreementPercent.toFixed(2)} | ${pair.kappa.toFixed(4)} | ${kappaCi} |`,
     );
   }
   lines.push("");
@@ -102,9 +111,15 @@ const main = async () => {
     pairwise: Array<{
       userIdA: number;
       userIdB: number;
+      metricType: "status" | "mapping_question" | "mapping_all" | "status_mapping_all";
+      metricKey: string;
+      metricLabel: string;
+      mappingQuestionId: number | null;
       sharedCount: number;
       agreementPercent: number;
       kappa: number;
+      kappaCi95Lower: number | null;
+      kappaCi95Upper: number | null;
     }>;
     disagreements: Array<{ recordId: number }>;
   };
