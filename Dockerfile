@@ -1,4 +1,4 @@
-FROM node:24-bookworm AS deps
+FROM node:24-trixie-slim AS deps
 
 WORKDIR /app
 
@@ -14,7 +14,7 @@ WORKDIR /app
 COPY . .
 RUN npm run ui:build
 
-FROM node:24-bookworm-slim AS runtime
+FROM node:24-trixie-slim AS runtime
 
 ENV NODE_ENV=production
 ENV APP_ROOT=/app

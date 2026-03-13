@@ -17,8 +17,8 @@
     "test:run": "vitest run"
   },
   "dependencies": {
-    "@handsontable/vue3": "^16.2.0",
-    "handsontable": "^16.2.0",
+    "@handsontable/vue3": "^17.0.0",
+    "handsontable": "^17.0.0",
     "pinia": "^3.0.4",
     "vue": "^3.5.29"
   },
@@ -33,7 +33,7 @@
     "pinia-plugin-persistedstate": "^4.7.1",
     "sass": "^1.97.3",
     "typescript": "^5.9.3",
-    "vite": "^7.3.1",
+    "vite": "^8.0.0",
     "vitest": "^4.0.18",
     "vue-eslint-parser": "^10.4.0",
     "vue-tsc": "^3.2.5"
