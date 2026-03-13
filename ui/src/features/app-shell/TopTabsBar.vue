@@ -22,14 +22,26 @@
         @change="onProfileChange"
       >
         <option :value="CANONICAL_VIEW_VALUE">Canonical (resolved data)</option>
-        <option v-for="profile in profiles" :key="profile.id" :value="profile.id">
-          {{ profile.name }}
-        </option>
+        <optgroup v-if="profiles.length > 0" label="User profiles">
+          <option v-for="profile in profiles" :key="profile.id" :value="profile.id">
+            {{ profile.name }}
+          </option>
+        </optgroup>
       </select>
       <button type="button" class="profile-controls__button" @click="emit('manage-profiles')">
         Manage
       </button>
       <button
+        v-if="isCanonicalView"
+        type="button"
+        class="profile-controls__button profile-controls__button--lock"
+        :class="[canonicalEditingUnlocked && 'profile-controls__button--lock-active']"
+        @click="emit('toggle-canonical-editing')"
+      >
+        {{ canonicalEditingUnlocked ? "Lock canonical editing" : "Unlock canonical editing" }}
+      </button>
+      <button
+        v-if="!isCanonicalView"
         type="button"
         class="profile-controls__button profile-controls__button--save"
         :disabled="snapshotDisabled"
@@ -54,6 +66,8 @@ const props = defineProps<{
   tab: TabMode;
   profiles: UserProfile[];
   activeProfileId: number | null;
+  isCanonicalView: boolean;
+  canonicalEditingUnlocked: boolean;
   loading: boolean;
   snapshotSaving: boolean;
   snapshotDisabled: boolean;
@@ -67,6 +81,7 @@ const emit = defineEmits<{
   "update-tab": [value: TabMode];
   "profile-change": [value: number | null];
   "manage-profiles": [];
+  "toggle-canonical-editing": [];
   "save-snapshot": [];
 }>();
 
@@ -107,6 +122,12 @@ const onProfileChange = (event: Event) => {
   gap: 6px;
   min-width: 120px;
   justify-content: center;
+}
+
+.profile-controls__button--lock-active {
+  border-color: #cc5b00;
+  background: #fff3e6;
+  color: #7d3700;
 }
 
 .profile-controls__spinner {

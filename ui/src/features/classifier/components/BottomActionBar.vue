@@ -8,6 +8,7 @@
           class="comment comment--bottom"
           type="text"
           rows="3"
+          :disabled="editingDisabled"
           placeholder="Write your comments here..."
           @input="emit('comment-input', $event)"
           @focus="emit('focus-comment')"
@@ -19,6 +20,7 @@
             class="action action--exclude"
             :class="[status === 'excluded' && 'action--selected']"
             :aria-pressed="status === 'excluded'"
+            :disabled="editingDisabled"
             @click="onDecisionClick('exclude', $event)"
           >
             Exclude
@@ -27,6 +29,7 @@
             class="action action--uncertain"
             :class="[status === 'uncertain' && 'action--selected']"
             :aria-pressed="status === 'uncertain'"
+            :disabled="editingDisabled"
             @click="onDecisionClick('uncertain', $event)"
           >
             Uncertain
@@ -35,6 +38,7 @@
             class="action action--include"
             :class="[status === 'included' && 'action--selected']"
             :aria-pressed="status === 'included'"
+            :disabled="editingDisabled"
             @click="onDecisionClick('include', $event)"
           >
             Include
@@ -55,6 +59,7 @@ defineProps<{
   tab: TabMode;
   comment: string | null;
   status: RecordStatus;
+  editingDisabled?: boolean;
 }>();
 
 const emit = defineEmits<{

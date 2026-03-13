@@ -1,5 +1,5 @@
 <template>
-    <div class="mapping-actions">
+    <div class="mapping-actions" :class="{ 'mapping-actions--readonly': readOnly }">
         <div v-for="(question, i)  in mappingQuestions" class="mapping-question" :key="question.id">
             <div class="mapping-question__title" @click="(e) => setQuestionPopupActive(e, question.id)">
                 <div class="mapping-question__popup" v-if="activeQuestionPopup === question.id">
@@ -102,6 +102,12 @@ const optionInput = ref("");
 const nextOptionColor = ref("");
 const newOption = ref<HTMLInputElement | null>(null);
 
+const props = withDefaults(defineProps<{
+  readOnly?: boolean;
+}>(), {
+  readOnly: false,
+});
+
 const store = defaultStore();
 const { mappingQuestions, currentItem } = storeToRefs(store);
 const currentMappingOptions = computed(() => currentItem.value?.MappingOptions ?? []);
@@ -117,6 +123,9 @@ const isBackdropTarget = (target: EventTarget | null) => {
 };
 
 const setOptionPopupActive = async (event: MouseEvent, id: number) => {
+  if (props.readOnly) {
+    return;
+  }
   if (isBackdropTarget(event.target)) {
     return;
   }
@@ -133,6 +142,9 @@ const setOptionPopupInactive = () => {
 };
 
 const setQuestionPopupActive = (event: MouseEvent, id: number) => {
+  if (props.readOnly) {
+    return;
+  }
   if (isBackdropTarget(event.target)) {
     return;
   }
@@ -148,17 +160,26 @@ const setQuestionPopupInactive = () => {
 };
 
 const newMappingQuestion = async () => {
+  if (props.readOnly) {
+    return;
+  }
   await store.createMappingQuestion();
   activeQuestionPopup.value = mappingQuestions.value[mappingQuestions.value.length - 1]?.id ?? null;
 };
 
 const deleteQuestion = async (id: number) => {
+  if (props.readOnly) {
+    return;
+  }
   await store.deleteMappingQuestion(id);
   activeQuestionConfirm.value = false;
   activeQuestionPopup.value = null;
 };
 
 const setQuestionTitle = debounce(async (event: Event, question: MappingQuestion) => {
+  if (props.readOnly) {
+    return;
+  }
   const title = (event.target as HTMLInputElement).value;
   const { id, type, position } = question;
   await store.updateMappingQuestion({
@@ -170,6 +191,9 @@ const setQuestionTitle = debounce(async (event: Event, question: MappingQuestion
 }, 1000);
 
 const increaseQuestionPosition = async (question: MappingQuestion, index: number) => {
+  if (props.readOnly) {
+    return;
+  }
   const lastQuestion = mappingQuestions.value[mappingQuestions.value.length - 1];
   if (!lastQuestion || lastQuestion.id === question.id) {
     return;
@@ -199,6 +223,9 @@ const increaseQuestionPosition = async (question: MappingQuestion, index: number
 };
 
 const decreaseQuestionPosition = async (question: MappingQuestion, index: number) => {
+  if (props.readOnly) {
+    return;
+  }
   const firstQuestion = mappingQuestions.value[0];
   if (!firstQuestion || firstQuestion.id === question.id) {
     return;
@@ -228,6 +255,9 @@ const decreaseQuestionPosition = async (question: MappingQuestion, index: number
 };
 
 const createOption = async (question: MappingQuestion, color: string) => {
+  if (props.readOnly) {
+    return;
+  }
   await store.createMappingOption({
     id: question.id,
     title: optionInput.value,
@@ -259,10 +289,16 @@ const addRecordMappingOption = async (payload: {
   mappingQuestionId: number;
   mappingOptionId: number;
 }) => {
+  if (props.readOnly) {
+    return;
+  }
   await store.addRecordMappingOption(payload);
 };
 
 const removeRecordMappingOption = async (optionId: number) => {
+  if (props.readOnly) {
+    return;
+  }
   await store.removeRecordMappingOption(optionId);
 };
 
@@ -529,5 +565,10 @@ onMounted(async () => {
             }
         }
     }
+}
+
+.mapping-actions--readonly {
+  opacity: 0.65;
+  pointer-events: none;
 }
 </style>

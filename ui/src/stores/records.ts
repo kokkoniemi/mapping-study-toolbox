@@ -30,6 +30,11 @@ const normalizeRecordItem = (record: RecordItem): RecordItem => ({
   MappingOptions: Array.isArray(record.MappingOptions) ? record.MappingOptions : [],
 });
 
+const canEditResolvedValues = () => {
+  const userProfilesStore = useUserProfilesStore();
+  return userProfilesStore.canEditResolved;
+};
+
 export const useRecordsStore = defineStore("records", {
   state: (): RecordsState => ({
     pageItems: [],
@@ -250,6 +255,9 @@ export const useRecordsStore = defineStore("records", {
       if (!currentItem) {
         return;
       }
+      if (!canEditResolvedValues()) {
+        return;
+      }
       const activeProfileId = userProfilesStore.activeProfileId;
       const normalized = activeProfileId
         ? normalizeRecordItem({
@@ -290,6 +298,9 @@ export const useRecordsStore = defineStore("records", {
     async setItemComment(id: number, payload: string) {
       const userProfilesStore = useUserProfilesStore();
       const snapshotsStore = useSnapshotsStore();
+      if (!canEditResolvedValues()) {
+        return;
+      }
       const pageIndex = this.pageItems.findIndex((item) => item.id === id);
       const dataIndex = this.dataItems.findIndex((item) => item.id === id);
       if (pageIndex < 0 && dataIndex < 0) {
@@ -332,6 +343,9 @@ export const useRecordsStore = defineStore("records", {
       const userProfilesStore = useUserProfilesStore();
       const snapshotsStore = useSnapshotsStore();
       if (Object.keys(patch).length === 0) {
+        return;
+      }
+      if (!canEditResolvedValues() && ("status" in patch || "comment" in patch)) {
         return;
       }
 
@@ -416,6 +430,9 @@ export const useRecordsStore = defineStore("records", {
     async linkRecordMappingOption(recordId: number, mappingQuestionId: number, mappingOptionId: number) {
       const userProfilesStore = useUserProfilesStore();
       const snapshotsStore = useSnapshotsStore();
+      if (!canEditResolvedValues()) {
+        return;
+      }
       const field = `mapping:${mappingQuestionId}`;
       this.setCellSaving(recordId, field, true);
       this.setCellError(recordId, field, null);
@@ -513,6 +530,9 @@ export const useRecordsStore = defineStore("records", {
     async unlinkRecordMappingOption(recordId: number, mappingOptionId: number) {
       const userProfilesStore = useUserProfilesStore();
       const snapshotsStore = useSnapshotsStore();
+      if (!canEditResolvedValues()) {
+        return;
+      }
       const record =
         this.pageItems.find((item) => item.id === recordId)
         ?? this.dataItems.find((item) => item.id === recordId);
@@ -609,6 +629,9 @@ export const useRecordsStore = defineStore("records", {
       title: string,
       color: string,
     ) {
+      if (!canEditResolvedValues()) {
+        return;
+      }
       const mappingStore = useMappingStore();
       const question = mappingStore.mappingQuestions.find((item) => item.id === mappingQuestionId);
       if (!question) {

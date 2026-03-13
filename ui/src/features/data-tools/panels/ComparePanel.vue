@@ -27,6 +27,9 @@
         {{ compareLoading ? "Running..." : "Run compare" }}
       </button>
     </div>
+    <p v-if="resolveDisabled" class="compare-tools__hint">
+      Canonical values are locked. Unlock canonical editing in the top bar to resolve records.
+    </p>
 
     <p v-if="compareError" class="compare-tools__error">{{ compareError }}</p>
 
@@ -73,7 +76,7 @@
           <button
             type="button"
             class="compare-tools__row-edit"
-            :disabled="resolvingRecordId === row.recordId"
+            :disabled="resolvingRecordId === row.recordId || resolveDisabled"
             @click="toggleResolveEditor(row.recordId)"
           >
             {{ isResolveEditorOpen(row.recordId) ? "Hide resolve" : "Edit resolve" }}
@@ -124,7 +127,11 @@
         <div v-if="isResolveEditorOpen(row.recordId)" class="compare-tools__resolve">
           <label>
             Resolved status
-            <select :value="getDraft(row.recordId).status" @change="onDraftStatusChange(row.recordId, $event)">
+            <select
+              :value="getDraft(row.recordId).status"
+              :disabled="resolveDisabled"
+              @change="onDraftStatusChange(row.recordId, $event)"
+            >
               <option value="null">Unset</option>
               <option value="uncertain">Uncertain</option>
               <option value="excluded">Excluded</option>
@@ -147,6 +154,7 @@
                     type="button"
                     class="compare-tools__mapping-chip compare-tools__mapping-chip--selected"
                     :style="mappingChipStyle(option.color)"
+                    :disabled="resolveDisabled"
                     @click="removeDraftMappingOption(row.recordId, option.id)"
                   >
                     {{ option.title }}
@@ -159,7 +167,11 @@
                     No selection
                   </span>
                 </div>
-                <select class="compare-tools__mapping-add" @change="addDraftMappingOption(row.recordId, $event)">
+                <select
+                  class="compare-tools__mapping-add"
+                  :disabled="resolveDisabled"
+                  @change="addDraftMappingOption(row.recordId, $event)"
+                >
                   <option value="">+ Add option</option>
                   <option
                     v-for="option in getAvailableOptionsForQuestion(row.recordId, question.id)"
@@ -182,6 +194,7 @@
                     :key="`unknown-${row.recordId}-${option.id}`"
                     type="button"
                     class="compare-tools__mapping-chip compare-tools__mapping-chip--unknown compare-tools__mapping-chip--selected"
+                    :disabled="resolveDisabled"
                     @click="removeDraftMappingOption(row.recordId, option.id)"
                   >
                     {{ option.title }}
@@ -197,12 +210,13 @@
               :value="getDraft(row.recordId).comment"
               rows="3"
               placeholder="Manual resolution note/comment"
+              :disabled="resolveDisabled"
               @input="onDraftCommentInput(row.recordId, $event)"
             />
           </label>
           <button
             type="button"
-            :disabled="resolvingRecordId === row.recordId"
+            :disabled="resolvingRecordId === row.recordId || resolveDisabled"
             @click="resolveRow(row.recordId)"
           >
             {{ resolvingRecordId === row.recordId ? "Resolving..." : "Resolve to canonical" }}
@@ -233,6 +247,7 @@ const props = defineProps<{
   compareError: string | null;
   pairwise: PairwiseAgreement[];
   disagreements: AssessmentDisagreementItem[];
+  resolveDisabled: boolean;
   resolvingRecordId: number | null;
 }>();
 
@@ -347,6 +362,18 @@ watch(
   { immediate: true },
 );
 
+watch(
+  () => props.resolveDisabled,
+  (disabled) => {
+    if (!disabled) {
+      return;
+    }
+    for (const recordId of Object.keys(resolveEditorOpenByRecord).map((key) => Number.parseInt(key, 10))) {
+      resolveEditorOpenByRecord[recordId] = false;
+    }
+  },
+);
+
 const formatStatus = (status: RecordStatus) => (status === null ? "Unset" : status);
 
 const isUserSelected = (userId: number) => props.compareUserIds.includes(userId);
@@ -365,6 +392,9 @@ const toggleUserSelection = (userId: number, event: Event) => {
 const isResolveEditorOpen = (recordId: number) => Boolean(resolveEditorOpenByRecord[recordId]);
 
 const toggleResolveEditor = (recordId: number) => {
+  if (props.resolveDisabled) {
+    return;
+  }
   resolveEditorOpenByRecord[recordId] = !resolveEditorOpenByRecord[recordId];
 };
 
@@ -482,6 +512,9 @@ const onDraftCommentInput = (recordId: number, event: Event) => {
 };
 
 const resolveRow = (recordId: number) => {
+  if (props.resolveDisabled) {
+    return;
+  }
   const draft = draftByRecord[recordId];
   if (!draft) {
     return;
@@ -518,6 +551,12 @@ const resolveRow = (recordId: number) => {
 
 .compare-tools__pairwise-note {
   margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--ui-text-secondary);
+}
+
+.compare-tools__hint {
+  margin: -2px 0 0;
   font-size: 12px;
   color: var(--ui-text-secondary);
 }

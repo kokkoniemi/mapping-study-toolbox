@@ -42,6 +42,7 @@
           :tab="tab"
           :comment="currentItem.comment"
           :status="currentItem.status"
+          :editingDisabled="editingDisabled"
           @comment-input="onCommentInput"
           @focus-comment="onCommentFocus"
           @blur-comment="onCommentBlur"
@@ -49,12 +50,13 @@
           @uncertain="setUncertain"
           @include="setIncluded"
         >
-          <MappingActions v-if="tab === 'map'" />
+          <MappingActions v-if="tab === 'map'" :readOnly="editingDisabled" />
         </BottomActionBar>
       </div>
 
       <NotebookPanel
         :comment="currentItem.comment"
+        :editingDisabled="editingDisabled"
         @comment-input="onCommentInput"
         @focus-comment="onCommentFocus"
         @blur-comment="onCommentBlur"
@@ -69,6 +71,7 @@ import { storeToRefs } from "pinia";
 
 import MappingActions from "../../components/MappingActions.vue";
 import { defaultStore } from "../../stores/default";
+import { useUserProfilesStore } from "../../stores/userProfiles";
 import AbstractSection from "./components/AbstractSection.vue";
 import BottomActionBar from "./components/BottomActionBar.vue";
 import LiteratureLists from "./components/LiteratureLists.vue";
@@ -81,9 +84,12 @@ import { useLiteratureDisplay } from "./composables/useLiteratureDisplay";
 import "./styles.scss";
 
 const store = defaultStore();
+const userProfilesStore = useUserProfilesStore();
 const { pageItems, pageLength, page, tab, moveLock, currentItem } = storeToRefs(store);
+const { canEditResolved } = storeToRefs(userProfilesStore);
 const classifierRef = ref<HTMLElement | null>(null);
 const classifierMainRef = ref<HTMLElement | null>(null);
+const editingDisabled = computed(() => !canEditResolved.value);
 
 const {
   showReferences,

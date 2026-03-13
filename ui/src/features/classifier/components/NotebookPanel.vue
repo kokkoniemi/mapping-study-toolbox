@@ -6,6 +6,7 @@
       class="comment comment--notebook"
       type="text"
       rows="16"
+      :disabled="editingDisabled"
       placeholder="Write your comments here..."
       @input="emit('comment-input', $event)"
       @focus="emit('focus-comment')"
@@ -17,6 +18,7 @@
 <script setup lang="ts">
 defineProps<{
   comment: string | null;
+  editingDisabled?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -25,4 +27,3 @@ const emit = defineEmits<{
   "blur-comment": [];
 }>();
 </script>
-

@@ -167,6 +167,7 @@
         :compareError="compareError"
         :pairwise="comparePairwise"
         :disagreements="compareDisagreements"
+        :resolveDisabled="isCanonicalEditLocked"
         :resolvingRecordId="resolvingRecordId"
         @update-users="onCompareUsersUpdate"
         @run-compare="runAssessmentCompare"
@@ -376,7 +377,7 @@ const {
   importViewMode,
   importWizardStep,
 } = storeToRefs(dataToolsStore);
-const { activeProfiles } = storeToRefs(userProfilesStore);
+const { activeProfiles, canEditResolved, isCanonicalEditLocked } = storeToRefs(userProfilesStore);
 
 const dataGridRef = ref<DataGridExpose | null>(null);
 const searchInput = ref(searchFilter.value);
@@ -708,6 +709,9 @@ const parseMappingQuestionId = (prop: unknown) => {
 
   return questionId;
 };
+
+const isResolvedDecisionField = (prop: string) =>
+  prop === "status" || prop === "comment" || prop.startsWith("mapping_");
 
 const textIndicatorThreshold = 90;
 
@@ -1100,6 +1104,9 @@ const closeMappingEditor = () => {
 };
 
 const openMappingEditor = (recordId: number, questionId: number, anchor: AnchorRect | null) => {
+  if (!canEditResolved.value) {
+    return;
+  }
   mappingEditor.value = { recordId, questionId };
   mappingEditorAnchor.value = anchor;
   mappingEditorInput.value = "";
@@ -1111,7 +1118,7 @@ const onMappingEditorInputUpdate = (value: string) => {
 };
 
 const addMappingOption = async (mappingOptionId: number) => {
-  if (!mappingEditor.value) {
+  if (!mappingEditor.value || !canEditResolved.value) {
     return;
   }
 
@@ -1124,7 +1131,7 @@ const addMappingOption = async (mappingOptionId: number) => {
 };
 
 const removeMappingOption = async (mappingOptionId: number) => {
-  if (!mappingEditor.value) {
+  if (!mappingEditor.value || !canEditResolved.value) {
     return;
   }
 
@@ -1132,7 +1139,7 @@ const removeMappingOption = async (mappingOptionId: number) => {
 };
 
 const createMappingOption = async () => {
-  if (!mappingEditor.value || !canCreateMappingOption.value) {
+  if (!mappingEditor.value || !canCreateMappingOption.value || !canEditResolved.value) {
     return;
   }
 
@@ -1298,6 +1305,9 @@ const handleCellChange = async (recordId: number, prop: string, nextValue: strin
   }
 
   if (prop === "status") {
+    if (!canEditResolved.value) {
+      return;
+    }
     const normalizedStatus: RecordStatus =
       nextValue === "" || nextValue === "null" ? null : (nextValue as RecordStatus);
     await store.patchRecord(recordId, { status: normalizedStatus });
@@ -1335,6 +1345,9 @@ const handleCellChange = async (recordId: number, prop: string, nextValue: strin
   }
 
   if (prop === "abstract" || prop === "comment") {
+    if (prop === "comment" && !canEditResolved.value) {
+      return;
+    }
     await store.patchRecord(recordId, { [prop]: nextValue === "" ? null : nextValue });
   }
 };
@@ -1377,9 +1390,14 @@ const cellMetaFactory: GridSettings["cells"] = (row: number, _col: number, prop:
     return {} as CellProperties;
   }
 
-  const field = mapPropToCellStateField(String(prop));
+  const propName = String(prop);
+  const field = mapPropToCellStateField(propName);
   const state = store.getCellState(record.id, field);
   const meta: Partial<CellProperties> = {};
+
+  if (isCanonicalEditLocked.value && isResolvedDecisionField(propName)) {
+    meta.readOnly = true;
+  }
 
   if (state.error) {
     meta.className = "cell-error";
@@ -1433,6 +1451,10 @@ const onAfterOnCellMouseDown = (event: Event, coords: { row: number; col: number
 
   const questionId = parseMappingQuestionId(column.settings.data);
   if (!questionId) {
+    return;
+  }
+
+  if (!canEditResolved.value) {
     return;
   }
 
@@ -1976,6 +1998,11 @@ const resolveComparedRecord = async (payload: {
   comment: string | null;
   mappingOptionIds: number[];
 }) => {
+  if (isCanonicalEditLocked.value) {
+    compareError.value = "Canonical values are locked. Unlock canonical editing to resolve records.";
+    return;
+  }
+
   resolvingRecordId.value = payload.recordId;
   compareError.value = "";
 
@@ -2067,6 +2094,15 @@ watch(
   () => [mappingEditorRecord.value, mappingEditorQuestion.value] as const,
   ([record, question]) => {
     if (mappingEditor.value && (!record || !question)) {
+      closeMappingEditor();
+    }
+  },
+);
+
+watch(
+  () => isCanonicalEditLocked.value,
+  (locked) => {
+    if (locked) {
       closeMappingEditor();
     }
   },

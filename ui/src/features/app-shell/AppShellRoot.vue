@@ -18,7 +18,15 @@ const snapshotsStore = useSnapshotsStore();
 const recordsStore = useRecordsStore();
 const userProfilesStore = useUserProfilesStore();
 const { tab } = storeToRefs(uiStore);
-const { activeProfileId, activeProfiles, loading: profilesLoading, error: profilesError, profiles } =
+const {
+  activeProfileId,
+  activeProfiles,
+  loading: profilesLoading,
+  error: profilesError,
+  profiles,
+  isCanonicalView,
+  canonicalEditingUnlocked,
+} =
   storeToRefs(userProfilesStore);
 const {
   activeSaving: snapshotSaving,
@@ -66,6 +74,10 @@ const updateTab = (value: TabMode) => {
 
 const setActiveProfile = (value: number | null) => {
   userProfilesStore.setActiveProfile(value);
+};
+
+const toggleCanonicalEditing = () => {
+  userProfilesStore.toggleCanonicalEditingUnlocked();
 };
 
 const createProfile = async () => {
@@ -119,6 +131,8 @@ const uploadSnapshots = async () => {
       :tab="tab"
       :profiles="activeProfiles"
       :activeProfileId="activeProfileId"
+      :isCanonicalView="isCanonicalView"
+      :canonicalEditingUnlocked="canonicalEditingUnlocked"
       :loading="profilesLoading"
       :snapshotSaving="snapshotSaving"
       :snapshotDisabled="snapshotDisabled"
@@ -126,6 +140,7 @@ const uploadSnapshots = async () => {
       @update-tab="updateTab"
       @profile-change="setActiveProfile"
       @manage-profiles="showProfileManager = !showProfileManager"
+      @toggle-canonical-editing="toggleCanonicalEditing"
       @save-snapshot="saveSnapshot"
     />
 

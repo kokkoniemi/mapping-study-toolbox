@@ -10,6 +10,7 @@ type UserProfilesState = {
   profiles: UserProfile[];
   activeProfileId: number | null;
   mode: "canonical" | "profile";
+  canonicalEditingUnlocked: boolean;
   loading: boolean;
   error: string | null;
 };
@@ -22,6 +23,7 @@ export const useUserProfilesStore = defineStore("userProfiles", {
     profiles: [],
     activeProfileId: null,
     mode: "profile",
+    canonicalEditingUnlocked: false,
     loading: false,
     error: null,
   }),
@@ -30,6 +32,8 @@ export const useUserProfilesStore = defineStore("userProfiles", {
       state.profiles.find((profile) => profile.id === state.activeProfileId) ?? null,
     activeProfiles: (state): UserProfile[] => state.profiles.filter((profile) => profile.isActive),
     isCanonicalView: (state): boolean => state.mode === "canonical",
+    isCanonicalEditLocked: (state): boolean => state.mode === "canonical" && !state.canonicalEditingUnlocked,
+    canEditResolved: (state): boolean => state.mode === "profile" || state.canonicalEditingUnlocked,
   },
   actions: {
     async fetchProfiles() {
@@ -41,6 +45,7 @@ export const useUserProfilesStore = defineStore("userProfiles", {
 
         if (this.mode === "canonical") {
           this.activeProfileId = null;
+          this.canonicalEditingUnlocked = false;
           return;
         }
 
@@ -63,6 +68,7 @@ export const useUserProfilesStore = defineStore("userProfiles", {
       if (profileId === null) {
         this.activeProfileId = null;
         this.mode = "canonical";
+        this.canonicalEditingUnlocked = false;
         return;
       }
       const exists = this.profiles.some((profile) => profile.id === profileId && profile.isActive);
@@ -71,6 +77,21 @@ export const useUserProfilesStore = defineStore("userProfiles", {
       }
       this.activeProfileId = profileId;
       this.mode = "profile";
+      this.canonicalEditingUnlocked = false;
+    },
+    setCanonicalEditingUnlocked(unlocked: boolean) {
+      if (this.mode !== "canonical") {
+        this.canonicalEditingUnlocked = false;
+        return;
+      }
+      this.canonicalEditingUnlocked = unlocked;
+    },
+    toggleCanonicalEditingUnlocked() {
+      if (this.mode !== "canonical") {
+        this.canonicalEditingUnlocked = false;
+        return;
+      }
+      this.canonicalEditingUnlocked = !this.canonicalEditingUnlocked;
     },
     async createProfile(name: string) {
       const response = await userProfilesApi.create({ name });
