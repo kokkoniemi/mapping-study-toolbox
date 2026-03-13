@@ -3,45 +3,14 @@ import path from "node:path";
 
 import * as SequelizeModule from "sequelize";
 
+import { resolveDbConfig, type DbConfig } from "../lib/dbConfig";
 import type { AssociableModel, DbModels, ModelFactory } from "./types";
 
 const { DataTypes, Sequelize } = SequelizeModule;
 
-type DbConfig = {
-  database?: string;
-  username?: string;
-  password?: string;
-  use_env_variable?: string;
-  [key: string]: unknown;
-};
-
-type DbConfigFile = {
-  development?: DbConfig;
-  test?: DbConfig;
-  production?: DbConfig;
-} & DbConfig;
-
 const basename = path.basename(__filename);
 const env = process.env.NODE_ENV || "development";
-
-const configCandidates = [
-  path.join(__dirname, "..", "config", "config.json"),
-  path.join(path.dirname(process.execPath), "config", "config.json"),
-  // Backward compatibility with older setups
-  path.join(__dirname, "..", "db-config.json"),
-  path.join(path.dirname(process.execPath), "db-config.json"),
-];
-
-const configPath = configCandidates.find((candidate) => fs.existsSync(candidate));
-if (!configPath) {
-  throw new Error(
-    "No database config found. Expected config/config.json (preferred) or db-config.json (legacy).",
-  );
-}
-
-const rawConfig = JSON.parse(fs.readFileSync(configPath, "utf-8")) as DbConfigFile;
-const envConfig = (rawConfig as Record<string, DbConfig | undefined>)[env];
-const config: DbConfig = envConfig || rawConfig.development || rawConfig;
+const { config } = resolveDbConfig({ env });
 
 let sequelize: SequelizeModule.Sequelize;
 if (config.use_env_variable) {

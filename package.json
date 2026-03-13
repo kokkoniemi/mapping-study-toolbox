@@ -9,7 +9,7 @@
   "scripts": {
     "start": "node --import tsx server.ts",
     "start:dev": "node --watch --import tsx server.ts",
-    "migrate": "node_modules/.bin/sequelize db:migrate",
+    "migrate": "node --import tsx scripts/migrate.ts",
     "snapshots:export": "node --import tsx scripts/exportAssessmentSnapshot.ts",
     "snapshots:import": "node --import tsx scripts/importAssessmentSnapshot.ts",
     "snapshots:import-others": "node --import tsx scripts/importOtherAssessmentSnapshots.ts",

@@ -3,10 +3,6 @@ set -eu
 
 cd /workspace
 
-if [ ! -f config/config.json ]; then
-  cp config/config.example.json config/config.json
-fi
-
 LOCK_HASH="$(sha256sum package-lock.json | awk '{print $1}')"
 INSTALLED_HASH=""
 if [ -f node_modules/.package-lock.hash ]; then
@@ -20,5 +16,5 @@ if [ ! -d node_modules ] || [ "$LOCK_HASH" != "$INSTALLED_HASH" ]; then
   printf "%s" "$LOCK_HASH" > node_modules/.package-lock.hash
 fi
 
-node_modules/.bin/sequelize db:migrate
+npm run migrate
 exec node --watch --import tsx server.ts

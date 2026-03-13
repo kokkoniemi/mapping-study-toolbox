@@ -27,7 +27,7 @@ When `package-lock.json` (backend or `ui/`) changes, dependencies are automatica
 This starts:
 - backend (auto-migrates sqlite and hot-reloads on backend file changes)
 - frontend Vite dev server (hot-reloads on UI changes)
-- if missing, `config/config.json` is created automatically from `config/config.example.json`
+- backend DB config comes from `db-config.json` when present, otherwise defaults are used
 
 Open:
 - UI (dev/HMR): http://localhost:8080
@@ -69,8 +69,9 @@ npm install
 ```shell
 npm run ui:install
 ```
-3. Ensure DB config exists for runtime + migrations:
-   - copy `config/config.example.json` to `config/config.json` and set sqlite path (`storage`)
+3. (Optional) customize DB config in `db-config.json`:
+   - by default, runtime + migrations use sqlite `./db.sqlite3` with logging disabled
+   - in test environment, sqlite is always `:memory:`
 4. Run local migrations:
 ```shell
 npm run migrate
