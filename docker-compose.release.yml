@@ -1,0 +1,25 @@
+services:
+  app:
+    image: ${MAPPING_TOOL_IMAGE:-ghcr.io/kokkoniemi/mapping-study-toolbox:latest}
+    init: true
+    restart: unless-stopped
+    working_dir: /workspace-data
+    environment:
+      APP_DATA_DIR: /workspace-data
+      OPENALEX_API_KEY: ${OPENALEX_API_KEY:-}
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./:/workspace-data
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:3000/api/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s

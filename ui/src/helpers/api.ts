@@ -38,7 +38,16 @@ import type {
 
 export type { CreateEnrichmentJobPayload, EnrichmentMode, PatchRecordPayload, RecordStatus };
 
-const API_ROOT = "http://localhost:3000/api/";
+const normalizeApiRoot = (value: string) => value.endsWith("/") ? value : `${value}/`;
+const resolveApiRoot = () => {
+  const configured = import.meta.env.VITE_API_ROOT;
+  if (typeof configured === "string" && configured.trim().length > 0) {
+    return normalizeApiRoot(configured.trim());
+  }
+  return import.meta.env.DEV ? "http://localhost:3000/api/" : "/api/";
+};
+
+const API_ROOT = resolveApiRoot();
 const REQUEST_TIMEOUT_MS = 10000;
 const REQUEST_RETRY_COUNT = 3;
 const REQUEST_RETRY_DELAY_MS = 300;

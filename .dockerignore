@@ -1,5 +1,6 @@
 .git
 .gitmodules
+.github
 node_modules
 ui/node_modules
 npm-debug.log*
@@ -9,3 +10,7 @@ ui/coverage
 dist
 ui/dist
 db.sqlite3
+snapshots
+.env
+.env.*
+db-config.json

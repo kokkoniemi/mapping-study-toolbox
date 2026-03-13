@@ -6,12 +6,14 @@ import { spawnSync } from "node:child_process";
 import { resolveDbConfig } from "../lib/dbConfig";
 
 const env = process.env.NODE_ENV || "development";
+const appDataDir = process.env.APP_DATA_DIR?.trim() || process.cwd();
+const projectRoot = path.resolve(__dirname, "..");
 
 const runMigrations = () => {
-  const { config, sourcePath } = resolveDbConfig({ env });
+  const { config, sourcePath } = resolveDbConfig({ env, cwd: appDataDir });
   const tempDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "mapping-study-toolbox-migrate-"));
   const tempConfigPath = path.join(tempDirectory, "sequelize.config.json");
-  const sequelizeCliEntry = path.resolve(process.cwd(), "node_modules", "sequelize-cli", "lib", "sequelize");
+  const sequelizeCliEntry = path.resolve(projectRoot, "node_modules", "sequelize-cli", "lib", "sequelize");
 
   if (!fs.existsSync(sequelizeCliEntry)) {
     throw new Error(
@@ -38,6 +40,7 @@ const runMigrations = () => {
       {
         stdio: "inherit",
         env: process.env,
+        cwd: projectRoot,
       },
     );
 

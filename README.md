@@ -3,7 +3,7 @@
 This repository is now a monorepo with:
 - `server` side API (Express + Sequelize + sqlite + TypeScript)
 - `ui/` frontend source (Vue 3 + Vite)
-- separated runtime: backend API on `3000`, frontend on `8080`
+- dev split-runtime (`3000` API + `8080` Vite) and single-image runtime (`3000` serves UI + API)
 
 ![Screenshot of the GUI](screenshot.png)
 
@@ -46,6 +46,33 @@ Troubleshooting:
 - If frontend reports missing module imports after adding dependencies, run:
   - `docker compose down -v && docker compose up --build`
 - If API requests fail right after startup, wait for backend healthcheck and refresh once.
+
+## Single-image release
+
+Use this mode when you want a simple install from GHCR and keep data files in the current folder (for example your manuscript repo).
+
+1. Start from your working folder:
+```shell
+docker compose -f docker-compose.release.yml up -d
+```
+
+2. Open the app:
+- UI: http://localhost:3000
+
+3. Update to latest image:
+```shell
+docker compose -f docker-compose.release.yml pull
+docker compose -f docker-compose.release.yml up -d
+```
+
+What gets persisted in the current folder:
+- `db.sqlite3`
+- `snapshots/`
+- `db-config.json` (created on first run when missing)
+
+Notes:
+- The release container auto-runs migrations at startup.
+- You can pin image tag with `MAPPING_TOOL_IMAGE=ghcr.io/<owner>/<repo>:<tag>`.
 
 ## Local (without Docker)
 
@@ -102,8 +129,11 @@ npm run migrate
 
 ## Api and GUI
 
-The backend (`server.ts`) exposes only the API at `http://localhost:3000/api`.
-The frontend runs separately with Vite dev server.
+In dev mode, backend and frontend run separately:
+- backend API at `http://localhost:3000/api`
+- frontend Vite dev server at `http://localhost:8080`
+
+In single-image release mode, backend serves the built UI and API from the same host (`/` + `/api`).
 
 GUI tabs:
 - `Include/exclude literature`: focused classification flow
