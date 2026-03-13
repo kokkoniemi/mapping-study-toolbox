@@ -55,12 +55,6 @@
     </div>
 
     <div class="data-tools__actions">
-      <button type="button" :disabled="!dataItemsLength || enrichmentRunning" @click="emit('select-loaded')">
-        Select loaded
-      </button>
-      <button type="button" :disabled="selectedRecordCount === 0 || enrichmentRunning" @click="emit('clear-selection')">
-        Clear
-      </button>
       <button
         type="button"
         class="data-tools__primary"
@@ -79,7 +73,6 @@ defineProps<{
   enrichmentMode: string;
   enrichmentForceRefresh: boolean;
   enrichmentRunning: boolean;
-  dataItemsLength: number;
   selectedRecordCount: number;
 }>();
 
@@ -87,9 +80,6 @@ const emit = defineEmits<{
   "provider-change": [event: Event];
   "mode-change": [event: Event];
   "force-refresh-change": [event: Event];
-  "select-loaded": [];
-  "clear-selection": [];
   "enrich-selected": [];
 }>();
 </script>
-

@@ -99,10 +99,12 @@
   }
 
   &__panel--export {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(160px, 220px)) minmax(260px, 1fr) auto;
-    align-items: start;
-    gap: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    align-content: flex-start;
+    gap: 10px;
   }
 
   &__group {
@@ -199,11 +201,37 @@
 }
 
 .export-tools {
+  &__section {
+    border: 1px solid #ededed;
+    background: #fff;
+    padding: 10px;
+
+    &--fields {
+      padding: 0;
+      overflow: hidden;
+    }
+  }
+
+  &__section-title {
+    margin: 0;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ui-text-secondary);
+    text-transform: uppercase;
+    line-height: 1.2;
+  }
+
+  &__setup-grid {
+    margin-top: 8px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 240px));
+    gap: 10px 12px;
+  }
+
   &__fields {
     min-width: 0;
-    border: 1px solid #ededed;
     background: #fafafa;
-    padding: 8px;
+    padding: 10px;
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -239,15 +267,17 @@
     min-width: 0;
   }
 
-  &__actions {
-    margin-left: 0;
-    align-self: end;
-    justify-self: end;
+  &__footer {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    border-top: 1px solid #ededed;
+    background: #fff;
+    padding: 8px 10px;
   }
 
   &__error,
   &__message {
-    grid-column: 1 / -1;
     margin: 0;
     font-size: 12px;
   }
@@ -870,14 +900,6 @@
     margin-left: 0;
     width: 100%;
     justify-content: flex-start;
-  }
-
-  .data-tools__panel--export {
-    grid-template-columns: 1fr;
-  }
-
-  .export-tools__actions {
-    justify-self: auto;
   }
 
   .forum-tools__content {

@@ -50,13 +50,10 @@
         :enrichmentMode="enrichmentMode"
         :enrichmentForceRefresh="enrichmentForceRefresh"
         :enrichmentRunning="enrichmentRunning"
-        :dataItemsLength="dataItems.length"
         :selectedRecordCount="selectedRecordCount"
         @provider-change="onProviderChange"
         @mode-change="onModeChange"
         @force-refresh-change="onForceRefreshChange"
-        @select-loaded="selectAllLoadedRecords"
-        @clear-selection="clearSelectedRecords"
         @enrich-selected="enrichSelectedRecords"
       />
 
@@ -68,11 +65,6 @@
         :selectAllMatchingRunning="selectAllMatchingRunning"
         :exportFieldOptions="exportFieldOptions"
         :exportSelectedFields="exportSelectedFields"
-        :dataItemsLength="dataItems.length"
-        :dataTotal="dataTotal"
-        :dataLoading="dataLoading"
-        :selectAllProgressText="selectAllProgressText"
-        :selectedRecordCount="selectedRecordCount"
         :canExportRecords="canExportRecords"
         :exportError="exportError"
         :exportMessage="exportMessage"
@@ -81,9 +73,6 @@
         @select-all-fields="selectAllExportFields"
         @clear-fields="clearExportFields"
         @toggle-field="onExportFieldToggle"
-        @select-loaded="selectAllLoadedRecords"
-        @select-all-matching="selectAllMatchingFilters"
-        @clear-selection="clearSelectedRecords"
         @export="exportRecordsFile"
       />
 
@@ -194,6 +183,11 @@
       :importFilterOptions="importFilterOptions"
       :searchInput="searchInput"
       :dataCellsTruncated="dataCellsTruncated"
+      :selectLoadedDisabled="selectLoadedDisabled"
+      :selectAllMatchingDisabled="selectAllMatchingDisabled"
+      :clearSelectionDisabled="clearSelectionDisabled"
+      :selectAllMatchingRunning="selectAllMatchingRunning"
+      :selectAllProgressText="selectAllProgressText"
       :tableKey="tableKey"
       :tableRows="tableRows"
       :columns="columns"
@@ -219,6 +213,9 @@
       @import-filter-change="onImportFilterChange"
       @search-input="onSearchInput"
       @show-full-text-change="onShowFullTextChange"
+      @select-loaded="selectAllLoadedRecords"
+      @select-all-matching="selectAllMatchingFilters"
+      @clear-selection="clearSelectedRecords"
       @after-change="onAfterChange"
       @after-scroll-vertically="onAfterScrollVertically"
       @after-cell-mouse-down="onAfterOnCellMouseDown"
@@ -520,7 +517,43 @@ const canExportRecords = computed(
 );
 const selectAllProgressText = computed(() => {
   const totalLabel = selectAllProgressTotal.value > 0 ? String(selectAllProgressTotal.value) : "...";
-  return `Loading ${selectAllProgressLoaded.value} / ${totalLabel}`;
+  return `${selectAllProgressLoaded.value}/${totalLabel}`;
+});
+const selectLoadedDisabled = computed(() => {
+  if (dataItems.value.length <= 0 || selectAllMatchingRunning.value) {
+    return true;
+  }
+  if (toolsTab.value === "export") {
+    return exportRunning.value;
+  }
+  if (toolsTab.value === "enrichment") {
+    return enrichmentRunning.value;
+  }
+  return true;
+});
+const selectAllMatchingDisabled = computed(() => {
+  if (dataTotal.value <= 0 || dataLoading.value || selectAllMatchingRunning.value) {
+    return true;
+  }
+  if (toolsTab.value === "export") {
+    return exportRunning.value;
+  }
+  if (toolsTab.value === "enrichment") {
+    return enrichmentRunning.value;
+  }
+  return true;
+});
+const clearSelectionDisabled = computed(() => {
+  if (selectedRecordCount.value === 0 || selectAllMatchingRunning.value) {
+    return true;
+  }
+  if (toolsTab.value === "export") {
+    return exportRunning.value;
+  }
+  if (toolsTab.value === "enrichment") {
+    return enrichmentRunning.value;
+  }
+  return true;
 });
 const selectedForumGroup = computed(
   () => forumGroups.value.find((group) => group.key === selectedForumGroupKey.value) ?? null,
@@ -1192,7 +1225,13 @@ const onExportFormatChange = (event: Event) => {
 };
 
 const selectAllMatchingFilters = async () => {
-  if (selectAllMatchingRunning.value || exportRunning.value || dataTotal.value <= 0) {
+  if (
+    selectAllMatchingRunning.value
+    || exportRunning.value
+    || enrichmentRunning.value
+    || dataLoading.value
+    || dataTotal.value <= 0
+  ) {
     return;
   }
 
@@ -1395,8 +1434,8 @@ const cellMetaFactory: GridSettings["cells"] = (row: number, _col: number, prop:
   const state = store.getCellState(record.id, field);
   const meta: Partial<CellProperties> = {};
 
-  if (isCanonicalEditLocked.value && isResolvedDecisionField(propName)) {
-    meta.readOnly = true;
+  if (isResolvedDecisionField(propName)) {
+    meta.readOnly = isCanonicalEditLocked.value;
   }
 
   if (state.error) {
@@ -2102,6 +2141,7 @@ watch(
 watch(
   () => isCanonicalEditLocked.value,
   (locked) => {
+    dataGridRef.value?.getHotInstance()?.render();
     if (locked) {
       closeMappingEditor();
     }

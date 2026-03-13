@@ -91,7 +91,8 @@ defineExpose({
   min-height: 0;
   width: 100%;
   min-width: 0;
-  border: 1px solid #eaeaea;
+  border: 1px solid #e7e7e9;
+  border-top: 0;
   background: #fff;
   overflow: hidden;
 }
@@ -128,6 +129,20 @@ defineExpose({
 :deep(.handsontable .ht_clone_top thead tr:first-child th:first-child),
 :deep(.handsontable .ht_master thead tr:first-child th:first-child) {
   border-start-start-radius: 0 !important;
+}
+
+/* Prevent double-thick outer frame lines against the shell border. */
+:deep(.handsontable .htCore thead tr:first-child th) {
+  border-top-width: 0 !important;
+}
+
+:deep(.handsontable .htCore tr > th:first-child),
+:deep(.handsontable .htCore tr > td:first-child) {
+  border-left-width: 0 !important;
+}
+
+:deep(.handsontable .htCore tbody tr:last-child td) {
+  border-bottom-width: 0 !important;
 }
 
 :deep(td.data-text-cell) {

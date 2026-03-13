@@ -21,10 +21,18 @@
       :importFilterOptions="importFilterOptions"
       :searchInput="searchInput"
       :showFullText="!dataCellsTruncated"
+      :selectLoadedDisabled="selectLoadedDisabled"
+      :selectAllMatchingDisabled="selectAllMatchingDisabled"
+      :clearSelectionDisabled="clearSelectionDisabled"
+      :selectAllMatchingRunning="selectAllMatchingRunning"
+      :selectAllProgressText="selectAllProgressText"
       @status-filter-change="emit('status-filter-change', $event)"
       @import-filter-change="emit('import-filter-change', $event)"
       @search-input="emit('search-input', $event)"
       @show-full-text-change="emit('show-full-text-change', $event)"
+      @select-loaded="emit('select-loaded')"
+      @select-all-matching="emit('select-all-matching')"
+      @clear-selection="emit('clear-selection')"
     />
 
     <DataGrid
@@ -101,6 +109,11 @@ defineProps<{
   importFilterOptions: Array<{ label: string; value: string }>;
   searchInput: string;
   dataCellsTruncated: boolean;
+  selectLoadedDisabled: boolean;
+  selectAllMatchingDisabled: boolean;
+  clearSelectionDisabled: boolean;
+  selectAllMatchingRunning: boolean;
+  selectAllProgressText: string;
   tableKey: string;
   tableRows: Array<Record<string, unknown>>;
   columns: ColumnSettings[];
@@ -129,6 +142,9 @@ const emit = defineEmits<{
   "import-filter-change": [value: string];
   "search-input": [value: string];
   "show-full-text-change": [value: boolean];
+  "select-loaded": [];
+  "select-all-matching": [];
+  "clear-selection": [];
   "after-change": [changes: CellChange[] | null, source: string | undefined];
   "after-scroll-vertically": [];
   "after-cell-mouse-down": [event: Event, coords: { row: number; col: number }];

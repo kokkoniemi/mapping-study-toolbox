@@ -36,7 +36,7 @@
         type="button"
         class="profile-controls__button profile-controls__button--lock"
         :class="[canonicalEditingUnlocked && 'profile-controls__button--lock-active']"
-        @click="emit('toggle-canonical-editing')"
+        @click="onToggleCanonicalEditing"
       >
         {{ canonicalEditingUnlocked ? "Lock canonical editing" : "Unlock canonical editing" }}
       </button>
@@ -86,7 +86,9 @@ const emit = defineEmits<{
 }>();
 
 const onProfileChange = (event: Event) => {
-  const rawValue = (event.target as HTMLSelectElement).value;
+  const select = event.target as HTMLSelectElement;
+  const rawValue = select.value;
+  select.blur();
   if (rawValue === CANONICAL_VIEW_VALUE) {
     emit("profile-change", null);
     return;
@@ -97,6 +99,11 @@ const onProfileChange = (event: Event) => {
     return;
   }
   emit("profile-change", profileId);
+};
+
+const onToggleCanonicalEditing = (event: MouseEvent) => {
+  emit("toggle-canonical-editing");
+  (event.currentTarget as HTMLButtonElement | null)?.blur();
 };
 </script>
 
