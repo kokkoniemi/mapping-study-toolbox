@@ -49,23 +49,40 @@ Troubleshooting:
 
 ## Single-image release
 
-Use this mode when you want a simple install from GHCR and keep data files in the current folder (for example your manuscript repo).
+Use this mode when you want the simplest install from GHCR without cloning this repository.
 
-1. Start from your working folder:
+1. Move to the folder you wish to use for the mapping:
 ```shell
-docker compose -f docker-compose.release.yml up
+cd /path/to/my-research-project
 ```
 
-2. Open the app:
+2. Download the release compose file as `docker-compose.yml`:
+```shell
+curl -fsSL https://raw.githubusercontent.com/kokkoniemi/mapping-study-toolbox/master/docker-compose.release.yml -o docker-compose.yml
+```
+
+3. Start the app:
+```shell
+docker compose up -d
+```
+
+4. Open the app:
 - UI: http://localhost:3000
 
-3. Update to latest image:
+Daily commands:
 ```shell
-docker compose -f docker-compose.release.yml pull
-docker compose -f docker-compose.release.yml up
+docker compose down # Shuts down the mapping tool
+docker compose pull # Updates the mapping tool
+docker compose up -d # Starts up the mapping tool
 ```
 
-What gets persisted in the current folder:
+If your folder already has a `docker-compose.yml`, use a separate filename:
+```shell
+curl -fsSL https://raw.githubusercontent.com/kokkoniemi/mapping-study-toolbox/master/docker-compose.release.yml -o docker-compose.mapping-tool.yml
+docker compose -f docker-compose.mapping-tool.yml up -d
+```
+
+What gets persisted in your research folder:
 - `db.sqlite3`
 - `snapshots/`
 - `db-config.json` (created on first run when missing)
@@ -73,6 +90,9 @@ What gets persisted in the current folder:
 Notes:
 - The release container auto-runs migrations at startup.
 - You can pin image tag with `MAPPING_TOOL_IMAGE=ghcr.io/<owner>/<repo>:<tag>`.
+- If you want to use OpenAlex for data enrichment, add api key (it's free) to OPENALEX_API_KEY variable in docker-compose.yml. See https://developers.openalex.org/guides/authentication.
+- Requires Docker Compose v2.
+- Port `3000` must be available (or adjust the port mapping in the compose file).
 
 ## Local (without Docker)
 
