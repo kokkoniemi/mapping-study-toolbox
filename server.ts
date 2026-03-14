@@ -57,6 +57,6 @@ export const createApp = () => {
 if (require.main === module) {
   const app = createApp();
   app.listen(PORT, () => {
-    console.log(`The API is running on: http://localhost:${PORT}/api`);
+    console.log(`The server running on: http://localhost:${PORT}`);
   });
 }

@@ -39,12 +39,26 @@ import type {
 export type { CreateEnrichmentJobPayload, EnrichmentMode, PatchRecordPayload, RecordStatus };
 
 const normalizeApiRoot = (value: string) => value.endsWith("/") ? value : `${value}/`;
+const toAbsoluteApiRoot = (value: string) => {
+  const normalized = normalizeApiRoot(value);
+  if (/^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(normalized)) {
+    return normalized;
+  }
+
+  const origin = typeof window !== "undefined" && window.location?.origin
+    ? window.location.origin
+    : "http://localhost";
+  return new URL(normalized, origin).toString();
+};
+
 const resolveApiRoot = () => {
   const configured = import.meta.env.VITE_API_ROOT;
   if (typeof configured === "string" && configured.trim().length > 0) {
-    return normalizeApiRoot(configured.trim());
+    return toAbsoluteApiRoot(configured.trim());
   }
-  return import.meta.env.DEV ? "http://localhost:3000/api/" : "/api/";
+  return import.meta.env.DEV
+    ? toAbsoluteApiRoot("http://localhost:3000/api/")
+    : toAbsoluteApiRoot("/api/");
 };
 
 const API_ROOT = resolveApiRoot();

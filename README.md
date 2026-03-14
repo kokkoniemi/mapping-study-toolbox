@@ -53,7 +53,7 @@ Use this mode when you want a simple install from GHCR and keep data files in th
 
 1. Start from your working folder:
 ```shell
-docker compose -f docker-compose.release.yml up -d
+docker compose -f docker-compose.release.yml up
 ```
 
 2. Open the app:
@@ -62,7 +62,7 @@ docker compose -f docker-compose.release.yml up -d
 3. Update to latest image:
 ```shell
 docker compose -f docker-compose.release.yml pull
-docker compose -f docker-compose.release.yml up -d
+docker compose -f docker-compose.release.yml up
 ```
 
 What gets persisted in the current folder:
