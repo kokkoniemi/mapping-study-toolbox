@@ -1,7 +1,7 @@
 import { defineStore } from "pinia";
 import type { ExportFormat, ExportScope } from "@shared/contracts";
 
-export type DataToolsTab = "enrichment" | "export" | "forums" | "imports" | "compare";
+export type DataToolsTab = "enrichment" | "export" | "forums" | "imports" | "pdfs" | "keywording" | "compare";
 export type ImportViewMode = "history" | "wizard";
 export type ImportWizardStep = 1 | 2 | 3 | 4;
 

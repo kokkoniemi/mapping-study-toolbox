@@ -22,13 +22,21 @@ describe("data tools store", () => {
   it("updates tools tab and export preferences", () => {
     const store = useDataToolsStore();
 
-    store.setToolsTab("export");
+    store.setToolsTab("pdfs");
     store.setExportScope("selected");
     store.setExportFormat("bibtex");
 
-    expect(store.toolsTab).toBe("export");
+    expect(store.toolsTab).toBe("pdfs");
     expect(store.exportScope).toBe("selected");
     expect(store.exportFormat).toBe("bibtex");
+  });
+
+  it("supports keywording tab selection", () => {
+    const store = useDataToolsStore();
+
+    store.setToolsTab("keywording");
+
+    expect(store.toolsTab).toBe("keywording");
   });
 
   it("resets selected records via clear action", () => {

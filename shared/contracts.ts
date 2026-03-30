@@ -16,6 +16,107 @@ export type EnrichmentMode = "missing" | "full";
 export type EnrichmentJobStatus = "queued" | "running" | "cancelling" | "completed" | "failed" | "cancelled";
 export type EnrichmentResultStatus = "enriched" | "skipped" | "failed";
 export type EnrichmentConfidenceLevel = "low" | "medium" | "high";
+export type RecordDocumentUploadStatus = "uploaded" | "deleted";
+export type RecordDocumentExtractionStatus = "pending" | "running" | "completed" | "failed";
+export type KeywordingJobStatus = "queued" | "running" | "cancelling" | "completed" | "failed" | "cancelled";
+export type KeywordingSuggestionDecisionType = "existing-option" | "new-option";
+
+export type RecordDocumentSummary = {
+  id: number;
+  recordId: number;
+  originalFileName: string;
+  storedPath: string;
+  mimeType: string;
+  checksum: string;
+  fileSize: number;
+  uploadStatus: RecordDocumentUploadStatus;
+  extractionStatus: RecordDocumentExtractionStatus;
+  extractedTextPath: string | null;
+  extractionError: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type RecordDocumentsIndexResponse = {
+  count: number;
+  documents: RecordDocumentSummary[];
+};
+
+export type RecordDocumentExtractResponse = {
+  document: RecordDocumentSummary;
+  extractedCharacters: number;
+};
+
+export type KeywordingEvidenceSpan = {
+  id: number;
+  keywordingSuggestionId: number;
+  pageStart: number | null;
+  pageEnd: number | null;
+  sectionName: string | null;
+  excerptText: string;
+  rank: number;
+  score: number | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type KeywordingSuggestion = {
+  id: number;
+  keywordingJobId: number;
+  recordId: number;
+  mappingQuestionId: number;
+  decisionType: KeywordingSuggestionDecisionType;
+  existingOptionId: number | null;
+  proposedOptionLabel: string | null;
+  confidence: number;
+  rationale: string;
+  createdAt: string;
+  updatedAt: string;
+  evidenceSpans: KeywordingEvidenceSpan[];
+};
+
+export type KeywordingRecordIssue = {
+  recordId: number;
+  title: string | null;
+  reason: string;
+};
+
+export type KeywordingJobSummary = {
+  existingSuggestionCount: number;
+  newSuggestionCount: number;
+  lowConfidenceCount: number;
+  skippedRecords: KeywordingRecordIssue[];
+  failedRecords: KeywordingRecordIssue[];
+};
+
+export type KeywordingJobSnapshot = {
+  id: number;
+  jobId: string;
+  status: KeywordingJobStatus;
+  cancelRequested: boolean;
+  total: number;
+  processed: number;
+  recordIds: number[];
+  mappingQuestionIds: number[];
+  reportPath: string | null;
+  reportReady: boolean;
+  createdAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  latestError: string | null;
+  summary: KeywordingJobSummary;
+};
+
+export type KeywordingJobsIndexResponse = {
+  count: number;
+  jobs: KeywordingJobSnapshot[];
+};
+
+export type CreateKeywordingJobPayload = {
+  recordIds: number[];
+  mappingQuestionIds?: number[];
+};
 
 export type EnrichmentFieldProvenance = {
   provider: "crossref" | "openalex" | "jufo";

@@ -37,6 +37,22 @@
         <button
           type="button"
           class="data-tools__tab"
+          :class="{ 'data-tools__tab--active': toolsTab === 'pdfs' }"
+          @click="onPdfsTabOpen"
+        >
+          PDFs
+        </button>
+        <button
+          type="button"
+          class="data-tools__tab"
+          :class="{ 'data-tools__tab--active': toolsTab === 'keywording' }"
+          @click="onKeywordingTabOpen"
+        >
+          Keywording
+        </button>
+        <button
+          type="button"
+          class="data-tools__tab"
           :class="{ 'data-tools__tab--active': toolsTab === 'compare' }"
           @click="onCompareTabOpen"
         >
@@ -145,6 +161,42 @@
         @create-import-file="createImportFile"
         @start-enrichment-for-imported="startEnrichmentForImportedRecords"
         @decline-import-enrichment="declineImportEnrichment"
+      />
+
+      <PdfPanel
+        v-else-if="toolsTab === 'pdfs'"
+        :selectedRecords="selectedRecordsForTools"
+        :selectedRecordCount="selectedRecordCount"
+        :recordDocuments="pdfDocumentsByRecord"
+        :pdfLoading="pdfLoading"
+        :pdfError="pdfError"
+        :pdfMessage="pdfMessage"
+        :uploadingRecordIds="pdfUploadingRecordIds"
+        :extractingDocumentIds="pdfExtractingDocumentIds"
+        :removingDocumentIds="pdfRemovingDocumentIds"
+        @reload="reloadPdfDocuments"
+        @upload="onPdfUpload"
+        @extract="extractPdfDocument"
+        @remove="removePdfDocument"
+      />
+
+      <KeywordingPanel
+        v-else-if="toolsTab === 'keywording'"
+        :selectedRecordCount="selectedRecordCount"
+        :eligibleRecordCount="eligibleKeywordingRecordCount"
+        :mappingQuestions="mappingQuestions"
+        :selectedQuestionIds="keywordingQuestionIds"
+        :canStartKeywording="canStartKeywording"
+        :keywordingStarting="keywordingStarting"
+        :keywordingLoading="keywordingLoading"
+        :keywordingError="keywordingError"
+        :keywordingMessage="keywordingMessage"
+        :keywordingJobs="keywordingJobs"
+        @reload="reloadKeywordingJobs"
+        @toggle-question="toggleKeywordingQuestion"
+        @start="startKeywordingJob"
+        @cancel="cancelKeywordingJobRun"
+        @download="downloadKeywordingReport"
       />
 
       <ComparePanel
@@ -263,6 +315,8 @@ import EnrichmentPanel from "./panels/EnrichmentPanel.vue";
 import ExportPanel from "./panels/ExportPanel.vue";
 import ForumsPanel from "./panels/ForumsPanel.vue";
 import ImportPanel from "./panels/ImportPanel.vue";
+import PdfPanel from "./panels/PdfPanel.vue";
+import KeywordingPanel from "./panels/KeywordingPanel.vue";
 import ComparePanel from "./panels/ComparePanel.vue";
 import { useRecordSelection } from "./composables/useRecordSelection";
 import RecordsGridWorkspace from "./RecordsGridWorkspace.vue";
@@ -271,9 +325,12 @@ import {
   assessments,
   forums,
   imports as importApi,
+  keywording,
   records,
+  type KeywordingJob,
   type MappingOption,
   type RecordItem,
+  type RecordDocumentSummary,
   type RecordStatus,
 } from "../../helpers/api";
 import { getApiErrorMessage } from "../../helpers/errors";
@@ -379,7 +436,7 @@ const { activeProfiles, canEditResolved, isCanonicalEditLocked } = storeToRefs(u
 const dataGridRef = ref<DataGridExpose | null>(null);
 const searchInput = ref(searchFilter.value);
 const isUnmounted = ref(false);
-const showDataGrid = computed(() => toolsTab.value === "enrichment" || toolsTab.value === "export");
+const showDataGrid = computed(() => ["enrichment", "export", "pdfs", "keywording"].includes(toolsTab.value));
 const exportRunning = ref(false);
 const exportError = ref("");
 const exportMessage = ref("");
@@ -434,6 +491,20 @@ const importHistoryTotal = ref(0);
 const importHistoryLoading = ref(false);
 const importDeleteLoadingId = ref<number | null>(null);
 const lastImportResult = ref<{ importId: number; createdRecordIds: number[] } | null>(null);
+const pdfDocumentsByRecord = ref<Record<number, RecordDocumentSummary[]>>({});
+const pdfLoading = ref(false);
+const pdfError = ref("");
+const pdfMessage = ref("");
+const pdfUploadingRecordIds = ref<Record<number, boolean>>({});
+const pdfExtractingDocumentIds = ref<Record<number, boolean>>({});
+const pdfRemovingDocumentIds = ref<Record<number, boolean>>({});
+const keywordingJobs = ref<KeywordingJob[]>([]);
+const keywordingLoading = ref(false);
+const keywordingStarting = ref(false);
+const keywordingError = ref("");
+const keywordingMessage = ref("");
+const keywordingQuestionIds = ref<number[]>([]);
+const keywordingPollTimer = ref<number | null>(null);
 const compareUserIds = ref<number[]>([]);
 const comparePairwise = ref<PairwiseAgreement[]>([]);
 const compareDisagreements = ref<AssessmentDisagreementItem[]>([]);
@@ -604,6 +675,30 @@ const showImportCsvMapping = computed(
 );
 const importedCreatedCount = computed(() => lastImportResult.value?.createdRecordIds.length ?? 0);
 const canPromptImportEnrichment = computed(() => importedCreatedCount.value > 0);
+const selectedRecordsForTools = computed<Array<{ id: number; title: string | null }>>(() => {
+  const recordMap = new Map(dataItems.value.map((record) => [record.id, record]));
+  return [...selectedRecordIds.value]
+    .sort((left, right) => left - right)
+    .map((recordId) => {
+      const record = recordMap.get(recordId);
+      return { id: recordId, title: record?.title ?? null };
+    });
+});
+const eligibleKeywordingRecordCount = computed(() =>
+  selectedRecordsForTools.value.filter((record) =>
+    (pdfDocumentsByRecord.value[record.id] ?? []).some((document) =>
+      document.isActive
+      && document.uploadStatus === "uploaded"
+      && document.extractionStatus === "completed"),
+  ).length,
+);
+const canStartKeywording = computed(
+  () =>
+    !keywordingStarting.value
+    && selectedRecordIds.value.length > 0
+    && eligibleKeywordingRecordCount.value > 0
+    && keywordingQuestionIds.value.length > 0,
+);
 const importFilterValue = computed(() =>
   dataImportFilterId.value === null ? "" : String(dataImportFilterId.value),
 );
@@ -2001,6 +2096,215 @@ const onImportsTabOpen = () => {
   }
 };
 
+const mergeDocumentMap = (recordId: number, documents: RecordDocumentSummary[]) => {
+  pdfDocumentsByRecord.value = {
+    ...pdfDocumentsByRecord.value,
+    [recordId]: documents,
+  };
+};
+
+const loadPdfDocumentsForRecord = async (recordId: number) => {
+  const response = await records.documents.list(recordId);
+  mergeDocumentMap(recordId, response.data.documents);
+};
+
+const loadPdfDocumentsForSelectedRecords = async () => {
+  pdfLoading.value = true;
+  pdfError.value = "";
+  try {
+    const nextEntries = await Promise.all(
+      selectedRecordsForTools.value.map(async (record) => {
+        const response = await records.documents.list(record.id);
+        return [record.id, response.data.documents] as const;
+      }),
+    );
+
+    const nextMap: Record<number, RecordDocumentSummary[]> = {};
+    for (const [recordId, documents] of nextEntries) {
+      nextMap[recordId] = documents;
+    }
+    pdfDocumentsByRecord.value = nextMap;
+  } catch (error) {
+    pdfError.value = getApiErrorMessage(error);
+  } finally {
+    pdfLoading.value = false;
+  }
+};
+
+const reloadPdfDocuments = () => {
+  void loadPdfDocumentsForSelectedRecords();
+};
+
+const onPdfsTabOpen = () => {
+  toolsTab.value = "pdfs";
+  void loadPdfDocumentsForSelectedRecords();
+};
+
+const onPdfUpload = async (recordId: number, event: Event) => {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0] ?? null;
+  if (!file) {
+    return;
+  }
+
+  pdfUploadingRecordIds.value = { ...pdfUploadingRecordIds.value, [recordId]: true };
+  pdfError.value = "";
+  pdfMessage.value = "";
+
+  try {
+    await records.documents.upload(recordId, file);
+    await loadPdfDocumentsForRecord(recordId);
+    pdfMessage.value = `Uploaded PDF for record #${recordId}.`;
+  } catch (error) {
+    pdfError.value = getApiErrorMessage(error);
+  } finally {
+    pdfUploadingRecordIds.value = { ...pdfUploadingRecordIds.value, [recordId]: false };
+    input.value = "";
+  }
+};
+
+const extractPdfDocument = async (recordId: number, documentId: number) => {
+  pdfExtractingDocumentIds.value = { ...pdfExtractingDocumentIds.value, [documentId]: true };
+  pdfError.value = "";
+  pdfMessage.value = "";
+
+  try {
+    const response = await records.documents.extract(recordId, documentId);
+    await loadPdfDocumentsForRecord(recordId);
+    pdfMessage.value = `Extracted ${response.data.extractedCharacters} characters from document #${documentId}.`;
+  } catch (error) {
+    pdfError.value = getApiErrorMessage(error);
+  } finally {
+    pdfExtractingDocumentIds.value = { ...pdfExtractingDocumentIds.value, [documentId]: false };
+  }
+};
+
+const removePdfDocument = async (recordId: number, documentId: number) => {
+  if (!window.confirm(`Remove document #${documentId} from record #${recordId}?`)) {
+    return;
+  }
+
+  pdfRemovingDocumentIds.value = { ...pdfRemovingDocumentIds.value, [documentId]: true };
+  pdfError.value = "";
+  pdfMessage.value = "";
+
+  try {
+    await records.documents.remove(recordId, documentId);
+    await loadPdfDocumentsForRecord(recordId);
+    pdfMessage.value = `Removed document #${documentId}.`;
+  } catch (error) {
+    pdfError.value = getApiErrorMessage(error);
+  } finally {
+    pdfRemovingDocumentIds.value = { ...pdfRemovingDocumentIds.value, [documentId]: false };
+  }
+};
+
+const stopKeywordingPolling = () => {
+  if (keywordingPollTimer.value !== null) {
+    window.clearInterval(keywordingPollTimer.value);
+    keywordingPollTimer.value = null;
+  }
+};
+
+const shouldPollKeywording = () =>
+  keywordingJobs.value.some((job) => job.status === "queued" || job.status === "running" || job.status === "cancelling");
+
+const syncKeywordingPolling = () => {
+  if (toolsTab.value !== "keywording" || !shouldPollKeywording()) {
+    stopKeywordingPolling();
+    return;
+  }
+
+  if (keywordingPollTimer.value !== null) {
+    return;
+  }
+
+  keywordingPollTimer.value = window.setInterval(() => {
+    void loadKeywordingJobs();
+  }, 4000);
+};
+
+const loadKeywordingJobs = async () => {
+  keywordingLoading.value = true;
+  keywordingError.value = "";
+  try {
+    const response = await keywording.index();
+    keywordingJobs.value = response.data.jobs;
+    syncKeywordingPolling();
+  } catch (error) {
+    keywordingError.value = getApiErrorMessage(error);
+    stopKeywordingPolling();
+  } finally {
+    keywordingLoading.value = false;
+  }
+};
+
+const reloadKeywordingJobs = () => {
+  void loadKeywordingJobs();
+};
+
+const onKeywordingTabOpen = () => {
+  toolsTab.value = "keywording";
+  void Promise.all([loadPdfDocumentsForSelectedRecords(), loadKeywordingJobs()]);
+};
+
+const toggleKeywordingQuestion = (questionId: number) => {
+  if (keywordingQuestionIds.value.includes(questionId)) {
+    keywordingQuestionIds.value = keywordingQuestionIds.value.filter((id) => id !== questionId);
+    return;
+  }
+  keywordingQuestionIds.value = [...keywordingQuestionIds.value, questionId].sort((left, right) => left - right);
+};
+
+const startKeywordingJob = async () => {
+  if (!canStartKeywording.value) {
+    return;
+  }
+
+  keywordingStarting.value = true;
+  keywordingError.value = "";
+  keywordingMessage.value = "";
+
+  try {
+    const response = await keywording.create({
+      recordIds: [...selectedRecordIds.value],
+      mappingQuestionIds: [...keywordingQuestionIds.value],
+    });
+    keywordingMessage.value = `Keywording job ${response.data.jobId} started.`;
+    await loadKeywordingJobs();
+  } catch (error) {
+    keywordingError.value = getApiErrorMessage(error);
+  } finally {
+    keywordingStarting.value = false;
+  }
+};
+
+const cancelKeywordingJobRun = async (jobId: string) => {
+  keywordingError.value = "";
+  keywordingMessage.value = "";
+
+  try {
+    await keywording.cancel(jobId);
+    keywordingMessage.value = `Keywording job ${jobId} cancellation requested.`;
+    await loadKeywordingJobs();
+  } catch (error) {
+    keywordingError.value = getApiErrorMessage(error);
+  }
+};
+
+const downloadKeywordingReport = async (jobId: string) => {
+  keywordingError.value = "";
+  keywordingMessage.value = "";
+
+  try {
+    const response = await keywording.downloadReport(jobId);
+    triggerFileDownload(response.blob, response.filename);
+    keywordingMessage.value = `Downloaded ${response.filename}.`;
+  } catch (error) {
+    keywordingError.value = getApiErrorMessage(error);
+  }
+};
+
 const onCompareTabOpen = () => {
   toolsTab.value = "compare";
   if (compareUserIds.value.length === 0) {
@@ -2067,6 +2371,22 @@ watch(
     compareUserIds.value = compareUserIds.value.filter((id) => allowed.has(id));
     if (compareUserIds.value.length === 0 && ids.length >= 2) {
       compareUserIds.value = ids.slice(0, 2);
+    }
+  },
+  { immediate: true },
+);
+
+watch(
+  () => mappingQuestions.value.map((question) => question.id),
+  (questionIds) => {
+    const available = new Set(questionIds);
+    if (keywordingQuestionIds.value.length === 0) {
+      keywordingQuestionIds.value = [...questionIds];
+      return;
+    }
+    keywordingQuestionIds.value = keywordingQuestionIds.value.filter((id) => available.has(id));
+    if (keywordingQuestionIds.value.length === 0) {
+      keywordingQuestionIds.value = [...questionIds];
     }
   },
   { immediate: true },
@@ -2154,6 +2474,20 @@ watch(
     if (value !== "enrichment") {
       closeMappingEditor();
     }
+    if (value !== "keywording") {
+      stopKeywordingPolling();
+    } else {
+      syncKeywordingPolling();
+    }
+  },
+);
+
+watch(
+  () => selectedRecordIds.value.join(","),
+  () => {
+    if (toolsTab.value === "pdfs" || toolsTab.value === "keywording") {
+      void loadPdfDocumentsForSelectedRecords();
+    }
   },
 );
 
@@ -2174,6 +2508,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   isUnmounted.value = true;
+  stopKeywordingPolling();
   window.removeEventListener("resize", updateViewportSize);
   window.removeEventListener("keydown", onWindowKeyDown);
   unmountGridSizing();

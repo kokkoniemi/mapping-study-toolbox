@@ -1,4 +1,5 @@
 import type {
+  CreateKeywordingJobPayload,
   AssessmentCompareResponse as SharedAssessmentCompareResponse,
   AssessmentResolvePayload as SharedAssessmentResolvePayload,
   AssessmentSelection as SharedAssessmentSelection,
@@ -24,6 +25,11 @@ import type {
   ImportPreviewRecord as SharedImportPreviewRecord,
   ImportPreviewResponse as SharedImportPreviewResponse,
   ImportsIndexResponse as SharedImportsIndexResponse,
+  KeywordingJobSnapshot as SharedKeywordingJobSnapshot,
+  KeywordingJobsIndexResponse as SharedKeywordingJobsIndexResponse,
+  RecordDocumentExtractResponse as SharedRecordDocumentExtractResponse,
+  RecordDocumentsIndexResponse as SharedRecordDocumentsIndexResponse,
+  RecordDocumentSummary as SharedRecordDocumentSummary,
   DeleteImportResponse as SharedDeleteImportResponse,
   ForumMergePayload as SharedForumMergePayload,
   ForumMergeResponse as SharedForumMergeResponse,
@@ -218,9 +224,9 @@ const parseFilenameFromDisposition = (disposition: string | null, fallback: stri
 };
 
 const requestFile = async <TBody = unknown>(
-  method: Exclude<HttpMethod, "GET">,
+  method: HttpMethod,
   path: string,
-  data: TBody,
+  data?: TBody,
 ): Promise<FileDownloadResponse> => {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -230,9 +236,9 @@ const requestFile = async <TBody = unknown>(
       method,
       headers: {
         Accept: "*/*",
-        "Content-Type": "application/json",
+        ...(data !== undefined ? { "Content-Type": "application/json" } : {}),
       },
-      body: JSON.stringify(data),
+      ...(data !== undefined ? { body: JSON.stringify(data) } : {}),
       signal: controller.signal,
     });
 
@@ -259,6 +265,35 @@ const requestFile = async <TBody = unknown>(
       contentType,
       status: response.status,
     };
+  } finally {
+    clearTimeout(timeoutId);
+  }
+};
+
+const requestForm = async <TResponse = unknown>(
+  method: Exclude<HttpMethod, "GET">,
+  path: string,
+  data: FormData,
+): Promise<HttpResponse<TResponse>> => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(buildUrl(path), {
+      method,
+      headers: {
+        Accept: "application/json",
+      },
+      body: data,
+      signal: controller.signal,
+    });
+
+    const payload = await parseResponse<TResponse>(response);
+    if (!response.ok) {
+      throw new HttpError(`HTTP ${response.status} for ${method} ${path}`, response.status, payload);
+    }
+
+    return { data: payload, status: response.status };
   } finally {
     clearTimeout(timeoutId);
   }
@@ -406,6 +441,11 @@ export type ImportPreviewResponse = SharedImportPreviewResponse;
 export type ImportCreateResponse = SharedImportCreateResponse;
 export type ImportsIndexResponse = SharedImportsIndexResponse;
 export type DeleteImportResponse = SharedDeleteImportResponse;
+export type RecordDocumentSummary = SharedRecordDocumentSummary;
+export type RecordDocumentsIndexResponse = SharedRecordDocumentsIndexResponse;
+export type RecordDocumentExtractResponse = SharedRecordDocumentExtractResponse;
+export type KeywordingJob = SharedKeywordingJobSnapshot;
+export type KeywordingJobsIndexResponse = SharedKeywordingJobsIndexResponse;
 export type ExportRequestPayload = SharedExportRequestPayload;
 export type UserProfile = SharedUserProfile;
 export type UserProfilesIndexResponse = SharedUserProfilesIndexResponse;
@@ -453,6 +493,25 @@ export const records = {
   patch: (id: number, data: PatchRecordPayload, params?: QueryParams) =>
     http.patch<RecordItem, PatchRecordPayload>(`records/${id}`, data, { params }),
   exportFile: (data: ExportRequestPayload) => requestFile<ExportRequestPayload>("POST", "records/export", data),
+  documents: {
+    list: (recordId: number, params?: QueryParams) =>
+      http.get<RecordDocumentsIndexResponse>(`records/${recordId}/documents`, { params }),
+    get: (recordId: number, documentId: number, params?: QueryParams) =>
+      http.get<RecordDocumentSummary>(`records/${recordId}/documents/${documentId}`, { params }),
+    upload: (recordId: number, file: File) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      return requestForm<RecordDocumentSummary>("POST", `records/${recordId}/documents`, formData);
+    },
+    remove: (recordId: number, documentId: number, params?: QueryParams) =>
+      http.delete<RecordDocumentSummary>(`records/${recordId}/documents/${documentId}`, { params }),
+    extract: (recordId: number, documentId: number, params?: QueryParams) =>
+      http.post<RecordDocumentExtractResponse, Record<string, never>>(
+        `records/${recordId}/documents/${documentId}/extract`,
+        {},
+        { params },
+      ),
+  },
   mappingOptions: {
     save: (id: number, data: SaveMappingOptionPayload, params?: QueryParams) =>
       http.post<MappingOption, SaveMappingOptionPayload>(`records/${id}/mapping-options`, data, {
@@ -469,6 +528,19 @@ export const records = {
     cancelJob: (jobId: string, params?: QueryParams) =>
       http.post<EnrichmentJob, Record<string, never>>(`records/enrichment-jobs/${jobId}/cancel`, {}, { params }),
   },
+};
+
+export const keywording = {
+  index: (params?: QueryParams) =>
+    http.get<KeywordingJobsIndexResponse>("keywording-jobs", { params }),
+  create: (data: CreateKeywordingJobPayload, params?: QueryParams) =>
+    http.post<KeywordingJob, CreateKeywordingJobPayload>("keywording-jobs", data, { params }),
+  get: (jobId: string, params?: QueryParams) =>
+    http.get<KeywordingJob>(`keywording-jobs/${jobId}`, { params }),
+  cancel: (jobId: string, params?: QueryParams) =>
+    http.post<KeywordingJob, Record<string, never>>(`keywording-jobs/${jobId}/cancel`, {}, { params }),
+  downloadReport: (jobId: string) =>
+    requestFile("GET", `keywording-jobs/${jobId}/report`),
 };
 
 export const forums = {

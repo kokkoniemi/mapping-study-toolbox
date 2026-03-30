@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { buildUrl, http, HttpError } from "./api";
+import { buildUrl, http, HttpError, keywording, records } from "./api";
 
 describe("buildUrl", () => {
   it("builds URL and ignores null/undefined params", () => {
@@ -142,5 +142,40 @@ describe("http", () => {
     expect(caught).toMatchObject({
       response: { status: 400, data: { error: "invalid" } },
     });
+  });
+
+  it("uploads form-data without forcing JSON content-type", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(
+        new Response(JSON.stringify({ id: 1, recordId: 5 }), {
+          status: 201,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+
+    await records.documents.upload(5, new File(["%PDF"], "paper.pdf", { type: "application/pdf" }));
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const headers = init.headers as Record<string, string>;
+    expect(init.method).toBe("POST");
+    expect(init.body).toBeInstanceOf(FormData);
+    expect(headers["Content-Type"]).toBeUndefined();
+  });
+
+  it("downloads keywording reports with GET file requests", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(new Blob(["zip"]), {
+        status: 200,
+        headers: {
+          "content-type": "application/zip",
+          "content-disposition": 'attachment; filename="keywording-report.zip"',
+        },
+      }),
+    );
+
+    const response = await keywording.downloadReport("job-1");
+    expect(response.filename).toBe("keywording-report.zip");
+    expect(response.contentType).toContain("application/zip");
   });
 });

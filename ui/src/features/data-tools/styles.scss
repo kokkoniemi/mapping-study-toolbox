@@ -291,6 +291,149 @@
   }
 }
 
+.pdf-tools,
+.keywording-tools {
+  &__header {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: flex-start;
+
+    h4, h5 {
+      margin: 0;
+    }
+
+    p {
+      margin: 4px 0 0;
+      color: var(--ui-text-secondary);
+    }
+  }
+
+  &__meta {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  &__error {
+    color: #b42318;
+    margin: 0;
+  }
+
+  &__message {
+    color: #0f766e;
+    margin: 0;
+  }
+
+  &__empty {
+    color: var(--ui-text-secondary);
+    padding: 10px 0;
+  }
+}
+
+.pdf-tools {
+  &__list,
+  &__documents {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  &__list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  &__item,
+  &__document {
+    border: 1px solid #e5e7eb;
+    padding: 10px;
+    background: #fff;
+  }
+
+  &__item-head,
+  &__document {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    align-items: flex-start;
+  }
+
+  &__status,
+  &__document-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    color: var(--ui-text-secondary);
+  }
+
+  &__upload {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  &__document-actions {
+    display: inline-flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+}
+
+.keywording-tools {
+  &__setup,
+  &__jobs {
+    border: 1px solid #e5e7eb;
+    padding: 12px;
+    background: #fff;
+  }
+
+  &__questions {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 8px 12px;
+    margin: 10px 0 12px;
+  }
+
+  &__question {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  &__job-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  &__job {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    border: 1px solid #e5e7eb;
+    padding: 10px;
+  }
+
+  &__job-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  &__job-actions {
+    display: inline-flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+}
+
 .forum-tools {
   &__top {
     width: 100%;

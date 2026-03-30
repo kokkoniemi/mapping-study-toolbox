@@ -8,6 +8,8 @@ import * as imports from "./imports";
 import * as users from "./users";
 import * as assessments from "./assessments";
 import * as snapshots from "./snapshots";
+import * as recordDocuments from "./recordDocuments";
+import * as keywording from "./keywording";
 
 const router = Router();
 const parsePositiveInteger = (value: string | undefined, fallback: number) => {
@@ -52,12 +54,24 @@ router.get("/records", records.listing);
 router.get("/records/:id", records.get);
 router.patch("/records/:id", records.patch);
 router.put("/records/:id", records.update);
+router.get("/records/:recordId/documents", recordDocuments.listing);
+router.get("/records/:recordId/documents/:documentId", recordDocuments.get);
+router.post("/records/:recordId/documents", recordDocuments.upload);
+router.delete("/records/:recordId/documents/:documentId", recordDocuments.remove);
+router.post("/records/:recordId/documents/:documentId/extract", recordDocuments.extract);
 router.post("/records/export", records.exportRecords);
 router.post("/records/enrichment-jobs", enrichmentRateLimit, records.createEnrichment);
 router.get("/records/enrichment-jobs/:jobId", records.getEnrichment);
 router.post("/records/enrichment-jobs/:jobId/cancel", enrichmentRateLimit, records.cancelEnrichment);
 router.post("/records/:recordId/mapping-options", records.createOption);
 router.delete("/records/:recordId/mapping-options/:mappingOptionId", records.removeOption);
+
+// KEYWORDING
+router.get("/keywording-jobs", keywording.listing);
+router.post("/keywording-jobs", keywording.create);
+router.get("/keywording-jobs/:jobId", keywording.get);
+router.post("/keywording-jobs/:jobId/cancel", keywording.cancel);
+router.get("/keywording-jobs/:jobId/report", keywording.report);
 
 // FORUMS
 router.get("/forums/duplicates", forums.listDuplicates);

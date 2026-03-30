@@ -44,6 +44,8 @@ const defineRecord: ModelFactory<RecordModelStatic> = (sequelize: Sequelize, Dat
     Record.belongsTo(models.Import, { foreignKey: "importId" });
     Record.belongsToMany(models.MappingOption, { through: models.RecordMappingOption });
     Record.hasMany(models.RecordAssessment, { foreignKey: "recordId" });
+    Record.hasMany(models.RecordDocument, { foreignKey: "recordId" });
+    Record.hasMany(models.KeywordingSuggestion, { foreignKey: "recordId" });
   };
 
   /**

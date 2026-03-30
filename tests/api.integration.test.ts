@@ -54,11 +54,29 @@ const importPipelineMock = vi.hoisted(() => ({
   deleteImportWithRecords: vi.fn(),
 }));
 
+const recordDocumentsMock = vi.hoisted(() => ({
+  listRecordDocuments: vi.fn(),
+  getRecordDocument: vi.fn(),
+  uploadRecordDocument: vi.fn(),
+  deleteRecordDocument: vi.fn(),
+  extractRecordDocument: vi.fn(),
+}));
+
+const keywordingMock = vi.hoisted(() => ({
+  createKeywordingJob: vi.fn(),
+  listKeywordingJobs: vi.fn(),
+  getKeywordingJob: vi.fn(),
+  cancelKeywordingJob: vi.fn(),
+  getKeywordingReport: vi.fn(),
+}));
+
 vi.mock("../models", () => ({
   default: dbMock,
 }));
 vi.mock("../lib/recordEnrichment", () => enrichmentMock);
 vi.mock("../lib/importPipeline", () => importPipelineMock);
+vi.mock("../lib/recordDocuments", () => recordDocumentsMock);
+vi.mock("../lib/keywording", () => keywordingMock);
 
 import { createApp } from "../server";
 
@@ -108,6 +126,16 @@ describeWhenSocketAllowed("API integration", () => {
     importPipelineMock.createImportData.mockReset();
     importPipelineMock.listImports.mockReset();
     importPipelineMock.deleteImportWithRecords.mockReset();
+    recordDocumentsMock.listRecordDocuments.mockReset();
+    recordDocumentsMock.getRecordDocument.mockReset();
+    recordDocumentsMock.uploadRecordDocument.mockReset();
+    recordDocumentsMock.deleteRecordDocument.mockReset();
+    recordDocumentsMock.extractRecordDocument.mockReset();
+    keywordingMock.createKeywordingJob.mockReset();
+    keywordingMock.listKeywordingJobs.mockReset();
+    keywordingMock.getKeywordingJob.mockReset();
+    keywordingMock.cancelKeywordingJob.mockReset();
+    keywordingMock.getKeywordingReport.mockReset();
   });
 
   it("GET /api/health returns ok", async () => {
@@ -256,6 +284,50 @@ describeWhenSocketAllowed("API integration", () => {
       status: "queued",
       total: 2,
       processed: 0,
+    });
+  });
+
+  it("POST /api/records/:recordId/documents accepts multipart PDF uploads", async () => {
+    recordDocumentsMock.uploadRecordDocument.mockResolvedValue({
+      id: 7,
+      recordId: 1,
+      originalFileName: "paper.pdf",
+      extractionStatus: "pending",
+    });
+
+    const app = createApp();
+    const response = await request(app)
+      .post("/api/records/1/documents")
+      .attach("file", Buffer.from("%PDF-1.4 test"), { filename: "paper.pdf", contentType: "application/pdf" });
+
+    expect(response.status).toBe(201);
+    expect(recordDocumentsMock.uploadRecordDocument).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({
+        fileName: "paper.pdf",
+        contentType: "application/pdf",
+      }),
+    );
+    expect(response.body).toMatchObject({
+      id: 7,
+      recordId: 1,
+      originalFileName: "paper.pdf",
+    });
+  });
+
+  it("GET /api/records/:recordId/documents returns contract shape", async () => {
+    recordDocumentsMock.listRecordDocuments.mockResolvedValue({
+      count: 1,
+      documents: [{ id: 3, recordId: 1 }],
+    });
+
+    const app = createApp();
+    const response = await request(app).get("/api/records/1/documents");
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      count: 1,
+      documents: [{ id: 3, recordId: 1 }],
     });
   });
 
@@ -471,6 +543,61 @@ describeWhenSocketAllowed("API integration", () => {
       deletedImport: true,
       deletedRecords: 7,
     });
+  });
+
+  it("POST /api/keywording-jobs creates a keywording job", async () => {
+    keywordingMock.createKeywordingJob.mockResolvedValue({
+      id: 1,
+      jobId: "kw-1",
+      status: "queued",
+      cancelRequested: false,
+      total: 2,
+      processed: 0,
+      recordIds: [1, 2],
+      mappingQuestionIds: [5],
+      reportPath: null,
+      reportReady: false,
+      createdAt: "2026-03-30T00:00:00.000Z",
+      startedAt: null,
+      finishedAt: null,
+      latestError: null,
+      summary: {
+        existingSuggestionCount: 0,
+        newSuggestionCount: 0,
+        lowConfidenceCount: 0,
+        skippedRecords: [],
+        failedRecords: [],
+      },
+    });
+
+    const app = createApp();
+    const response = await request(app).post("/api/keywording-jobs").send({
+      recordIds: [1, 2],
+      mappingQuestionIds: [5],
+    });
+
+    expect(response.status).toBe(202);
+    expect(response.body).toMatchObject({
+      jobId: "kw-1",
+      status: "queued",
+      total: 2,
+      processed: 0,
+    });
+  });
+
+  it("GET /api/keywording-jobs/:jobId/report returns a zip attachment", async () => {
+    keywordingMock.getKeywordingReport.mockResolvedValue({
+      fileName: "keywording-report-kw-1.zip",
+      contentType: "application/zip",
+      content: Buffer.from("zip"),
+    });
+
+    const app = createApp();
+    const response = await request(app).get("/api/keywording-jobs/kw-1/report");
+
+    expect(response.status).toBe(200);
+    expect(response.headers["content-type"]).toContain("application/zip");
+    expect(response.headers["content-disposition"]).toContain("keywording-report-kw-1.zip");
   });
 
   it("GET /api/records/enrichment-jobs/:id returns created job", async () => {

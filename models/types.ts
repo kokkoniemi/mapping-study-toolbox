@@ -1,6 +1,14 @@
 import type { Model, ModelStatic, Sequelize } from "sequelize";
 import type * as SequelizeModule from "sequelize";
-import type { EnrichmentProvenanceMap, RecordStatus } from "../shared/contracts";
+import type {
+  EnrichmentProvenanceMap,
+  KeywordingJobSummary,
+  KeywordingJobStatus,
+  KeywordingSuggestionDecisionType,
+  RecordDocumentExtractionStatus,
+  RecordDocumentUploadStatus,
+  RecordStatus,
+} from "../shared/contracts";
 
 export type DataTypesInstance = typeof import("sequelize").DataTypes;
 
@@ -160,6 +168,27 @@ export type RecordModelStatic = AssociableModel<RecordModel> & {
   getAllByUrls: (searchUrls: string[]) => Promise<RecordModel[]>;
 };
 
+export interface RecordDocumentAttributes {
+  id: number;
+  recordId: number;
+  originalFileName: string;
+  storedPath: string;
+  mimeType: string;
+  checksum: string;
+  fileSize: number;
+  uploadStatus: RecordDocumentUploadStatus;
+  extractionStatus: RecordDocumentExtractionStatus;
+  extractedTextPath: string | null;
+  extractionError: string | null;
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export type RecordDocumentCreationAttributes = Partial<RecordDocumentAttributes>;
+export type RecordDocumentModel = BaseModel<RecordDocumentAttributes, RecordDocumentCreationAttributes>;
+export type RecordDocumentModelStatic = AssociableModel<RecordDocumentModel>;
+
 export interface ImportAttributes {
   id: number;
   database: string | null;
@@ -224,8 +253,72 @@ export type RecordAssessmentOptionModel = BaseModel<
 >;
 export type RecordAssessmentOptionModelStatic = AssociableModel<RecordAssessmentOptionModel>;
 
+export interface KeywordingJobAttributes {
+  id: number;
+  jobId: string;
+  status: KeywordingJobStatus;
+  cancelRequested: boolean;
+  recordIds: number[];
+  mappingQuestionIds: number[];
+  total: number;
+  processed: number;
+  summary: KeywordingJobSummary | null;
+  reportPath: string | null;
+  latestError: string | null;
+  startedAt: Date | null;
+  finishedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export type KeywordingJobCreationAttributes = Partial<KeywordingJobAttributes>;
+export type KeywordingJobModel = BaseModel<KeywordingJobAttributes, KeywordingJobCreationAttributes>;
+export type KeywordingJobModelStatic = AssociableModel<KeywordingJobModel>;
+
+export interface KeywordingSuggestionAttributes {
+  id: number;
+  keywordingJobId: number;
+  recordId: number;
+  mappingQuestionId: number;
+  decisionType: KeywordingSuggestionDecisionType;
+  existingOptionId: number | null;
+  proposedOptionLabel: string | null;
+  confidence: number;
+  rationale: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export type KeywordingSuggestionCreationAttributes = Partial<KeywordingSuggestionAttributes>;
+export type KeywordingSuggestionModel = BaseModel<
+  KeywordingSuggestionAttributes,
+  KeywordingSuggestionCreationAttributes
+>;
+export type KeywordingSuggestionModelStatic = AssociableModel<KeywordingSuggestionModel>;
+
+export interface KeywordingEvidenceSpanAttributes {
+  id: number;
+  keywordingSuggestionId: number;
+  pageStart: number | null;
+  pageEnd: number | null;
+  sectionName: string | null;
+  excerptText: string;
+  rank: number;
+  score: number | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export type KeywordingEvidenceSpanCreationAttributes = Partial<KeywordingEvidenceSpanAttributes>;
+export type KeywordingEvidenceSpanModel = BaseModel<
+  KeywordingEvidenceSpanAttributes,
+  KeywordingEvidenceSpanCreationAttributes
+>;
+export type KeywordingEvidenceSpanModelStatic = AssociableModel<KeywordingEvidenceSpanModel>;
+
 export interface DbModels {
   Record: RecordModelStatic;
+  RecordDocument: RecordDocumentModelStatic;
   Forum: ForumModelStatic;
   MappingQuestion: MappingQuestionModelStatic;
   MappingOption: MappingOptionModelStatic;
@@ -234,6 +327,9 @@ export interface DbModels {
   UserProfile: UserProfileModelStatic;
   RecordAssessment: RecordAssessmentModelStatic;
   RecordAssessmentOption: RecordAssessmentOptionModelStatic;
+  KeywordingJob: KeywordingJobModelStatic;
+  KeywordingSuggestion: KeywordingSuggestionModelStatic;
+  KeywordingEvidenceSpan: KeywordingEvidenceSpanModelStatic;
   sequelize: Sequelize;
   Sequelize: typeof SequelizeModule;
 }
