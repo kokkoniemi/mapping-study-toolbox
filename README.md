@@ -27,11 +27,16 @@ When `package-lock.json` (backend or `ui/`) changes, dependencies are automatica
 This starts:
 - backend (auto-migrates sqlite and hot-reloads on backend file changes)
 - frontend Vite dev server (hot-reloads on UI changes)
+- Python keywording worker on `:8001`
+- GROBID service on `:8070`
 - backend DB config comes from `db-config.json` when present, otherwise defaults are used
+- worker image includes `PyMuPDF`, `pdftoppm`, `tesseract`, and OpenAI/GROBID integration for PDF evidence extraction + taxonomy audit runs
 
 Open:
 - UI (dev/HMR): http://localhost:8080
 - API: http://localhost:3000/api
+- Keywording worker health: http://localhost:8001/health
+- GROBID: http://localhost:8070
 - sqlite DB file (default): `./db.sqlite3`
 
 Useful commands:
@@ -49,7 +54,7 @@ Troubleshooting:
 
 ## Single-image release
 
-Use this mode when you want the simplest install from GHCR without cloning this repository.
+Use this mode when you want the backend app image from GHCR plus the local worker/GROBID sidecars defined in the release compose file.
 
 1. Move to the folder you wish to use for the mapping:
 ```shell
@@ -91,6 +96,7 @@ Notes:
 - The release container auto-runs migrations at startup.
 - You can pin image tag with `MAPPING_TOOL_IMAGE=ghcr.io/<owner>/<repo>:<tag>`.
 - If you want to use OpenAlex for data enrichment, add api key (it's free) to OPENALEX_API_KEY variable in docker-compose.yml. See https://developers.openalex.org/guides/authentication.
+- For GPT-backed taxonomy audit runs, set `OPENAI_API_KEY` and optionally `OPENAI_MODEL` (default `gpt-5.4`) in the compose file or shell environment before `docker compose up`.
 - Requires Docker Compose v2.
 - Port `3000` must be available (or adjust the port mapping in the compose file).
 
@@ -100,6 +106,10 @@ Notes:
 - node.js v24 LTS or above (you can use [nvm](https://github.com/nvm-sh/nvm))
 - npm
 - sqlite3
+- Python 3.12+
+- `pdftoppm` / `pdftotext` (Poppler) if you want PDF evidence extraction outside Docker
+- `tesseract` with English language data if you want OCR fallback outside Docker
+- a reachable GROBID service if you want scholarly section parsing outside Docker
 
 If you use nvm:
 ```shell
@@ -128,6 +138,14 @@ npm run migrate
 ```shell
 npm start
 npm run ui:dev
+```
+
+To run the keywording worker locally too:
+```shell
+python3 -m venv .venv
+. .venv/bin/activate
+pip install -r worker/requirements.txt
+uvicorn worker.app:app --host 0.0.0.0 --port 8001
 ```
 
 ### Quality checks (recommended before commit)

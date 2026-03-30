@@ -2,8 +2,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { createHash } from "node:crypto";
 
+import { Op } from "sequelize";
+
 import db from "../models";
-import type { RecordDocumentModel } from "../models/types";
+import type { DocumentChunkCreationAttributes, RecordDocumentModel } from "../models/types";
 import type {
   RecordDocumentExtractResponse,
   RecordDocumentSummary,
@@ -12,11 +14,12 @@ import type {
 import { badRequest, notFound } from "./http";
 import type { ParsedMultipartFile } from "./multipart";
 import {
+  getAppDataDir,
   getPdfStorageDir,
-  getPdfTextStorageDir,
   toAbsoluteStoragePath,
   toRelativeStoragePath,
 } from "./storagePaths";
+import { requestWorkerExtraction } from "./workerClient";
 
 const MAX_PDF_BYTES = Number.parseInt(process.env.RECORD_DOCUMENT_MAX_BYTES ?? "", 10) || 20_000_000;
 
@@ -40,6 +43,8 @@ const toIso = (value: Date | string | null | undefined) => {
   return value instanceof Date ? value.toISOString() : String(value);
 };
 
+const toWarningList = (value: string[] | null | undefined) => Array.isArray(value) ? value : [];
+
 const toDocumentSummary = (document: RecordDocumentModel): RecordDocumentSummary => ({
   id: document.id,
   recordId: document.recordId,
@@ -50,8 +55,21 @@ const toDocumentSummary = (document: RecordDocumentModel): RecordDocumentSummary
   fileSize: document.fileSize,
   uploadStatus: document.uploadStatus,
   extractionStatus: document.extractionStatus,
+  sourceType: document.sourceType,
+  pageCount: document.pageCount,
+  extractorKind: document.extractorKind,
+  extractorVersion: document.extractorVersion,
   extractedTextPath: document.extractedTextPath,
+  structuredDocumentPath: document.structuredDocumentPath,
+  chunkManifestPath: document.chunkManifestPath,
   extractionError: document.extractionError,
+  qualityStatus: document.qualityStatus,
+  qualityScore: document.qualityScore,
+  printableTextRatio: document.printableTextRatio,
+  weirdCharacterRatio: document.weirdCharacterRatio,
+  ocrUsed: Boolean(document.ocrUsed),
+  ocrConfidence: document.ocrConfidence,
+  extractionWarnings: toWarningList(document.extractionWarnings),
   isActive: Boolean(document.isActive),
   createdAt: toIso(document.createdAt),
   updatedAt: toIso(document.updatedAt),
@@ -60,32 +78,38 @@ const toDocumentSummary = (document: RecordDocumentModel): RecordDocumentSummary
 const safeBaseName = (value: string) =>
   value.replace(/[^a-z0-9._-]+/gi, "-").replace(/-+/g, "-").replace(/^-|-$/g, "") || "document";
 
-const extractTextFromPdf = (buffer: Buffer) => {
-  const utf8 = buffer.toString("utf8");
-  const literalMatches = [...utf8.matchAll(/\(([^()]{4,500})\)/g)].map((match) => match[1]);
-  const candidate = literalMatches.length > 0 ? literalMatches.join("\n") : utf8;
-  const normalized = candidate
-    .replace(/\0/g, " ")
-    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+const getStoredDocumentPath = (relativePath: string | null | undefined) =>
+  relativePath ? toAbsoluteStoragePath(relativePath) : null;
 
-  if (normalized.length < 20) {
-    throw new Error("Unable to extract meaningful text from PDF");
+const deleteIfPresent = (relativePath: string | null | undefined) => {
+  const absolutePath = getStoredDocumentPath(relativePath);
+  if (!absolutePath) {
+    return;
   }
 
-  return normalized;
+  try {
+    fs.rmSync(absolutePath, { force: true });
+  } catch {
+    // Ignore missing artifacts so metadata cleanup still completes.
+  }
 };
 
-const writeExtractedText = (recordId: number, documentId: number, text: string) => {
-  const recordDir = path.join(getPdfTextStorageDir(), `record-${recordId}`);
-  fs.mkdirSync(recordDir, { recursive: true });
-  const outputPath = path.join(recordDir, `document-${documentId}.txt`);
-  fs.writeFileSync(outputPath, `${text}\n`, "utf8");
-  return toRelativeStoragePath(outputPath);
-};
-
-const getStoredDocumentPath = (relativePath: string) => toAbsoluteStoragePath(relativePath);
+const normalizeChunkRows = (recordDocumentId: number, chunks: Awaited<ReturnType<typeof requestWorkerExtraction>>["chunks"]) =>
+  chunks.map<DocumentChunkCreationAttributes>((chunk) => ({
+    recordDocumentId,
+    chunkKey: chunk.chunkKey,
+    chunkIndex: chunk.chunkIndex,
+    pageStart: chunk.pageStart,
+    pageEnd: chunk.pageEnd,
+    sectionName: chunk.sectionName,
+    headingPath: chunk.headingPath,
+    text: chunk.text,
+    charCount: chunk.charCount,
+    tokenCount: chunk.tokenCount,
+    embeddingReference: chunk.embeddingReference,
+    qualityScore: chunk.qualityScore,
+    qualityFlags: chunk.qualityFlags,
+  }));
 
 export const listRecordDocuments = async (recordId: number): Promise<RecordDocumentsIndexResponse> => {
   await ensureRecordExists(recordId);
@@ -154,8 +178,21 @@ export const uploadRecordDocument = async (
     fileSize: file.data.length,
     uploadStatus: "uploaded",
     extractionStatus: "pending",
+    sourceType: "unknown",
+    pageCount: null,
+    extractorKind: null,
+    extractorVersion: null,
     extractedTextPath: null,
+    structuredDocumentPath: null,
+    chunkManifestPath: null,
     extractionError: null,
+    qualityStatus: "pending",
+    qualityScore: null,
+    printableTextRatio: null,
+    weirdCharacterRatio: null,
+    ocrUsed: false,
+    ocrConfidence: null,
+    extractionWarnings: [],
     isActive: true,
   });
 
@@ -173,19 +210,10 @@ export const deleteRecordDocument = async (recordId: number, documentId: number)
   document.isActive = false;
   await document.save();
 
-  try {
-    fs.rmSync(getStoredDocumentPath(document.storedPath), { force: true });
-  } catch {
-    // Ignore missing files so metadata can still be updated.
-  }
-
-  if (document.extractedTextPath) {
-    try {
-      fs.rmSync(getStoredDocumentPath(document.extractedTextPath), { force: true });
-    } catch {
-      // Ignore missing text artifacts.
-    }
-  }
+  deleteIfPresent(document.storedPath);
+  deleteIfPresent(document.extractedTextPath);
+  deleteIfPresent(document.structuredDocumentPath);
+  deleteIfPresent(document.chunkManifestPath);
 
   const replacement = await db.RecordDocument.findOne({
     where: {
@@ -220,22 +248,53 @@ export const extractRecordDocument = async (
   await document.save();
 
   try {
-    const content = fs.readFileSync(getStoredDocumentPath(document.storedPath));
-    const extractedText = extractTextFromPdf(content);
-    const extractedTextPath = writeExtractedText(recordId, documentId, extractedText);
+    const result = await requestWorkerExtraction({
+      recordId,
+      documentId,
+      absolutePdfPath: toAbsoluteStoragePath(document.storedPath),
+      appDataDir: getAppDataDir(),
+      relativePdfPath: document.storedPath,
+    });
 
-    document.extractionStatus = "completed";
-    document.extractedTextPath = extractedTextPath;
-    document.extractionError = null;
+    await db.DocumentChunk.destroy({ where: { recordDocumentId: document.id } });
+    if (result.chunks.length > 0) {
+      await db.DocumentChunk.bulkCreate(normalizeChunkRows(document.id, result.chunks));
+    }
+
+    document.extractionStatus =
+      result.qualityStatus === "passed"
+        ? "completed"
+        : result.qualityStatus === "needs_review"
+          ? "needs_review"
+          : "failed";
+    document.sourceType = result.sourceType;
+    document.pageCount = result.pageCount;
+    document.extractorKind = result.extractorKind;
+    document.extractorVersion = result.extractorVersion;
+    document.extractedTextPath = result.extractedTextPath;
+    document.structuredDocumentPath = result.structuredDocumentPath;
+    document.chunkManifestPath = result.chunkManifestPath;
+    document.extractionError = result.qualityStatus === "failed"
+      ? (result.warnings[0] ?? "Document extraction failed quality checks")
+      : null;
+    document.qualityStatus = result.qualityStatus;
+    document.qualityScore = result.qualityScore;
+    document.printableTextRatio = result.printableTextRatio;
+    document.weirdCharacterRatio = result.weirdCharacterRatio;
+    document.ocrUsed = result.ocrUsed;
+    document.ocrConfidence = result.ocrConfidence;
+    document.extractionWarnings = result.warnings;
     await document.save();
 
     return {
       document: toDocumentSummary(document),
-      extractedCharacters: extractedText.length,
+      extractedCharacters: result.extractedCharacters,
+      chunkCount: result.chunks.length,
     };
   } catch (error) {
     document.extractionStatus = "failed";
     document.extractionError = error instanceof Error ? error.message : String(error);
+    document.qualityStatus = "failed";
     await document.save();
     throw badRequest(`text extraction failed: ${document.extractionError}`);
   }
@@ -247,10 +306,10 @@ export const getActiveExtractedDocumentForRecord = async (recordId: number) =>
       recordId,
       isActive: true,
       uploadStatus: "uploaded",
-      extractionStatus: "completed",
+      extractionStatus: { [Op.in]: ["completed", "needs_review"] },
     },
     order: [["createdAt", "DESC"], ["id", "DESC"]],
   });
 
 export const readExtractedDocumentText = (relativePath: string) =>
-  fs.readFileSync(getStoredDocumentPath(relativePath), "utf8");
+  fs.readFileSync(toAbsoluteStoragePath(relativePath), "utf8");

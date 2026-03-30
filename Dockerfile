@@ -23,6 +23,10 @@ ENV UI_DIST_DIR=/app/ui/dist
 
 WORKDIR /app
 
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends poppler-utils \
+  && rm -rf /var/lib/apt/lists/*
+
 COPY --from=build /app /app
 
 RUN chmod +x /app/docker/release-entrypoint.sh

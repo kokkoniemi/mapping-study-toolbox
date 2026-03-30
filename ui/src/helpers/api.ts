@@ -1,4 +1,5 @@
 import type {
+  CreateMappingQuestionPayload as SharedCreateMappingQuestionPayload,
   CreateKeywordingJobPayload,
   AssessmentCompareResponse as SharedAssessmentCompareResponse,
   AssessmentResolvePayload as SharedAssessmentResolvePayload,
@@ -14,6 +15,7 @@ import type {
   CreateEnrichmentJobPayload,
   CreateUserProfilePayload as SharedCreateUserProfilePayload,
   UpdateUserProfilePayload as SharedUpdateUserProfilePayload,
+  UpdateMappingQuestionPayload as SharedUpdateMappingQuestionPayload,
   UpsertAssessmentSelectionPayload as SharedUpsertAssessmentSelectionPayload,
   EnrichmentMode,
   EnrichmentJobSnapshot,
@@ -335,6 +337,12 @@ export interface MappingQuestion {
   title: string;
   type: string;
   position: number;
+  description: string | null;
+  decisionGuidance: string | null;
+  positiveExamples: string[];
+  negativeExamples: string[];
+  evidenceInstructions: string | null;
+  allowNewOption: boolean;
   MappingOptions?: MappingOption[];
   [key: string]: unknown;
 }
@@ -471,12 +479,18 @@ type SaveMappingOptionPayload = {
 };
 
 type SaveQuestionPayload = {
-  title: string;
-  type: string;
-  position: number;
+  title: SharedCreateMappingQuestionPayload["title"];
+  type: SharedCreateMappingQuestionPayload["type"];
+  position: SharedCreateMappingQuestionPayload["position"];
+  description: SharedCreateMappingQuestionPayload["description"];
+  decisionGuidance: SharedCreateMappingQuestionPayload["decisionGuidance"];
+  positiveExamples: SharedCreateMappingQuestionPayload["positiveExamples"];
+  negativeExamples: SharedCreateMappingQuestionPayload["negativeExamples"];
+  evidenceInstructions: SharedCreateMappingQuestionPayload["evidenceInstructions"];
+  allowNewOption: SharedCreateMappingQuestionPayload["allowNewOption"];
 };
 
-type UpdateQuestionPayload = Partial<SaveQuestionPayload>;
+type UpdateQuestionPayload = SharedUpdateMappingQuestionPayload;
 type SaveQuestionOptionPayload = {
   title: string;
   position: number;

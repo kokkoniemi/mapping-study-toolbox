@@ -17,9 +17,26 @@ export type EnrichmentJobStatus = "queued" | "running" | "cancelling" | "complet
 export type EnrichmentResultStatus = "enriched" | "skipped" | "failed";
 export type EnrichmentConfidenceLevel = "low" | "medium" | "high";
 export type RecordDocumentUploadStatus = "uploaded" | "deleted";
-export type RecordDocumentExtractionStatus = "pending" | "running" | "completed" | "failed";
+export type RecordDocumentExtractionStatus = "pending" | "queued" | "running" | "completed" | "failed" | "needs_review";
+export type RecordDocumentSourceType = "unknown" | "text-pdf" | "scanned-pdf" | "mixed";
+export type RecordDocumentQualityStatus = "pending" | "passed" | "needs_review" | "failed";
 export type KeywordingJobStatus = "queued" | "running" | "cancelling" | "completed" | "failed" | "cancelled";
 export type KeywordingSuggestionDecisionType = "existing-option" | "new-option";
+export type KeywordingActionType =
+  | "reuse_existing"
+  | "create_new"
+  | "split_existing"
+  | "merge_existing"
+  | "abstain";
+
+export type MappingQuestionGuidanceFields = {
+  description: string | null;
+  decisionGuidance: string | null;
+  positiveExamples: string[];
+  negativeExamples: string[];
+  evidenceInstructions: string | null;
+  allowNewOption: boolean;
+};
 
 export type RecordDocumentSummary = {
   id: number;
@@ -31,8 +48,21 @@ export type RecordDocumentSummary = {
   fileSize: number;
   uploadStatus: RecordDocumentUploadStatus;
   extractionStatus: RecordDocumentExtractionStatus;
+  sourceType: RecordDocumentSourceType;
+  pageCount: number | null;
+  extractorKind: string | null;
+  extractorVersion: string | null;
   extractedTextPath: string | null;
+  structuredDocumentPath: string | null;
+  chunkManifestPath: string | null;
   extractionError: string | null;
+  qualityStatus: RecordDocumentQualityStatus;
+  qualityScore: number | null;
+  printableTextRatio: number | null;
+  weirdCharacterRatio: number | null;
+  ocrUsed: boolean;
+  ocrConfidence: number | null;
+  extractionWarnings: string[];
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -46,14 +76,19 @@ export type RecordDocumentsIndexResponse = {
 export type RecordDocumentExtractResponse = {
   document: RecordDocumentSummary;
   extractedCharacters: number;
+  chunkCount: number;
 };
 
 export type KeywordingEvidenceSpan = {
   id: number;
   keywordingSuggestionId: number;
+  recordDocumentId: number | null;
+  documentChunkId: number | null;
+  chunkKey: string | null;
   pageStart: number | null;
   pageEnd: number | null;
   sectionName: string | null;
+  headingPath: string[];
   excerptText: string;
   rank: number;
   score: number | null;
@@ -66,11 +101,13 @@ export type KeywordingSuggestion = {
   keywordingJobId: number;
   recordId: number;
   mappingQuestionId: number;
+  actionType: KeywordingActionType;
   decisionType: KeywordingSuggestionDecisionType;
   existingOptionId: number | null;
   proposedOptionLabel: string | null;
   confidence: number;
   rationale: string;
+  reviewerNote: string | null;
   createdAt: string;
   updatedAt: string;
   evidenceSpans: KeywordingEvidenceSpan[];
@@ -86,6 +123,10 @@ export type KeywordingJobSummary = {
   existingSuggestionCount: number;
   newSuggestionCount: number;
   lowConfidenceCount: number;
+  clusterDecisionCount: number;
+  manualReviewCount: number;
+  qualityFailedRecordCount: number;
+  actionCounts: Record<KeywordingActionType, number>;
   skippedRecords: KeywordingRecordIssue[];
   failedRecords: KeywordingRecordIssue[];
 };
@@ -117,6 +158,14 @@ export type CreateKeywordingJobPayload = {
   recordIds: number[];
   mappingQuestionIds?: number[];
 };
+
+export type CreateMappingQuestionPayload = {
+  title: string;
+  type: string;
+  position: number;
+} & MappingQuestionGuidanceFields;
+
+export type UpdateMappingQuestionPayload = Partial<CreateMappingQuestionPayload>;
 
 export type EnrichmentFieldProvenance = {
   provider: "crossref" | "openalex" | "jufo";

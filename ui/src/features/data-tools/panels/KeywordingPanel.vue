@@ -42,9 +42,10 @@
             <strong>{{ job.jobId }}</strong>
             <span>{{ job.status }} / {{ job.processed }} of {{ job.total }}</span>
             <span>
-              existing {{ job.summary.existingSuggestionCount }},
-              new {{ job.summary.newSuggestionCount }},
-              skipped {{ job.summary.skippedRecords.length }}
+              reuse {{ job.summary.actionCounts.reuse_existing }},
+              create {{ job.summary.actionCounts.create_new }},
+              split/merge {{ job.summary.actionCounts.split_existing + job.summary.actionCounts.merge_existing }},
+              review {{ job.summary.manualReviewCount }}
             </span>
           </div>
           <div class="keywording-tools__job-actions">

@@ -70,7 +70,17 @@ describe("routes/mappingQuestions", () => {
     dbMock.MappingQuestion.create.mockResolvedValue({ id: 2, title: "Quality" });
 
     const req = {
-      body: { title: "Quality", type: "multiSelect", position: 0 },
+      body: {
+        title: "Quality",
+        type: "multiSelect",
+        position: 0,
+        description: "Longer guidance",
+        decisionGuidance: "Only code explicit evidence.",
+        positiveExamples: ["Collaborative learning intervention"],
+        negativeExamples: ["A passing mention in related work"],
+        evidenceInstructions: "Quote the exact page excerpt.",
+        allowNewOption: true,
+      },
     } as unknown as Request;
     const res = mockResponse();
 
@@ -80,6 +90,12 @@ describe("routes/mappingQuestions", () => {
       title: "Quality",
       type: "multiSelect",
       position: 0,
+      description: "Longer guidance",
+      decisionGuidance: "Only code explicit evidence.",
+      positiveExamples: ["Collaborative learning intervention"],
+      negativeExamples: ["A passing mention in related work"],
+      evidenceInstructions: "Quote the exact page excerpt.",
+      allowNewOption: true,
     });
     expect(res.send).toHaveBeenCalledWith({ id: 2, title: "Quality" });
   });

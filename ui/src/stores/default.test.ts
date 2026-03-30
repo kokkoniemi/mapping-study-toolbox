@@ -54,6 +54,12 @@ const makeQuestion = (overrides: Partial<MappingQuestion> = {}): MappingQuestion
   title: "Question",
   type: "multiSelect",
   position: 0,
+  description: "",
+  decisionGuidance: "",
+  positiveExamples: [],
+  negativeExamples: [],
+  evidenceInstructions: "",
+  allowNewOption: true,
   MappingOptions: [],
   ...overrides,
 });
@@ -433,6 +439,12 @@ describe("defaultStore", () => {
       title: "",
       type: "multiSelect",
       position: 1,
+      description: "",
+      decisionGuidance: "",
+      positiveExamples: [],
+      negativeExamples: [],
+      evidenceInstructions: "",
+      allowNewOption: true,
     });
     expect(store.mappingQuestions).toHaveLength(2);
     expect(store.mappingQuestions[1]?.MappingOptions).toEqual([]);

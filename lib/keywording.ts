@@ -1,48 +1,49 @@
 import fs from "node:fs";
-import path from "node:path";
 import { randomUUID } from "node:crypto";
 
 import db from "../models";
 import type {
-  KeywordingEvidenceSpanModel,
   KeywordingJobModel,
-  KeywordingSuggestionModel,
   MappingOptionModel,
   MappingQuestionModel,
+  RecordDocumentModel,
   RecordModel,
 } from "../models/types";
 import type {
   CreateKeywordingJobPayload,
-  KeywordingEvidenceSpan,
+  KeywordingActionType,
   KeywordingJobSnapshot,
   KeywordingJobSummary,
   KeywordingJobsIndexResponse,
-  KeywordingRecordIssue,
-  KeywordingSuggestion,
 } from "../shared/contracts";
 import { badRequest, notFound } from "./http";
-import { getActiveExtractedDocumentForRecord, readExtractedDocumentText } from "./recordDocuments";
-import { getKeywordingReportStorageDir, toAbsoluteStoragePath, toRelativeStoragePath } from "./storagePaths";
-import { buildZip } from "./zip";
+import { getActiveExtractedDocumentForRecord } from "./recordDocuments";
+import { toAbsoluteStoragePath } from "./storagePaths";
+import { requestWorkerKeywording } from "./workerClient";
 
 const queue: number[] = [];
 let queueActive = false;
 
-const LOW_CONFIDENCE_THRESHOLD = 60;
-const STOP_WORDS = new Set([
-  "a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "in", "into", "is", "it", "its", "of", "on",
-  "or", "our", "that", "the", "their", "this", "to", "using", "use", "with", "we", "within", "through",
-  "study", "paper", "approach", "based", "results", "analysis", "system", "systems", "method", "methods",
-]);
-
 type QuestionWithOptions = MappingQuestionModel & {
   MappingOptions?: MappingOptionModel[];
+};
+
+const ACTION_COUNTS: Record<KeywordingActionType, number> = {
+  reuse_existing: 0,
+  create_new: 0,
+  split_existing: 0,
+  merge_existing: 0,
+  abstain: 0,
 };
 
 const createEmptySummary = (): KeywordingJobSummary => ({
   existingSuggestionCount: 0,
   newSuggestionCount: 0,
   lowConfidenceCount: 0,
+  clusterDecisionCount: 0,
+  manualReviewCount: 0,
+  qualityFailedRecordCount: 0,
+  actionCounts: { ...ACTION_COUNTS },
   skippedRecords: [],
   failedRecords: [],
 });
@@ -57,6 +58,10 @@ const toIso = (value: Date | string | null | undefined) => {
 const normalizeSummary = (summary: KeywordingJobSummary | null | undefined): KeywordingJobSummary => ({
   ...createEmptySummary(),
   ...(summary ?? {}),
+  actionCounts: {
+    ...ACTION_COUNTS,
+    ...(summary?.actionCounts ?? {}),
+  },
   skippedRecords: Array.isArray(summary?.skippedRecords) ? summary.skippedRecords : [],
   failedRecords: Array.isArray(summary?.failedRecords) ? summary.failedRecords : [],
 });
@@ -79,80 +84,12 @@ const buildJobSnapshot = (job: KeywordingJobModel): KeywordingJobSnapshot => ({
   summary: normalizeSummary(job.summary),
 });
 
-const tokenize = (value: string) =>
-  value
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]+/g, " ")
-    .split(/\s+/)
-    .map((token) => token.trim())
-    .filter((token) => token.length >= 3 && !STOP_WORDS.has(token));
-
-const unique = <T>(items: T[]) => [...new Set(items)];
-
-const splitSentences = (value: string) =>
-  value
-    .split(/(?<=[.!?])\s+|\n+/)
-    .map((item) => item.trim())
-    .filter((item) => item.length > 0);
-
-const titleCase = (value: string) => value.replace(/\b\w/g, (char) => char.toUpperCase());
-
 const questionOptions = (question: MappingQuestionModel) =>
   Array.isArray((question as QuestionWithOptions).MappingOptions)
     ? (question as QuestionWithOptions).MappingOptions ?? []
     : [];
 
-const scoreOption = (option: MappingOptionModel, corpusLower: string, corpusTokens: Set<string>) => {
-  const optionTitle = option.title?.trim() ?? "";
-  const optionTokens = unique(tokenize(optionTitle));
-  if (optionTokens.length === 0) {
-    return { score: 0, matchedTokens: [] as string[] };
-  }
-
-  const matchedTokens = optionTokens.filter((token) => corpusTokens.has(token));
-  const titleMatch = optionTitle.length > 0 && corpusLower.includes(optionTitle.toLowerCase());
-  const overlapScore = Math.round((matchedTokens.length / optionTokens.length) * 70);
-  const score = Math.max(0, Math.min(99, overlapScore + (titleMatch ? 25 : 0)));
-  return { score, matchedTokens };
-};
-
-const findBestSentence = (sentences: string[], tokens: string[], fallback: string) => {
-  if (sentences.length === 0) {
-    return fallback;
-  }
-
-  const ranked = sentences
-    .map((sentence) => {
-      const lower = sentence.toLowerCase();
-      const matches = tokens.filter((token) => lower.includes(token)).length;
-      return { sentence, matches };
-    })
-    .sort((left, right) => right.matches - left.matches || left.sentence.length - right.sentence.length);
-
-  return ranked[0]?.sentence ?? fallback;
-};
-
-const buildProposedLabel = (
-  title: string | null,
-  corpusTokens: string[],
-  existingOptions: MappingOptionModel[],
-) => {
-  const excludedTokens = new Set(existingOptions.flatMap((option) => tokenize(option.title ?? "")));
-  const preferredTokens = [...tokenize(title ?? ""), ...corpusTokens].filter((token) => !excludedTokens.has(token));
-  const labelTokens = unique(preferredTokens).slice(0, 3);
-  if (labelTokens.length === 0) {
-    return "Emerging Topic";
-  }
-  return titleCase(labelTokens.join(" "));
-};
-
-const getSuggestionConfidence = (score: number, isExisting: boolean) =>
-  Math.max(isExisting ? 55 : 40, Math.min(95, score));
-
-const addIssue = (target: KeywordingRecordIssue[], issue: KeywordingRecordIssue) => {
-  target.push(issue);
-  return target;
-};
+const unique = <T>(items: T[]) => [...new Set(items)];
 
 const loadQuestionSet = async (mappingQuestionIds?: number[]) => {
   const where = mappingQuestionIds && mappingQuestionIds.length > 0 ? { id: mappingQuestionIds } : undefined;
@@ -185,353 +122,153 @@ const ensureRecordsExist = async (recordIds: number[]) => {
 const hasEligibleExtractedDocument = async (recordIds: number[]) => {
   for (const recordId of recordIds) {
     const document = await getActiveExtractedDocumentForRecord(recordId);
-    if (document?.extractedTextPath) {
+    if (document?.extractedTextPath && document.qualityStatus !== "failed") {
       return true;
     }
   }
   return false;
 };
 
-const persistSuggestion = async ({
-  job,
-  record,
-  question,
-  decisionType,
-  existingOptionId,
-  proposedOptionLabel,
-  confidence,
-  rationale,
-  excerptText,
-  score,
-}: {
-  job: KeywordingJobModel;
-  record: RecordModel;
-  question: MappingQuestionModel;
-  decisionType: "existing-option" | "new-option";
-  existingOptionId: number | null;
-  proposedOptionLabel: string | null;
-  confidence: number;
-  rationale: string;
-  excerptText: string;
-  score: number;
-}) => {
-  const suggestion = await db.KeywordingSuggestion.create({
-    keywordingJobId: job.id,
-    recordId: record.id,
-    mappingQuestionId: question.id,
-    decisionType,
-    existingOptionId,
-    proposedOptionLabel,
-    confidence,
-    rationale,
-  });
-
-  await db.KeywordingEvidenceSpan.create({
-    keywordingSuggestionId: suggestion.id,
-    pageStart: 1,
-    pageEnd: 1,
-    sectionName: "Document",
-    excerptText,
-    rank: 1,
-    score,
-  });
-
-  return suggestion;
-};
-
-const loadSuggestionsForJob = async (keywordingJobId: number) => {
-  const suggestions = await db.KeywordingSuggestion.findAll({
-    where: { keywordingJobId },
-    order: [["recordId", "ASC"], ["mappingQuestionId", "ASC"], ["id", "ASC"]],
-  });
-  if (suggestions.length === 0) {
-    return { suggestions, evidenceBySuggestionId: new Map<number, KeywordingEvidenceSpanModel[]>() };
-  }
-  const evidence = await db.KeywordingEvidenceSpan.findAll({
+const loadRecordDocuments = async (recordIds: number[]) => {
+  const documents = await db.RecordDocument.findAll({
     where: {
-      keywordingSuggestionId: suggestions.map((suggestion) => suggestion.id),
+      recordId: recordIds,
+      isActive: true,
+      uploadStatus: "uploaded",
     },
-    order: [["keywordingSuggestionId", "ASC"], ["rank", "ASC"], ["id", "ASC"]],
   });
-
-  const evidenceBySuggestionId = new Map<number, KeywordingEvidenceSpanModel[]>();
-  for (const item of evidence) {
-    const current = evidenceBySuggestionId.get(item.keywordingSuggestionId) ?? [];
-    current.push(item);
-    evidenceBySuggestionId.set(item.keywordingSuggestionId, current);
-  }
-
-  return { suggestions, evidenceBySuggestionId };
+  return new Map<number, RecordDocumentModel>(documents.map((document) => [document.recordId, document]));
 };
 
-const evidenceToContract = (evidence: KeywordingEvidenceSpanModel): KeywordingEvidenceSpan => ({
-  id: evidence.id,
-  keywordingSuggestionId: evidence.keywordingSuggestionId,
-  pageStart: evidence.pageStart,
-  pageEnd: evidence.pageEnd,
-  sectionName: evidence.sectionName,
-  excerptText: evidence.excerptText,
-  rank: evidence.rank,
-  score: evidence.score,
-  createdAt: toIso(evidence.createdAt) ?? new Date(0).toISOString(),
-  updatedAt: toIso(evidence.updatedAt) ?? new Date(0).toISOString(),
-});
-
-const suggestionToContract = (
-  suggestion: KeywordingSuggestionModel,
-  evidenceBySuggestionId: Map<number, KeywordingEvidenceSpanModel[]>,
-): KeywordingSuggestion => ({
-  id: suggestion.id,
-  keywordingJobId: suggestion.keywordingJobId,
-  recordId: suggestion.recordId,
-  mappingQuestionId: suggestion.mappingQuestionId,
-  decisionType: suggestion.decisionType,
-  existingOptionId: suggestion.existingOptionId,
-  proposedOptionLabel: suggestion.proposedOptionLabel,
-  confidence: suggestion.confidence,
-  rationale: suggestion.rationale,
-  createdAt: toIso(suggestion.createdAt) ?? new Date(0).toISOString(),
-  updatedAt: toIso(suggestion.updatedAt) ?? new Date(0).toISOString(),
-  evidenceSpans: (evidenceBySuggestionId.get(suggestion.id) ?? []).map(evidenceToContract),
-});
-
-const escapeHtml = (value: string) =>
-  value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-
-const buildHtmlReport = ({
-  title,
-  summary,
-  records,
-  proposedOptions,
-}: {
-  title: string;
-  summary: KeywordingJobSummary;
-  records: Array<{
-    id: number;
-    title: string | null;
-    suggestions: KeywordingSuggestion[];
-  }>;
-  proposedOptions: Array<{ questionTitle: string; label: string; count: number }>;
-}) => `<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <title>${escapeHtml(title)}</title>
-  <style>
-    body { font-family: sans-serif; margin: 2rem; color: #1f2937; }
-    h1, h2 { margin-bottom: 0.5rem; }
-    .meta, .issue-list { margin-bottom: 1rem; }
-    .record { border-top: 1px solid #d1d5db; padding: 1rem 0; }
-    .suggestion { margin: 0.75rem 0; padding: 0.75rem; background: #f8fafc; border-radius: 0.5rem; }
-    .excerpt { color: #374151; font-style: italic; }
-    table { border-collapse: collapse; width: 100%; margin-top: 1rem; }
-    th, td { border: 1px solid #d1d5db; padding: 0.5rem; text-align: left; }
-  </style>
-</head>
-<body>
-  <h1>${escapeHtml(title)}</h1>
-  <div class="meta">
-    <div>Existing suggestions: ${summary.existingSuggestionCount}</div>
-    <div>New proposals: ${summary.newSuggestionCount}</div>
-    <div>Low confidence cases: ${summary.lowConfidenceCount}</div>
-    <div>Skipped records: ${summary.skippedRecords.length}</div>
-    <div>Failed records: ${summary.failedRecords.length}</div>
-  </div>
-  <h2>Proposed New Options</h2>
-  <table>
-    <thead><tr><th>Mapping question</th><th>Label</th><th>Supporting records</th></tr></thead>
-    <tbody>
-      ${proposedOptions.map((item) => `<tr><td>${escapeHtml(item.questionTitle)}</td><td>${escapeHtml(item.label)}</td><td>${item.count}</td></tr>`).join("")}
-    </tbody>
-  </table>
-  <h2>Records</h2>
-  ${records.map((record) => `
-    <section class="record">
-      <h3>#${record.id} ${escapeHtml(record.title ?? "(untitled)")}</h3>
-      ${record.suggestions.map((suggestion) => `
-        <div class="suggestion">
-          <div><strong>${escapeHtml(suggestion.decisionType === "existing-option" ? "Existing option" : "New proposal")}</strong></div>
-          <div>Confidence: ${suggestion.confidence}</div>
-          <div>${escapeHtml(suggestion.rationale)}</div>
-          <div class="excerpt">${escapeHtml(suggestion.evidenceSpans[0]?.excerptText ?? "")}</div>
-        </div>
-      `).join("")}
-    </section>
-  `).join("")}
-  <h2>Skipped Records</h2>
-  <ul class="issue-list">
-    ${summary.skippedRecords.map((item) => `<li>#${item.recordId} ${escapeHtml(item.title ?? "(untitled)")}: ${escapeHtml(item.reason)}</li>`).join("")}
-  </ul>
-  <h2>Failed Records</h2>
-  <ul class="issue-list">
-    ${summary.failedRecords.map((item) => `<li>#${item.recordId} ${escapeHtml(item.title ?? "(untitled)")}: ${escapeHtml(item.reason)}</li>`).join("")}
-  </ul>
-</body>
-</html>
-`;
-
-const buildReportFiles = async (job: KeywordingJobModel, questions: MappingQuestionModel[], records: RecordModel[]) => {
-  const summary = normalizeSummary(job.summary);
-  const questionMap = new Map(questions.map((question) => [question.id, question]));
-  const optionMap = new Map(
-    questions.flatMap((question) =>
-      questionOptions(question).map((option) => [option.id, option] as const),
-    ),
-  );
-  const { suggestions, evidenceBySuggestionId } = await loadSuggestionsForJob(job.id);
-  const suggestionContracts = suggestions.map((suggestion) => suggestionToContract(suggestion, evidenceBySuggestionId));
-  const suggestionGroups = new Map<number, KeywordingSuggestion[]>();
-
-  for (const suggestion of suggestionContracts) {
-    const current = suggestionGroups.get(suggestion.recordId) ?? [];
-    current.push(suggestion);
-    suggestionGroups.set(suggestion.recordId, current);
-  }
-
-  const proposedAggregates = new Map<string, { questionTitle: string; label: string; count: number }>();
-  for (const suggestion of suggestionContracts.filter((item) => item.decisionType === "new-option")) {
-    const label = suggestion.proposedOptionLabel ?? "Untitled proposal";
-    const questionTitle = questionMap.get(suggestion.mappingQuestionId)?.title ?? `Question ${suggestion.mappingQuestionId}`;
-    const key = `${suggestion.mappingQuestionId}:${label.toLowerCase()}`;
-    const current = proposedAggregates.get(key) ?? { questionTitle, label, count: 0 };
-    current.count += 1;
-    proposedAggregates.set(key, current);
-  }
-
-  const reportJson = {
-    generatedAt: new Date().toISOString(),
-    job: buildJobSnapshot(job),
-    mappingQuestions: questions.map((question) => ({
-      id: question.id,
-      title: question.title,
-      type: question.type,
-      options: questionOptions(question).map((option) => ({
-        id: option.id,
-        title: option.title,
-        position: option.position,
-      })),
-    })),
-    records: records.map((record) => ({
-      id: record.id,
-      title: record.title,
-      suggestions: (suggestionGroups.get(record.id) ?? []).map((suggestion) => ({
-        ...suggestion,
-        existingOptionTitle: suggestion.existingOptionId
-          ? optionMap.get(suggestion.existingOptionId)?.title ?? null
-          : null,
-        mappingQuestionTitle: questionMap.get(suggestion.mappingQuestionId)?.title ?? null,
-      })),
-    })),
-    proposedOptions: [...proposedAggregates.values()],
-    lowConfidenceCases: suggestionContracts.filter((item) => item.confidence < LOW_CONFIDENCE_THRESHOLD),
-  };
-
-  const html = buildHtmlReport({
-    title: `Keywording audit report ${job.jobId}`,
-    summary,
-    records: records.map((record) => ({
-      id: record.id,
-      title: record.title,
-      suggestions: suggestionGroups.get(record.id) ?? [],
-    })),
-    proposedOptions: [...proposedAggregates.values()],
+const loadChunkLookups = async (documents: RecordDocumentModel[]) => {
+  const chunks = await db.DocumentChunk.findAll({
+    where: {
+      recordDocumentId: documents.map((document) => document.id),
+    },
   });
 
-  const reportDir = path.join(getKeywordingReportStorageDir(), job.jobId);
-  fs.mkdirSync(reportDir, { recursive: true });
-  const jsonPath = path.join(reportDir, "report.json");
-  const htmlPath = path.join(reportDir, "report.html");
-  const zipPath = path.join(reportDir, "keywording-report.zip");
+  const byDocumentId = new Map<number, Map<string, number>>();
+  for (const chunk of chunks) {
+    const current = byDocumentId.get(chunk.recordDocumentId) ?? new Map<string, number>();
+    current.set(chunk.chunkKey, chunk.id);
+    byDocumentId.set(chunk.recordDocumentId, current);
+  }
 
-  fs.writeFileSync(jsonPath, `${JSON.stringify(reportJson, null, 2)}\n`, "utf8");
-  fs.writeFileSync(htmlPath, html, "utf8");
-  fs.writeFileSync(zipPath, buildZip([
-    { name: "report.json", content: fs.readFileSync(jsonPath) },
-    { name: "report.html", content: fs.readFileSync(htmlPath) },
-  ]));
-
-  return toRelativeStoragePath(zipPath);
+  return byDocumentId;
 };
 
-const processSingleRecord = async ({
-  job,
-  record,
-  questions,
-  summary,
-}: {
-  job: KeywordingJobModel;
-  record: RecordModel;
-  questions: MappingQuestionModel[];
-  summary: KeywordingJobSummary;
-}) => {
-  const document = await getActiveExtractedDocumentForRecord(record.id);
-  if (!document?.extractedTextPath) {
-    addIssue(summary.skippedRecords, {
-      recordId: record.id,
+const serializeQuestions = (questions: MappingQuestionModel[]) =>
+  questions.map((question) => ({
+    id: question.id,
+    title: question.title,
+    type: question.type,
+    position: question.position,
+    description: question.description,
+    decisionGuidance: question.decisionGuidance,
+    positiveExamples: Array.isArray(question.positiveExamples) ? question.positiveExamples : [],
+    negativeExamples: Array.isArray(question.negativeExamples) ? question.negativeExamples : [],
+    evidenceInstructions: question.evidenceInstructions,
+    allowNewOption: Boolean(question.allowNewOption),
+    options: questionOptions(question).map((option) => ({
+      id: option.id,
+      title: option.title,
+      position: option.position,
+      color: option.color,
+    })),
+  }));
+
+const serializeRecords = (records: RecordModel[], documentsByRecordId: Map<number, RecordDocumentModel>) =>
+  records.map((record) => {
+    const document = documentsByRecordId.get(record.id);
+    return {
+      id: record.id,
       title: record.title,
-      reason: "No active extracted PDF available",
+      abstract: record.abstract,
+      year: record.year,
+      doi: record.doi,
+      document: document
+        ? {
+          id: document.id,
+          extractedTextPath: document.extractedTextPath,
+          structuredDocumentPath: document.structuredDocumentPath,
+          chunkManifestPath: document.chunkManifestPath,
+          qualityStatus: document.qualityStatus,
+          sourceType: document.sourceType,
+        }
+        : null,
+    };
+  });
+
+const persistWorkerResults = async (
+  job: KeywordingJobModel,
+  documentsByRecordId: Map<number, RecordDocumentModel>,
+  workerResponse: Awaited<ReturnType<typeof requestWorkerKeywording>>,
+) => {
+  const existingSuggestions = await db.KeywordingSuggestion.findAll({
+    where: { keywordingJobId: job.id },
+    attributes: ["id"],
+  });
+  const existingSuggestionIds = existingSuggestions.map((suggestion) => suggestion.id);
+  if (existingSuggestionIds.length > 0) {
+    await db.KeywordingEvidenceSpan.destroy({
+      where: {
+        keywordingSuggestionId: existingSuggestionIds,
+      },
     });
-    return;
+  }
+  await db.KeywordingSuggestion.destroy({ where: { keywordingJobId: job.id } });
+  await db.KeywordingCluster.destroy({ where: { keywordingJobId: job.id } });
+
+  const documents = [...documentsByRecordId.values()];
+  const chunkLookupByDocumentId = await loadChunkLookups(documents);
+
+  for (const suggestion of workerResponse.suggestions) {
+    const persistedSuggestion = await db.KeywordingSuggestion.create({
+      keywordingJobId: job.id,
+      recordId: suggestion.recordId,
+      mappingQuestionId: suggestion.mappingQuestionId,
+      actionType: suggestion.actionType,
+      decisionType: suggestion.actionType === "reuse_existing" ? "existing-option" : "new-option",
+      existingOptionId: suggestion.existingOptionId,
+      proposedOptionLabel: suggestion.proposedOptionLabel,
+      confidence: suggestion.confidence,
+      rationale: suggestion.rationale,
+      reviewerNote: suggestion.reviewerNote,
+    });
+
+    const document = documentsByRecordId.get(suggestion.recordId);
+    const chunkLookup = document ? (chunkLookupByDocumentId.get(document.id) ?? new Map<string, number>()) : new Map<string, number>();
+    for (const evidence of suggestion.evidence) {
+      await db.KeywordingEvidenceSpan.create({
+        keywordingSuggestionId: persistedSuggestion.id,
+        recordDocumentId: document?.id ?? null,
+        documentChunkId: evidence.chunkKey ? (chunkLookup.get(evidence.chunkKey) ?? null) : null,
+        chunkKey: evidence.chunkKey,
+        pageStart: evidence.pageStart,
+        pageEnd: evidence.pageEnd,
+        sectionName: evidence.sectionName,
+        headingPath: evidence.headingPath,
+        excerptText: evidence.excerptText,
+        rank: evidence.rank,
+        score: evidence.score,
+      });
+    }
   }
 
-  const extractedText = readExtractedDocumentText(document.extractedTextPath);
-  const corpus = [record.title ?? "", record.abstract ?? "", extractedText].join("\n");
-  const corpusLower = corpus.toLowerCase();
-  const corpusTokenList = tokenize(corpus);
-  const corpusTokens = new Set(corpusTokenList);
-  const sentences = splitSentences(extractedText);
-  const fallbackSentence = sentences[0] ?? (record.abstract?.trim() || record.title?.trim() || "No excerpt available");
-
-  for (const question of questions) {
-    const options = questionOptions(question);
-    const rankedOptions = options
-      .map((option) => ({ option, ...scoreOption(option, corpusLower, corpusTokens) }))
-      .sort((left, right) => right.score - left.score || left.option.id - right.option.id);
-
-    const [best] = rankedOptions;
-    if (best && best.score >= 55) {
-      const confidence = getSuggestionConfidence(best.score, true);
-      if (confidence < LOW_CONFIDENCE_THRESHOLD) {
-        summary.lowConfidenceCount += 1;
-      }
-      summary.existingSuggestionCount += 1;
-      await persistSuggestion({
-        job,
-        record,
-        question,
-        decisionType: "existing-option",
-        existingOptionId: best.option.id,
-        proposedOptionLabel: null,
-        confidence,
-        rationale: `Matched existing option "${best.option.title}" from overlapping evidence terms: ${best.matchedTokens.join(", ") || "topic wording"}.`,
-        excerptText: findBestSentence(sentences, best.matchedTokens, fallbackSentence),
-        score: best.score,
-      });
-      continue;
-    }
-
-    const proposedLabel = buildProposedLabel(record.title, corpusTokenList, options);
-    const evidenceTokens = tokenize(proposedLabel);
-    const confidence = getSuggestionConfidence(Math.max(best?.score ?? 35, 45), false);
-    if (confidence < LOW_CONFIDENCE_THRESHOLD) {
-      summary.lowConfidenceCount += 1;
-    }
-    summary.newSuggestionCount += 1;
-    await persistSuggestion({
-      job,
-      record,
-      question,
-      decisionType: "new-option",
-      existingOptionId: null,
-      proposedOptionLabel: proposedLabel,
-      confidence,
-      rationale: `No existing option matched strongly enough; proposed "${proposedLabel}" from repeated topic terms in the extracted evidence.`,
-      excerptText: findBestSentence(sentences, evidenceTokens, fallbackSentence),
-      score: best?.score ?? 45,
+  for (const cluster of workerResponse.clusters) {
+    await db.KeywordingCluster.create({
+      keywordingJobId: job.id,
+      mappingQuestionId: cluster.mappingQuestionId,
+      clusterKey: cluster.clusterKey,
+      label: cluster.label,
+      actionType: cluster.actionType,
+      confidence: cluster.confidence,
+      rationale: cluster.rationale,
+      existingOptionIds: cluster.existingOptionIds,
+      proposedOptionLabels: cluster.proposedOptionLabels,
+      supportingRecordIds: cluster.supportingRecordIds,
+      supportingChunkKeys: cluster.supportingChunkKeys,
+      supportingEvidence: cluster.supportingEvidence,
     });
   }
 };
@@ -561,59 +298,47 @@ const runQueuedJobs = async () => {
         continue;
       }
 
-      const summary = normalizeSummary(job.summary);
       const records = await ensureRecordsExist(Array.isArray(job.recordIds) ? job.recordIds : []);
       const questions = await loadQuestionSet(Array.isArray(job.mappingQuestionIds) ? job.mappingQuestionIds : []);
+      const documentsByRecordId = await loadRecordDocuments(records.map((record) => record.id));
 
       job.status = "running";
       job.startedAt = new Date();
       job.latestError = null;
+      job.summary = createEmptySummary();
       await job.save();
 
       try {
-        await db.KeywordingSuggestion.destroy({ where: { keywordingJobId: job.id } });
+        const workerResponse = await requestWorkerKeywording({
+          jobId: job.jobId,
+          appDataDir: process.env.APP_DATA_DIR?.trim() || process.cwd(),
+          records: serializeRecords(records, documentsByRecordId),
+          mappingQuestions: serializeQuestions(questions),
+        });
 
-        for (const record of records) {
-          const refreshedJob = await db.KeywordingJob.findByPk(job.id);
-          if (!refreshedJob) {
-            break;
-          }
-          if (refreshedJob.cancelRequested) {
-            job.status = "cancelled";
-            refreshedJob.status = "cancelled";
-            refreshedJob.finishedAt = new Date();
-            refreshedJob.summary = summary;
-            await refreshedJob.save();
-            break;
-          }
-
-          try {
-            await processSingleRecord({ job, record, questions, summary });
-          } catch (error) {
-            addIssue(summary.failedRecords, {
-              recordId: record.id,
-              title: record.title,
-              reason: error instanceof Error ? error.message : String(error),
-            });
-          }
-
-          job.processed += 1;
-          job.summary = summary;
-          await job.save();
+        const refreshedJob = await db.KeywordingJob.findByPk(job.id);
+        if (!refreshedJob) {
+          continue;
+        }
+        if (refreshedJob.cancelRequested) {
+          refreshedJob.status = "cancelled";
+          refreshedJob.finishedAt = new Date();
+          refreshedJob.summary = normalizeSummary(workerResponse.summary);
+          await refreshedJob.save();
+          continue;
         }
 
-        if (job.status !== "cancelled") {
-          job.summary = summary;
-          job.reportPath = await buildReportFiles(job, questions, records);
-          job.status = "completed";
-          job.finishedAt = new Date();
-          await job.save();
-        }
+        await persistWorkerResults(job, documentsByRecordId, workerResponse);
+        job.processed = records.length;
+        job.summary = normalizeSummary(workerResponse.summary);
+        job.reportPath = workerResponse.reportPath;
+        job.status = "completed";
+        job.finishedAt = new Date();
+        await job.save();
       } catch (error) {
         job.status = "failed";
         job.latestError = error instanceof Error ? error.message : String(error);
         job.finishedAt = new Date();
-        job.summary = summary;
         await job.save();
       }
     }
@@ -720,5 +445,6 @@ export const __resetKeywordingJobsForTests = async () => {
   queueActive = false;
   await db.KeywordingEvidenceSpan.destroy({ where: {} });
   await db.KeywordingSuggestion.destroy({ where: {} });
+  await db.KeywordingCluster.destroy({ where: {} });
   await db.KeywordingJob.destroy({ where: {} });
 };

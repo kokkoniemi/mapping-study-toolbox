@@ -44,7 +44,14 @@
             <div class="pdf-tools__document-meta">
               <strong>{{ document.originalFileName }}</strong>
               <span>{{ document.isActive ? "Active" : "History" }} / {{ document.extractionStatus }}</span>
+              <span v-if="document.qualityStatus && document.qualityStatus !== 'pending'">
+                quality {{ document.qualityStatus }}{{ document.qualityScore != null ? ` (${Math.round(document.qualityScore * 100)}%)` : "" }}
+              </span>
+              <span v-if="document.pageCount != null">{{ document.pageCount }} pages</span>
+              <span v-if="document.sourceType !== 'unknown'">{{ document.sourceType }}</span>
+              <span v-if="document.ocrUsed">OCR used{{ document.ocrConfidence != null ? ` (${document.ocrConfidence}%)` : "" }}</span>
               <span>{{ formatBytes(document.fileSize) }}</span>
+              <span v-if="document.extractionWarnings?.length">{{ document.extractionWarnings.join(" | ") }}</span>
               <span v-if="document.extractionError">{{ document.extractionError }}</span>
             </div>
             <div class="pdf-tools__document-actions">

@@ -17,8 +17,21 @@ const defineRecordDocument: ModelFactory<RecordDocumentModelStatic> = (
       fileSize: DataTypes.INTEGER,
       uploadStatus: DataTypes.STRING,
       extractionStatus: DataTypes.STRING,
+      sourceType: DataTypes.STRING,
+      pageCount: DataTypes.INTEGER,
+      extractorKind: DataTypes.STRING,
+      extractorVersion: DataTypes.STRING,
       extractedTextPath: DataTypes.STRING,
+      structuredDocumentPath: DataTypes.STRING,
+      chunkManifestPath: DataTypes.STRING,
       extractionError: DataTypes.TEXT,
+      qualityStatus: DataTypes.STRING,
+      qualityScore: DataTypes.FLOAT,
+      printableTextRatio: DataTypes.FLOAT,
+      weirdCharacterRatio: DataTypes.FLOAT,
+      ocrUsed: DataTypes.BOOLEAN,
+      ocrConfidence: DataTypes.FLOAT,
+      extractionWarnings: DataTypes.JSON,
       isActive: DataTypes.BOOLEAN,
     },
     {
@@ -28,6 +41,8 @@ const defineRecordDocument: ModelFactory<RecordDocumentModelStatic> = (
 
   RecordDocument.associate = (models: DbModels) => {
     RecordDocument.belongsTo(models.Record, { foreignKey: "recordId" });
+    RecordDocument.hasMany(models.DocumentChunk, { foreignKey: "recordDocumentId" });
+    RecordDocument.hasMany(models.KeywordingEvidenceSpan, { foreignKey: "recordDocumentId" });
   };
 
   return RecordDocument;

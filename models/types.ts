@@ -1,11 +1,14 @@
 import type { Model, ModelStatic, Sequelize } from "sequelize";
 import type * as SequelizeModule from "sequelize";
 import type {
+  KeywordingActionType,
   EnrichmentProvenanceMap,
   KeywordingJobSummary,
   KeywordingJobStatus,
   KeywordingSuggestionDecisionType,
   RecordDocumentExtractionStatus,
+  RecordDocumentQualityStatus,
+  RecordDocumentSourceType,
   RecordDocumentUploadStatus,
   RecordStatus,
 } from "../shared/contracts";
@@ -45,6 +48,12 @@ export interface MappingQuestionAttributes {
   title: string | null;
   type: string;
   position: number;
+  description: string | null;
+  decisionGuidance: string | null;
+  positiveExamples: string[] | null;
+  negativeExamples: string[] | null;
+  evidenceInstructions: string | null;
+  allowNewOption: boolean;
   createdAt: Date;
   updatedAt: Date;
   deletedAt: Date | null;
@@ -178,8 +187,21 @@ export interface RecordDocumentAttributes {
   fileSize: number;
   uploadStatus: RecordDocumentUploadStatus;
   extractionStatus: RecordDocumentExtractionStatus;
+  sourceType: RecordDocumentSourceType;
+  pageCount: number | null;
+  extractorKind: string | null;
+  extractorVersion: string | null;
   extractedTextPath: string | null;
+  structuredDocumentPath: string | null;
+  chunkManifestPath: string | null;
   extractionError: string | null;
+  qualityStatus: RecordDocumentQualityStatus;
+  qualityScore: number | null;
+  printableTextRatio: number | null;
+  weirdCharacterRatio: number | null;
+  ocrUsed: boolean;
+  ocrConfidence: number | null;
+  extractionWarnings: string[] | null;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -188,6 +210,29 @@ export interface RecordDocumentAttributes {
 export type RecordDocumentCreationAttributes = Partial<RecordDocumentAttributes>;
 export type RecordDocumentModel = BaseModel<RecordDocumentAttributes, RecordDocumentCreationAttributes>;
 export type RecordDocumentModelStatic = AssociableModel<RecordDocumentModel>;
+
+export interface DocumentChunkAttributes {
+  id: number;
+  recordDocumentId: number;
+  chunkKey: string;
+  chunkIndex: number;
+  pageStart: number | null;
+  pageEnd: number | null;
+  sectionName: string | null;
+  headingPath: string[] | null;
+  text: string;
+  charCount: number;
+  tokenCount: number;
+  embeddingReference: string | null;
+  qualityScore: number | null;
+  qualityFlags: string[] | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export type DocumentChunkCreationAttributes = Partial<DocumentChunkAttributes>;
+export type DocumentChunkModel = BaseModel<DocumentChunkAttributes, DocumentChunkCreationAttributes>;
+export type DocumentChunkModelStatic = AssociableModel<DocumentChunkModel>;
 
 export interface ImportAttributes {
   id: number;
@@ -280,11 +325,13 @@ export interface KeywordingSuggestionAttributes {
   keywordingJobId: number;
   recordId: number;
   mappingQuestionId: number;
+  actionType: KeywordingActionType;
   decisionType: KeywordingSuggestionDecisionType;
   existingOptionId: number | null;
   proposedOptionLabel: string | null;
   confidence: number;
   rationale: string;
+  reviewerNote: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -299,9 +346,13 @@ export type KeywordingSuggestionModelStatic = AssociableModel<KeywordingSuggesti
 export interface KeywordingEvidenceSpanAttributes {
   id: number;
   keywordingSuggestionId: number;
+  recordDocumentId: number | null;
+  documentChunkId: number | null;
+  chunkKey: string | null;
   pageStart: number | null;
   pageEnd: number | null;
   sectionName: string | null;
+  headingPath: string[] | null;
   excerptText: string;
   rank: number;
   score: number | null;
@@ -316,9 +367,32 @@ export type KeywordingEvidenceSpanModel = BaseModel<
 >;
 export type KeywordingEvidenceSpanModelStatic = AssociableModel<KeywordingEvidenceSpanModel>;
 
+export interface KeywordingClusterAttributes {
+  id: number;
+  keywordingJobId: number;
+  mappingQuestionId: number;
+  clusterKey: string;
+  label: string | null;
+  actionType: KeywordingActionType;
+  confidence: number;
+  rationale: string;
+  existingOptionIds: number[] | null;
+  proposedOptionLabels: string[] | null;
+  supportingRecordIds: number[] | null;
+  supportingChunkKeys: string[] | null;
+  supportingEvidence: Array<Record<string, unknown>> | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export type KeywordingClusterCreationAttributes = Partial<KeywordingClusterAttributes>;
+export type KeywordingClusterModel = BaseModel<KeywordingClusterAttributes, KeywordingClusterCreationAttributes>;
+export type KeywordingClusterModelStatic = AssociableModel<KeywordingClusterModel>;
+
 export interface DbModels {
   Record: RecordModelStatic;
   RecordDocument: RecordDocumentModelStatic;
+  DocumentChunk: DocumentChunkModelStatic;
   Forum: ForumModelStatic;
   MappingQuestion: MappingQuestionModelStatic;
   MappingOption: MappingOptionModelStatic;
@@ -330,6 +404,7 @@ export interface DbModels {
   KeywordingJob: KeywordingJobModelStatic;
   KeywordingSuggestion: KeywordingSuggestionModelStatic;
   KeywordingEvidenceSpan: KeywordingEvidenceSpanModelStatic;
+  KeywordingCluster: KeywordingClusterModelStatic;
   sequelize: Sequelize;
   Sequelize: typeof SequelizeModule;
 }

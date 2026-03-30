@@ -29,6 +29,7 @@ const defineKeywordingJob: ModelFactory<KeywordingJobModelStatic> = (
 
   KeywordingJob.associate = (models: DbModels) => {
     KeywordingJob.hasMany(models.KeywordingSuggestion, { foreignKey: "keywordingJobId" });
+    KeywordingJob.hasMany(models.KeywordingCluster, { foreignKey: "keywordingJobId" });
   };
 
   return KeywordingJob;

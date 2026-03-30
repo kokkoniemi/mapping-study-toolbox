@@ -12,11 +12,13 @@ const defineKeywordingSuggestion: ModelFactory<KeywordingSuggestionModelStatic> 
       keywordingJobId: DataTypes.INTEGER,
       recordId: DataTypes.INTEGER,
       mappingQuestionId: DataTypes.INTEGER,
+      actionType: DataTypes.STRING,
       decisionType: DataTypes.STRING,
       existingOptionId: DataTypes.INTEGER,
       proposedOptionLabel: DataTypes.STRING,
       confidence: DataTypes.INTEGER,
       rationale: DataTypes.TEXT,
+      reviewerNote: DataTypes.TEXT,
     },
     {
       paranoid: false,
