@@ -12,6 +12,7 @@ import type {
 import type {
   CreateKeywordingJobPayload,
   KeywordingActionType,
+  KeywordingAnalysisMode,
   KeywordingJobSnapshot,
   KeywordingJobSummary,
   KeywordingJobsIndexResponse,
@@ -43,6 +44,7 @@ const createEmptySummary = (): KeywordingJobSummary => ({
   clusterDecisionCount: 0,
   manualReviewCount: 0,
   qualityFailedRecordCount: 0,
+  outlierTopicCount: 0,
   actionCounts: { ...ACTION_COUNTS },
   skippedRecords: [],
   failedRecords: [],
@@ -75,6 +77,12 @@ const buildJobSnapshot = (job: KeywordingJobModel): KeywordingJobSnapshot => ({
   processed: job.processed,
   recordIds: Array.isArray(job.recordIds) ? job.recordIds : [],
   mappingQuestionIds: Array.isArray(job.mappingQuestionIds) ? job.mappingQuestionIds : [],
+  analysisMode: job.analysisMode ?? "standard",
+  reuseEmbeddingCache: Boolean(job.reuseEmbeddingCache),
+  embeddingModel: job.embeddingModel,
+  bertopicVersion: job.bertopicVersion,
+  topicArtifactPath: job.topicArtifactPath,
+  cacheSummary: job.cacheSummary ?? { hits: 0, misses: 0, writes: 0 },
   reportPath: job.reportPath,
   reportReady: Boolean(job.reportPath) && job.status === "completed",
   createdAt: toIso(job.createdAt) ?? new Date(0).toISOString(),
@@ -194,10 +202,83 @@ const serializeRecords = (records: RecordModel[], documentsByRecordId: Map<numbe
           chunkManifestPath: document.chunkManifestPath,
           qualityStatus: document.qualityStatus,
           sourceType: document.sourceType,
+          checksum: document.checksum,
+          embeddingStatus: document.embeddingStatus,
+          embeddingModel: document.embeddingModel,
+          embeddingTask: document.embeddingTask,
         }
         : null,
     };
   });
+
+const syncChunkEmbeddingMetadataFromManifest = async (document: RecordDocumentModel) => {
+  if (!document.chunkManifestPath) {
+    return;
+  }
+
+  const manifestPath = toAbsoluteStoragePath(document.chunkManifestPath);
+  if (!fs.existsSync(manifestPath)) {
+    return;
+  }
+
+  const raw = JSON.parse(fs.readFileSync(manifestPath, "utf8")) as Array<Record<string, unknown>>;
+  if (!Array.isArray(raw) || raw.length === 0) {
+    return;
+  }
+
+  const chunkRows = await db.DocumentChunk.findAll({
+    where: { recordDocumentId: document.id },
+  });
+  const chunkByKey = new Map(chunkRows.map((chunk) => [chunk.chunkKey, chunk]));
+
+  let readyCount = 0;
+  let embeddingModel: string | null = null;
+  let embeddingTask: string | null = null;
+  let embeddingGeneratedAt: Date | null = null;
+
+  for (const item of raw) {
+    const chunkKey = typeof item.chunkKey === "string" ? item.chunkKey : null;
+    if (!chunkKey) {
+      continue;
+    }
+    const chunk = chunkByKey.get(chunkKey);
+    if (!chunk) {
+      continue;
+    }
+
+    const generatedAt =
+      typeof item.embeddingGeneratedAt === "string" && item.embeddingGeneratedAt.length > 0
+        ? new Date(item.embeddingGeneratedAt)
+        : null;
+
+    chunk.embeddingReference = typeof item.embeddingReference === "string" ? item.embeddingReference : null;
+    chunk.embeddingModel = typeof item.embeddingModel === "string" ? item.embeddingModel : null;
+    chunk.embeddingTask = typeof item.embeddingTask === "string" ? item.embeddingTask : null;
+    chunk.embeddingVersion = typeof item.embeddingVersion === "string" ? item.embeddingVersion : null;
+    chunk.embeddingChecksum = typeof item.embeddingChecksum === "string" ? item.embeddingChecksum : null;
+    chunk.embeddingGeneratedAt = generatedAt;
+    await chunk.save();
+
+    if (chunk.embeddingReference) {
+      readyCount += 1;
+      embeddingModel = embeddingModel ?? chunk.embeddingModel;
+      embeddingTask = embeddingTask ?? chunk.embeddingTask;
+      embeddingGeneratedAt = embeddingGeneratedAt ?? chunk.embeddingGeneratedAt;
+    }
+  }
+
+  if (chunkRows.length > 0 && readyCount === chunkRows.length) {
+    document.embeddingStatus = "ready";
+  } else if (readyCount > 0) {
+    document.embeddingStatus = "pending";
+  } else {
+    document.embeddingStatus = "not_ready";
+  }
+  document.embeddingModel = embeddingModel;
+  document.embeddingTask = embeddingTask;
+  document.embeddingGeneratedAt = embeddingGeneratedAt;
+  await document.save();
+};
 
 const persistWorkerResults = async (
   job: KeywordingJobModel,
@@ -262,6 +343,13 @@ const persistWorkerResults = async (
       clusterKey: cluster.clusterKey,
       label: cluster.label,
       actionType: cluster.actionType,
+      topicId: cluster.topicId,
+      parentTopicId: cluster.parentTopicId,
+      isOutlier: cluster.isOutlier,
+      topTerms: cluster.topTerms,
+      representativeChunkKeys: cluster.representativeChunkKeys,
+      representationSource: cluster.representationSource,
+      topicSize: cluster.topicSize,
       confidence: cluster.confidence,
       rationale: cluster.rationale,
       existingOptionIds: cluster.existingOptionIds,
@@ -270,6 +358,10 @@ const persistWorkerResults = async (
       supportingChunkKeys: cluster.supportingChunkKeys,
       supportingEvidence: cluster.supportingEvidence,
     });
+  }
+
+  for (const document of documents) {
+    await syncChunkEmbeddingMetadataFromManifest(document);
   }
 };
 
@@ -312,6 +404,8 @@ const runQueuedJobs = async () => {
         const workerResponse = await requestWorkerKeywording({
           jobId: job.jobId,
           appDataDir: process.env.APP_DATA_DIR?.trim() || process.cwd(),
+          analysisMode: job.analysisMode ?? "standard",
+          reuseEmbeddingCache: Boolean(job.reuseEmbeddingCache),
           records: serializeRecords(records, documentsByRecordId),
           mappingQuestions: serializeQuestions(questions),
         });
@@ -324,6 +418,10 @@ const runQueuedJobs = async () => {
           refreshedJob.status = "cancelled";
           refreshedJob.finishedAt = new Date();
           refreshedJob.summary = normalizeSummary(workerResponse.summary);
+          refreshedJob.embeddingModel = workerResponse.embeddingModel;
+          refreshedJob.bertopicVersion = workerResponse.bertopicVersion;
+          refreshedJob.topicArtifactPath = workerResponse.topicArtifactPath;
+          refreshedJob.cacheSummary = workerResponse.cacheSummary;
           await refreshedJob.save();
           continue;
         }
@@ -331,6 +429,10 @@ const runQueuedJobs = async () => {
         await persistWorkerResults(job, documentsByRecordId, workerResponse);
         job.processed = records.length;
         job.summary = normalizeSummary(workerResponse.summary);
+        job.embeddingModel = workerResponse.embeddingModel;
+        job.bertopicVersion = workerResponse.bertopicVersion;
+        job.topicArtifactPath = workerResponse.topicArtifactPath;
+        job.cacheSummary = workerResponse.cacheSummary;
         job.reportPath = workerResponse.reportPath;
         job.status = "completed";
         job.finishedAt = new Date();
@@ -361,12 +463,21 @@ export const createKeywordingJob = async (
     throw badRequest("At least one selected record must have an extracted PDF before keywording can start");
   }
 
+  const analysisMode: KeywordingAnalysisMode = payload.analysisMode === "advanced" ? "advanced" : "standard";
+  const reuseEmbeddingCache = payload.reuseEmbeddingCache !== false;
+
   const job = await db.KeywordingJob.create({
     jobId: randomUUID(),
     status: "queued",
     cancelRequested: false,
     recordIds,
     mappingQuestionIds: questions.map((question) => question.id),
+    analysisMode,
+    reuseEmbeddingCache,
+    embeddingModel: null,
+    bertopicVersion: null,
+    cacheSummary: { hits: 0, misses: 0, writes: 0 },
+    topicArtifactPath: null,
     total: records.length,
     processed: 0,
     summary: createEmptySummary(),

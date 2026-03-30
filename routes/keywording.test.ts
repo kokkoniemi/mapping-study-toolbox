@@ -49,6 +49,8 @@ describe("routes/keywording", () => {
       body: {
         recordIds: [1, 2],
         mappingQuestionIds: [5],
+        analysisMode: "advanced",
+        reuseEmbeddingCache: false,
       },
     } as unknown as Request;
     const res = mockResponse();
@@ -58,12 +60,26 @@ describe("routes/keywording", () => {
     expect(keywordingMock.createKeywordingJob).toHaveBeenCalledWith({
       recordIds: [1, 2],
       mappingQuestionIds: [5],
+      analysisMode: "advanced",
+      reuseEmbeddingCache: false,
     });
     expect(res.status).toHaveBeenCalledWith(202);
   });
 
   it("create rejects missing recordIds", async () => {
     const req = { body: { mappingQuestionIds: [5] } } as unknown as Request;
+    const res = mockResponse();
+
+    await expect(create(req, res)).rejects.toBeInstanceOf(ApiError);
+  });
+
+  it("create rejects invalid analysis modes", async () => {
+    const req = {
+      body: {
+        recordIds: [1],
+        analysisMode: "turbo",
+      },
+    } as unknown as Request;
     const res = mockResponse();
 
     await expect(create(req, res)).rejects.toBeInstanceOf(ApiError);

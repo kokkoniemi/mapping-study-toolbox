@@ -186,6 +186,8 @@
         :eligibleRecordCount="eligibleKeywordingRecordCount"
         :mappingQuestions="mappingQuestions"
         :selectedQuestionIds="keywordingQuestionIds"
+        :analysisMode="keywordingAnalysisMode"
+        :reuseEmbeddingCache="keywordingReuseEmbeddingCache"
         :canStartKeywording="canStartKeywording"
         :keywordingStarting="keywordingStarting"
         :keywordingLoading="keywordingLoading"
@@ -194,6 +196,8 @@
         :keywordingJobs="keywordingJobs"
         @reload="reloadKeywordingJobs"
         @toggle-question="toggleKeywordingQuestion"
+        @update-analysis-mode="onKeywordingAnalysisModeChange"
+        @update-reuse-cache="onKeywordingReuseCacheChange"
         @start="startKeywordingJob"
         @cancel="cancelKeywordingJobRun"
         @download="downloadKeywordingReport"
@@ -504,6 +508,8 @@ const keywordingStarting = ref(false);
 const keywordingError = ref("");
 const keywordingMessage = ref("");
 const keywordingQuestionIds = ref<number[]>([]);
+const keywordingAnalysisMode = ref<"standard" | "advanced">("standard");
+const keywordingReuseEmbeddingCache = ref(true);
 const keywordingPollTimer = ref<number | null>(null);
 const compareUserIds = ref<number[]>([]);
 const comparePairwise = ref<PairwiseAgreement[]>([]);
@@ -2256,6 +2262,14 @@ const toggleKeywordingQuestion = (questionId: number) => {
   keywordingQuestionIds.value = [...keywordingQuestionIds.value, questionId].sort((left, right) => left - right);
 };
 
+const onKeywordingAnalysisModeChange = (analysisMode: string) => {
+  keywordingAnalysisMode.value = analysisMode === "advanced" ? "advanced" : "standard";
+};
+
+const onKeywordingReuseCacheChange = (reuseEmbeddingCache: boolean) => {
+  keywordingReuseEmbeddingCache.value = reuseEmbeddingCache;
+};
+
 const startKeywordingJob = async () => {
   if (!canStartKeywording.value) {
     return;
@@ -2269,8 +2283,10 @@ const startKeywordingJob = async () => {
     const response = await keywording.create({
       recordIds: [...selectedRecordIds.value],
       mappingQuestionIds: [...keywordingQuestionIds.value],
+      analysisMode: keywordingAnalysisMode.value,
+      reuseEmbeddingCache: keywordingReuseEmbeddingCache.value,
     });
-    keywordingMessage.value = `Keywording job ${response.data.jobId} started.`;
+    keywordingMessage.value = `Keywording job ${response.data.jobId} started in ${response.data.analysisMode} mode.`;
     await loadKeywordingJobs();
   } catch (error) {
     keywordingError.value = getApiErrorMessage(error);

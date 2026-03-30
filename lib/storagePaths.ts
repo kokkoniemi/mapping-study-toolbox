@@ -15,6 +15,8 @@ export const getPdfStorageDir = () => ensureDir(path.join(getStorageDir(), "pdfs
 export const getPdfTextStorageDir = () => ensureDir(path.join(getStorageDir(), "pdf-text"));
 export const getPdfStructureStorageDir = () => ensureDir(path.join(getStorageDir(), "pdf-structure"));
 export const getPdfChunkStorageDir = () => ensureDir(path.join(getStorageDir(), "pdf-chunks"));
+export const getPdfEmbeddingStorageDir = () => ensureDir(path.join(getStorageDir(), "pdf-embeddings"));
+export const getTopicModelStorageDir = () => ensureDir(path.join(getStorageDir(), "topic-models"));
 export const getKeywordingReportStorageDir = () => ensureDir(path.join(getStorageDir(), "keywording-reports"));
 
 export const toRelativeStoragePath = (absolutePath: string) => path.relative(APP_DATA_DIR, absolutePath);

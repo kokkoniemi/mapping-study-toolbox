@@ -32,6 +32,10 @@ const defineRecordDocument: ModelFactory<RecordDocumentModelStatic> = (
       ocrUsed: DataTypes.BOOLEAN,
       ocrConfidence: DataTypes.FLOAT,
       extractionWarnings: DataTypes.JSON,
+      embeddingStatus: DataTypes.STRING,
+      embeddingModel: DataTypes.STRING,
+      embeddingTask: DataTypes.STRING,
+      embeddingGeneratedAt: DataTypes.DATE,
       isActive: DataTypes.BOOLEAN,
     },
     {

@@ -1,4 +1,4 @@
-import type { KeywordingActionType } from "../shared/contracts";
+import type { KeywordingActionType, KeywordingAnalysisMode } from "../shared/contracts";
 import { ApiError } from "./http";
 
 const WORKER_ROOT = (() => {
@@ -82,6 +82,11 @@ export type WorkerChunk = {
   charCount: number;
   tokenCount: number;
   embeddingReference: string | null;
+  embeddingModel: string | null;
+  embeddingTask: string | null;
+  embeddingVersion: string | null;
+  embeddingChecksum: string | null;
+  embeddingGeneratedAt: string | null;
   qualityScore: number | null;
   qualityFlags: string[];
 };
@@ -133,6 +138,13 @@ export type WorkerKeywordingCluster = {
   clusterKey: string;
   label: string | null;
   actionType: KeywordingActionType;
+  topicId: number | null;
+  parentTopicId: number | null;
+  isOutlier: boolean;
+  topTerms: string[];
+  representativeChunkKeys: string[];
+  representationSource: string | null;
+  topicSize: number | null;
   confidence: number;
   rationale: string;
   existingOptionIds: number[];
@@ -143,6 +155,15 @@ export type WorkerKeywordingCluster = {
 };
 
 export type WorkerKeywordingResponse = {
+  analysisMode: KeywordingAnalysisMode;
+  embeddingModel: string | null;
+  bertopicVersion: string | null;
+  cacheSummary: {
+    hits: number;
+    misses: number;
+    writes: number;
+  };
+  topicArtifactPath: string | null;
   reportPath: string;
   summary: {
     existingSuggestionCount: number;
@@ -151,6 +172,7 @@ export type WorkerKeywordingResponse = {
     clusterDecisionCount: number;
     manualReviewCount: number;
     qualityFailedRecordCount: number;
+    outlierTopicCount: number;
     actionCounts: Record<KeywordingActionType, number>;
     skippedRecords: Array<{ recordId: number; title: string | null; reason: string }>;
     failedRecords: Array<{ recordId: number; title: string | null; reason: string }>;
@@ -170,6 +192,8 @@ export const requestWorkerExtraction = (payload: {
 export const requestWorkerKeywording = (payload: {
   jobId: string;
   appDataDir: string;
+  analysisMode: KeywordingAnalysisMode;
+  reuseEmbeddingCache: boolean;
   records: Array<Record<string, unknown>>;
   mappingQuestions: Array<Record<string, unknown>>;
 }) => workerRequest<WorkerKeywordingResponse>("keywording-jobs/run", { body: payload });

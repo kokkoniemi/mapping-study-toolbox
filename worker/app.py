@@ -5,7 +5,7 @@ from typing import Any
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
-from pipeline import extract_document, run_keywording
+from pipeline import extract_document, run_keywording, warm_start_advanced_components
 
 
 class ExtractionRequest(BaseModel):
@@ -19,11 +19,18 @@ class ExtractionRequest(BaseModel):
 class KeywordingJobRequest(BaseModel):
     jobId: str
     appDataDir: str
+    analysisMode: str = "standard"
+    reuseEmbeddingCache: bool = True
     records: list[dict[str, Any]]
     mappingQuestions: list[dict[str, Any]]
 
 
 app = FastAPI(title="mapping-study-toolbox keywording worker")
+
+
+@app.on_event("startup")
+def warm_start_models() -> None:
+    warm_start_advanced_components()
 
 
 @app.get("/health")

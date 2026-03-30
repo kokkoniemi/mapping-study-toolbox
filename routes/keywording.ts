@@ -1,4 +1,5 @@
 import type { Request, Response } from "express";
+import type { CreateKeywordingJobPayload, KeywordingAnalysisMode } from "../shared/contracts";
 
 import {
   cancelKeywordingJob,
@@ -7,11 +8,12 @@ import {
   getKeywordingReport,
   listKeywordingJobs,
 } from "../lib/keywording";
-import { assertAllowedKeys, parseIntegerArray, parseObject, parseString } from "../lib/validation";
+import { badRequest } from "../lib/http";
+import { assertAllowedKeys, parseBoolean, parseIntegerArray, parseObject, parseString } from "../lib/validation";
 
-const parseCreateBody = (body: unknown) => {
+const parseCreateBody = (body: unknown): CreateKeywordingJobPayload => {
   const parsed = parseObject(body, "body");
-  assertAllowedKeys(parsed, ["recordIds", "mappingQuestionIds"], "keywording job body");
+  assertAllowedKeys(parsed, ["recordIds", "mappingQuestionIds", "analysisMode", "reuseEmbeddingCache"], "keywording job body");
 
   const recordIds = parseIntegerArray(parsed.recordIds, "recordIds", {
     min: 1,
@@ -26,12 +28,23 @@ const parseCreateBody = (body: unknown) => {
         minItems: 1,
         maxItems: 500,
       });
+  const analysisMode =
+    parsed.analysisMode === undefined
+      ? undefined
+      : parseString(parsed.analysisMode, "analysisMode", { trim: true, allowEmpty: false, maxLength: 32 });
+  if (analysisMode !== undefined && analysisMode !== "standard" && analysisMode !== "advanced") {
+    throw badRequest("analysisMode must be either standard or advanced");
+  }
+  const reuseEmbeddingCache =
+    parsed.reuseEmbeddingCache === undefined
+      ? undefined
+      : parseBoolean(parsed.reuseEmbeddingCache, "reuseEmbeddingCache");
 
   if (!recordIds || recordIds.length === 0) {
     throw new Error("recordIds validation should guarantee at least one record");
   }
 
-  return { recordIds, mappingQuestionIds };
+  return { recordIds, mappingQuestionIds, analysisMode: analysisMode as KeywordingAnalysisMode | undefined, reuseEmbeddingCache };
 };
 
 export const listing = async (_req: Request, res: Response) => {

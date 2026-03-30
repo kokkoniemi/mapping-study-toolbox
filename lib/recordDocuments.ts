@@ -70,6 +70,10 @@ const toDocumentSummary = (document: RecordDocumentModel): RecordDocumentSummary
   ocrUsed: Boolean(document.ocrUsed),
   ocrConfidence: document.ocrConfidence,
   extractionWarnings: toWarningList(document.extractionWarnings),
+  embeddingStatus: document.embeddingStatus,
+  embeddingModel: document.embeddingModel,
+  embeddingTask: document.embeddingTask,
+  embeddingGeneratedAt: toIso(document.embeddingGeneratedAt),
   isActive: Boolean(document.isActive),
   createdAt: toIso(document.createdAt),
   updatedAt: toIso(document.updatedAt),
@@ -107,6 +111,11 @@ const normalizeChunkRows = (recordDocumentId: number, chunks: Awaited<ReturnType
     charCount: chunk.charCount,
     tokenCount: chunk.tokenCount,
     embeddingReference: chunk.embeddingReference,
+    embeddingModel: chunk.embeddingModel,
+    embeddingTask: chunk.embeddingTask,
+    embeddingVersion: chunk.embeddingVersion,
+    embeddingChecksum: chunk.embeddingChecksum,
+    embeddingGeneratedAt: chunk.embeddingGeneratedAt ? new Date(chunk.embeddingGeneratedAt) : null,
     qualityScore: chunk.qualityScore,
     qualityFlags: chunk.qualityFlags,
   }));
@@ -193,6 +202,10 @@ export const uploadRecordDocument = async (
     ocrUsed: false,
     ocrConfidence: null,
     extractionWarnings: [],
+    embeddingStatus: "not_ready",
+    embeddingModel: null,
+    embeddingTask: null,
+    embeddingGeneratedAt: null,
     isActive: true,
   });
 
@@ -284,6 +297,10 @@ export const extractRecordDocument = async (
     document.ocrUsed = result.ocrUsed;
     document.ocrConfidence = result.ocrConfidence;
     document.extractionWarnings = result.warnings;
+    document.embeddingStatus = "not_ready";
+    document.embeddingModel = null;
+    document.embeddingTask = null;
+    document.embeddingGeneratedAt = null;
     await document.save();
 
     return {

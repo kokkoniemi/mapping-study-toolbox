@@ -2,10 +2,13 @@ import type { Model, ModelStatic, Sequelize } from "sequelize";
 import type * as SequelizeModule from "sequelize";
 import type {
   KeywordingActionType,
+  KeywordingAnalysisMode,
   EnrichmentProvenanceMap,
+  KeywordingCacheSummary,
   KeywordingJobSummary,
   KeywordingJobStatus,
   KeywordingSuggestionDecisionType,
+  RecordDocumentEmbeddingStatus,
   RecordDocumentExtractionStatus,
   RecordDocumentQualityStatus,
   RecordDocumentSourceType,
@@ -202,6 +205,10 @@ export interface RecordDocumentAttributes {
   ocrUsed: boolean;
   ocrConfidence: number | null;
   extractionWarnings: string[] | null;
+  embeddingStatus: RecordDocumentEmbeddingStatus;
+  embeddingModel: string | null;
+  embeddingTask: string | null;
+  embeddingGeneratedAt: Date | null;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -224,6 +231,11 @@ export interface DocumentChunkAttributes {
   charCount: number;
   tokenCount: number;
   embeddingReference: string | null;
+  embeddingModel: string | null;
+  embeddingTask: string | null;
+  embeddingVersion: string | null;
+  embeddingChecksum: string | null;
+  embeddingGeneratedAt: Date | null;
   qualityScore: number | null;
   qualityFlags: string[] | null;
   createdAt: Date;
@@ -305,6 +317,12 @@ export interface KeywordingJobAttributes {
   cancelRequested: boolean;
   recordIds: number[];
   mappingQuestionIds: number[];
+  analysisMode: KeywordingAnalysisMode;
+  reuseEmbeddingCache: boolean;
+  embeddingModel: string | null;
+  bertopicVersion: string | null;
+  cacheSummary: KeywordingCacheSummary | null;
+  topicArtifactPath: string | null;
   total: number;
   processed: number;
   summary: KeywordingJobSummary | null;
@@ -374,6 +392,13 @@ export interface KeywordingClusterAttributes {
   clusterKey: string;
   label: string | null;
   actionType: KeywordingActionType;
+  topicId: number | null;
+  parentTopicId: number | null;
+  isOutlier: boolean;
+  topTerms: string[] | null;
+  representativeChunkKeys: string[] | null;
+  representationSource: string | null;
+  topicSize: number | null;
   confidence: number;
   rationale: string;
   existingOptionIds: number[] | null;

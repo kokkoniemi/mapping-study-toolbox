@@ -178,4 +178,31 @@ describe("http", () => {
     expect(response.filename).toBe("keywording-report.zip");
     expect(response.contentType).toContain("application/zip");
   });
+
+  it("sends advanced keywording job settings in create payload", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(
+        new Response(JSON.stringify({ jobId: "kw-advanced", analysisMode: "advanced" }), {
+          status: 202,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+
+    await keywording.create({
+      recordIds: [1, 2],
+      mappingQuestionIds: [3],
+      analysisMode: "advanced",
+      reuseEmbeddingCache: false,
+    });
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(init.method).toBe("POST");
+    expect(init.body).toBe(JSON.stringify({
+      recordIds: [1, 2],
+      mappingQuestionIds: [3],
+      analysisMode: "advanced",
+      reuseEmbeddingCache: false,
+    }));
+  });
 });

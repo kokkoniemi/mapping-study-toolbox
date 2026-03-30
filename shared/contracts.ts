@@ -20,8 +20,10 @@ export type RecordDocumentUploadStatus = "uploaded" | "deleted";
 export type RecordDocumentExtractionStatus = "pending" | "queued" | "running" | "completed" | "failed" | "needs_review";
 export type RecordDocumentSourceType = "unknown" | "text-pdf" | "scanned-pdf" | "mixed";
 export type RecordDocumentQualityStatus = "pending" | "passed" | "needs_review" | "failed";
+export type RecordDocumentEmbeddingStatus = "not_ready" | "pending" | "ready" | "stale";
 export type KeywordingJobStatus = "queued" | "running" | "cancelling" | "completed" | "failed" | "cancelled";
 export type KeywordingSuggestionDecisionType = "existing-option" | "new-option";
+export type KeywordingAnalysisMode = "standard" | "advanced";
 export type KeywordingActionType =
   | "reuse_existing"
   | "create_new"
@@ -63,6 +65,10 @@ export type RecordDocumentSummary = {
   ocrUsed: boolean;
   ocrConfidence: number | null;
   extractionWarnings: string[];
+  embeddingStatus: RecordDocumentEmbeddingStatus;
+  embeddingModel: string | null;
+  embeddingTask: string | null;
+  embeddingGeneratedAt: string | null;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -126,9 +132,16 @@ export type KeywordingJobSummary = {
   clusterDecisionCount: number;
   manualReviewCount: number;
   qualityFailedRecordCount: number;
+  outlierTopicCount: number;
   actionCounts: Record<KeywordingActionType, number>;
   skippedRecords: KeywordingRecordIssue[];
   failedRecords: KeywordingRecordIssue[];
+};
+
+export type KeywordingCacheSummary = {
+  hits: number;
+  misses: number;
+  writes: number;
 };
 
 export type KeywordingJobSnapshot = {
@@ -140,6 +153,12 @@ export type KeywordingJobSnapshot = {
   processed: number;
   recordIds: number[];
   mappingQuestionIds: number[];
+  analysisMode: KeywordingAnalysisMode;
+  reuseEmbeddingCache: boolean;
+  embeddingModel: string | null;
+  bertopicVersion: string | null;
+  topicArtifactPath: string | null;
+  cacheSummary: KeywordingCacheSummary;
   reportPath: string | null;
   reportReady: boolean;
   createdAt: string;
@@ -157,6 +176,8 @@ export type KeywordingJobsIndexResponse = {
 export type CreateKeywordingJobPayload = {
   recordIds: number[];
   mappingQuestionIds?: number[];
+  analysisMode?: KeywordingAnalysisMode;
+  reuseEmbeddingCache?: boolean;
 };
 
 export type CreateMappingQuestionPayload = {

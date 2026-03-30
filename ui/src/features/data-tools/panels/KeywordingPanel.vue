@@ -19,6 +19,26 @@
     <section class="keywording-tools__setup">
       <h5>Run setup</h5>
       <p>{{ eligibleRecordCount }} / {{ selectedRecordCount }} selected record{{ selectedRecordCount === 1 ? "" : "s" }} have extracted PDFs ready.</p>
+      <div class="keywording-tools__advanced">
+        <label class="keywording-tools__field">
+          <span>Analysis mode</span>
+          <select :value="analysisMode" @change="onAnalysisModeChange">
+            <option value="standard">Standard</option>
+            <option value="advanced">Advanced (BERTopic + SPECTER2)</option>
+          </select>
+        </label>
+        <label class="keywording-tools__checkbox">
+          <input
+            type="checkbox"
+            :checked="reuseEmbeddingCache"
+            @change="onReuseCacheChange"
+          />
+          <span>Reuse cached embeddings when possible</span>
+        </label>
+        <p class="keywording-tools__hint" v-if="analysisMode === 'advanced'">
+          Advanced mode uses local SPECTER2 embeddings, BERTopic clustering, and GPT adjudication. Completed jobs will include cache and topic metadata.
+        </p>
+      </div>
       <div class="keywording-tools__questions">
         <label v-for="question in mappingQuestions" :key="question.id" class="keywording-tools__question">
           <input
@@ -41,11 +61,16 @@
           <div class="keywording-tools__job-meta">
             <strong>{{ job.jobId }}</strong>
             <span>{{ job.status }} / {{ job.processed }} of {{ job.total }}</span>
+            <span>mode {{ job.analysisMode }}</span>
             <span>
               reuse {{ job.summary.actionCounts.reuse_existing }},
               create {{ job.summary.actionCounts.create_new }},
               split/merge {{ job.summary.actionCounts.split_existing + job.summary.actionCounts.merge_existing }},
               review {{ job.summary.manualReviewCount }}
+            </span>
+            <span v-if="job.analysisMode === 'advanced'">
+              cache {{ job.cacheSummary.hits }} hit / {{ job.cacheSummary.misses }} miss / {{ job.cacheSummary.writes }} write,
+              outliers {{ job.summary.outlierTopicCount }}
             </span>
           </div>
           <div class="keywording-tools__job-actions">
@@ -77,6 +102,8 @@ defineProps<{
   eligibleRecordCount: number;
   mappingQuestions: MappingQuestion[];
   selectedQuestionIds: number[];
+  analysisMode: "standard" | "advanced";
+  reuseEmbeddingCache: boolean;
   canStartKeywording: boolean;
   keywordingStarting: boolean;
   keywordingLoading: boolean;
@@ -88,8 +115,19 @@ defineProps<{
 const emit = defineEmits<{
   reload: [];
   "toggle-question": [questionId: number];
+  "update-analysis-mode": [analysisMode: "standard" | "advanced" | string];
+  "update-reuse-cache": [reuseEmbeddingCache: boolean];
   start: [];
   cancel: [jobId: string];
   download: [jobId: string];
 }>();
+
+const onAnalysisModeChange = (event: Event) => {
+  const value = (event.target as HTMLSelectElement | null)?.value;
+  emit("update-analysis-mode", value === "advanced" ? "advanced" : "standard");
+};
+
+const onReuseCacheChange = (event: Event) => {
+  emit("update-reuse-cache", Boolean((event.target as HTMLInputElement | null)?.checked));
+};
 </script>
