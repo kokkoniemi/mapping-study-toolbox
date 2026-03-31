@@ -52,8 +52,8 @@ OPENAI_TIMEOUT_SECONDS = int(os.environ.get("OPENAI_TIMEOUT_SECONDS", "120"))
 GROBID_URL = os.environ.get("GROBID_URL", "http://grobid:8070")
 ENABLE_OCR = os.environ.get("KEYWORDING_ENABLE_OCR", "true").lower() != "false"
 EXTRACTOR_VERSION = "1.0"
-SPECTER2_MODEL_NAME = os.environ.get("SPECTER2_MODEL_NAME", "allenai/specter2")
-SPECTER2_ADAPTER_NAME = os.environ.get("SPECTER2_ADAPTER_NAME", "allenai/specter2_proximity")
+SPECTER2_MODEL_NAME = os.environ.get("SPECTER2_MODEL_NAME", "allenai/specter2_base")
+SPECTER2_ADAPTER_NAME = os.environ.get("SPECTER2_ADAPTER_NAME", "allenai/specter2")
 SPECTER2_EMBEDDING_TASK = "proximity"
 SPECTER2_EMBEDDING_VERSION = "specter2-proximity-v1"
 KEYWORDING_WARM_START_MODELS = os.environ.get("KEYWORDING_WARM_START_MODELS", "true").lower() != "false"
