@@ -320,7 +320,12 @@ export interface KeywordingJobAttributes {
   analysisMode: KeywordingAnalysisMode;
   reuseEmbeddingCache: boolean;
   embeddingModel: string | null;
+  representationModel: string | null;
   bertopicVersion: string | null;
+  topicReductionApplied: boolean;
+  topicCountBeforeReduction: number | null;
+  topicCountAfterReduction: number | null;
+  downgradedTopicCount: number;
   cacheSummary: KeywordingCacheSummary | null;
   topicArtifactPath: string | null;
   total: number;

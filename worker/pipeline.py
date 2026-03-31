@@ -52,12 +52,18 @@ OPENAI_TIMEOUT_SECONDS = int(os.environ.get("OPENAI_TIMEOUT_SECONDS", "120"))
 GROBID_URL = os.environ.get("GROBID_URL", "http://grobid:8070")
 ENABLE_OCR = os.environ.get("KEYWORDING_ENABLE_OCR", "true").lower() != "false"
 EXTRACTOR_VERSION = "1.0"
-SPECTER2_MODEL_NAME = os.environ.get("SPECTER2_MODEL_NAME", "allenai/specter2_base")
-SPECTER2_ADAPTER_NAME = os.environ.get("SPECTER2_ADAPTER_NAME", "allenai/specter2")
+SPECTER2_MODEL_NAME = os.environ.get("SPECTER2_MODEL_NAME", "allenai/specter2")
+SPECTER2_ADAPTER_NAME = os.environ.get("SPECTER2_ADAPTER_NAME", "allenai/specter2_proximity")
 SPECTER2_EMBEDDING_TASK = "proximity"
 SPECTER2_EMBEDDING_VERSION = "specter2-proximity-v1"
 KEYWORDING_WARM_START_MODELS = os.environ.get("KEYWORDING_WARM_START_MODELS", "true").lower() != "false"
-ADVANCED_TOPIC_CONFIG_VERSION = "bertopic-v1"
+ADVANCED_TOPIC_CONFIG_VERSION = "bertopic-v2"
+ADVANCED_REPRESENTATION_MODEL = "keybert-inspired+ctfidf"
+TOPIC_REDUCTION_STRONG_SIMILARITY = 0.9
+TOPIC_REDUCTION_WEAK_SIMILARITY = 0.72
+TOPIC_LOW_SUPPORT_MIN_SIZE = 2
+TOPIC_LOW_SUPPORT_RATIO = 0.18
+TOPIC_MERGE_SIMILARITY_THRESHOLD = 0.82
 
 STOP_WORDS = {
     "a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "in", "into", "is", "it", "its", "of", "on",
@@ -694,10 +700,165 @@ def build_record_evidence_pack(record: dict[str, Any], chunks: list[dict[str, An
     return compact_text("\n\n".join(part for part in parts if part))
 
 
+def build_guidance_document(question: dict[str, Any]) -> str:
+    option_titles = [
+        option.get("title", "")
+        for option in question.get("options", [])
+        if isinstance(option.get("title"), str) and option.get("title", "").strip()
+    ]
+    return compact_text(
+        "\n".join(
+            item
+            for item in [
+                question.get("title") or "",
+                question.get("description") or "",
+                question.get("decisionGuidance") or "",
+                question.get("evidenceInstructions") or "",
+                *[f"Positive example: {example}" for example in question.get("positiveExamples") or []],
+                *[f"Negative example: {example}" for example in question.get("negativeExamples") or []],
+                *[f"Existing option: {title}" for title in option_titles],
+            ]
+            if item
+        )
+    )
+
+
+def build_seed_topic_list(question: dict[str, Any]) -> list[list[str]]:
+    seeds = []
+    guidance_tokens = tokenize(build_guidance_document(question))
+    if guidance_tokens:
+        seeds.append(guidance_tokens[:8])
+    for option in question.get("options", []):
+        option_tokens = tokenize(option.get("title") or "")
+        if option_tokens:
+            seeds.append(option_tokens[:6])
+    return seeds
+
+
+def count_non_outlier_topics(assignments: list[int]) -> int:
+    return len({topic_id for topic_id in assignments if topic_id != -1})
+
+
+def build_topic_info(assignments: list[int], representative_labels: dict[int, str], support_scores: dict[int, float], flags: dict[int, list[str]]) -> list[dict[str, Any]]:
+    counts = Counter(assignments)
+    return [
+        {
+            "Topic": topic_id,
+            "Count": count,
+            "Name": representative_labels.get(topic_id) or f"Topic {topic_id}",
+            "SupportScore": round(support_scores.get(topic_id, 0.0), 4),
+            "Flags": flags.get(topic_id, []),
+        }
+        for topic_id, count in sorted(counts.items(), key=lambda item: (item[0] == -1, -item[1], item[0]))
+    ]
+
+
+def build_topic_centroids(assignments: list[int], embeddings: np.ndarray) -> dict[int, np.ndarray]:
+    grouped: dict[int, list[np.ndarray]] = defaultdict(list)
+    for index, topic_id in enumerate(assignments):
+        if index >= len(embeddings):
+            continue
+        grouped[int(topic_id)].append(embeddings[index])
+    return {
+        topic_id: np.mean(np.vstack(vectors), axis=0)
+        for topic_id, vectors in grouped.items()
+        if vectors
+    }
+
+
+def extract_refined_topic_terms(topic_documents: list[str], topic_centroid: np.ndarray | None, fallback_terms: list[str]) -> list[str]:
+    if not topic_documents or CountVectorizer is None:
+        return fallback_terms[:8]
+
+    vectorizer = CountVectorizer(stop_words="english", ngram_range=(1, 2), max_features=40)
+    try:
+        matrix = vectorizer.fit_transform(topic_documents)
+    except ValueError:
+        return fallback_terms[:8]
+
+    feature_names = vectorizer.get_feature_names_out()
+    if len(feature_names) == 0:
+        return fallback_terms[:8]
+
+    frequencies = np.asarray(matrix.sum(axis=0)).ravel()
+    if topic_centroid is None:
+        sorted_indices = np.argsort(-frequencies)
+        return [str(feature_names[index]) for index in sorted_indices[:8]]
+
+    candidate_embeddings = embed_texts([str(term) for term in feature_names])
+    similarities = cosine_scores(topic_centroid, candidate_embeddings)
+    if len(similarities) == 0:
+        sorted_indices = np.argsort(-frequencies)
+        return [str(feature_names[index]) for index in sorted_indices[:8]]
+
+    max_frequency = float(np.max(frequencies)) if len(frequencies) else 1.0
+    max_frequency = max(max_frequency, 1.0)
+    ranked = []
+    for index, term in enumerate(feature_names):
+        frequency_score = float(frequencies[index]) / max_frequency
+        similarity_score = float(similarities[index])
+        combined = (0.7 * similarity_score) + (0.3 * frequency_score)
+        ranked.append((combined, str(term)))
+    ranked.sort(key=lambda item: item[0], reverse=True)
+    return [term for _score, term in ranked[:8]]
+
+
+def build_reduced_topic_mapping(
+    assignments: list[int],
+    embeddings: np.ndarray,
+) -> tuple[dict[int, int], dict[int, float]]:
+    centroids = build_topic_centroids(assignments, embeddings)
+    topic_sizes = Counter(assignments)
+    non_outlier_topics = sorted(topic_id for topic_id in centroids if topic_id != -1)
+    reduced_mapping = {topic_id: topic_id for topic_id in centroids}
+    topic_similarity_scores: dict[int, float] = {topic_id: 0.0 for topic_id in centroids}
+
+    for index, left_topic in enumerate(non_outlier_topics):
+        for right_topic in non_outlier_topics[index + 1:]:
+            similarity = float(cosine_scores(centroids[left_topic], np.vstack([centroids[right_topic]]))[0])
+            topic_similarity_scores[left_topic] = max(topic_similarity_scores.get(left_topic, 0.0), similarity)
+            topic_similarity_scores[right_topic] = max(topic_similarity_scores.get(right_topic, 0.0), similarity)
+            if similarity >= TOPIC_REDUCTION_STRONG_SIMILARITY:
+                keep_topic = min(reduced_mapping.get(left_topic, left_topic), reduced_mapping.get(right_topic, right_topic))
+                replace_topic = max(reduced_mapping.get(left_topic, left_topic), reduced_mapping.get(right_topic, right_topic))
+                for topic_id, mapped_topic in list(reduced_mapping.items()):
+                    if mapped_topic == replace_topic:
+                        reduced_mapping[topic_id] = keep_topic
+
+    for topic_id in non_outlier_topics:
+        mapped_topic = reduced_mapping.get(topic_id, topic_id)
+        current_size = sum(topic_sizes[source_topic] for source_topic, reduced_topic in reduced_mapping.items() if reduced_topic == mapped_topic)
+        if current_size >= TOPIC_LOW_SUPPORT_MIN_SIZE:
+            continue
+        nearest_topic = None
+        nearest_similarity = 0.0
+        for candidate_topic in non_outlier_topics:
+            if candidate_topic == topic_id:
+                continue
+            candidate_mapped = reduced_mapping.get(candidate_topic, candidate_topic)
+            if candidate_mapped == mapped_topic:
+                continue
+            similarity = float(cosine_scores(centroids[topic_id], np.vstack([centroids[candidate_topic]]))[0])
+            if similarity > nearest_similarity:
+                nearest_similarity = similarity
+                nearest_topic = candidate_mapped
+        if nearest_topic is not None and nearest_similarity >= TOPIC_REDUCTION_WEAK_SIMILARITY:
+            for source_topic, reduced_topic in list(reduced_mapping.items()):
+                if reduced_topic == mapped_topic:
+                    reduced_mapping[source_topic] = nearest_topic
+
+    if -1 not in reduced_mapping and -1 in topic_sizes:
+        reduced_mapping[-1] = -1
+    return reduced_mapping, topic_similarity_scores
+
+
 def run_bertopic_model(
     documents: list[str],
     embeddings: np.ndarray,
+    *,
+    stage_name: str,
     zero_shot_topics: list[str] | None = None,
+    seed_topic_list: list[list[str]] | None = None,
 ) -> tuple[dict[str, Any], list[int]]:
     if not ADVANCED_LIBS_AVAILABLE or BERTopic is None or UMAP is None or hdbscan is None or CountVectorizer is None:
         raise RuntimeError("BERTopic dependencies are unavailable.")
@@ -722,31 +883,95 @@ def run_bertopic_model(
         vectorizer_model=CountVectorizer(stop_words="english", ngram_range=(1, 2)),
         zeroshot_topic_list=zero_shot_topics if zero_shot_topics else None,
         zeroshot_min_similarity=0.55 if zero_shot_topics else None,
+        seed_topic_list=seed_topic_list if seed_topic_list else None,
         min_topic_size=min_cluster_size,
         calculate_probabilities=False,
         verbose=False,
     )
-    topics, _probabilities = topic_model.fit_transform(documents, embeddings=embeddings)
-    topic_info_frame = topic_model.get_topic_info()
-    topic_info = topic_info_frame.to_dict(orient="records")
+    original_assignments, _probabilities = topic_model.fit_transform(documents, embeddings=embeddings)
+    original_assignments = [int(topic_id) for topic_id in original_assignments]
     hierarchy = []
     try:
-        if len({topic for topic in topics if topic != -1}) > 1:
+        if len({topic for topic in original_assignments if topic != -1}) > 1:
             hierarchy_frame = topic_model.hierarchical_topics(documents)
             hierarchy = hierarchy_frame.to_dict(orient="records")
     except Exception:
         hierarchy = []
 
-    representative_docs = topic_model.get_representative_docs() or {}
+    original_topic_words = {
+        int(topic_id): normalize_topic_terms(topic_model.get_topic(topic_id))
+        for topic_id in set(original_assignments)
+    }
+    reduction_map, topic_similarity_scores = build_reduced_topic_mapping(original_assignments, embeddings)
+    reduced_assignments = [int(reduction_map.get(topic_id, topic_id)) for topic_id in original_assignments]
+    reduced_topic_centroids = build_topic_centroids(reduced_assignments, embeddings)
+    reduced_topic_docs: dict[int, list[str]] = defaultdict(list)
+    topic_member_indexes: dict[int, list[int]] = defaultdict(list)
+    for index, reduced_topic_id in enumerate(reduced_assignments):
+        reduced_topic_docs[reduced_topic_id].append(documents[index])
+        topic_member_indexes[reduced_topic_id].append(index)
+
+    reduced_raw_terms: dict[int, list[str]] = {}
+    reduced_refined_terms: dict[int, list[str]] = {}
+    topic_support_scores: dict[int, float] = {}
+    topic_flags: dict[int, list[str]] = {}
+    topic_labels: dict[int, str] = {}
+    for reduced_topic_id, topic_docs in reduced_topic_docs.items():
+        member_count = len(topic_docs)
+        topic_support_scores[reduced_topic_id] = round(member_count / max(len(documents), 1), 4)
+        source_topics = [source_topic for source_topic, mapped_topic in reduction_map.items() if mapped_topic == reduced_topic_id]
+        raw_terms = []
+        for source_topic in source_topics:
+            raw_terms.extend(original_topic_words.get(source_topic, []))
+        deduped_raw_terms = list(dict.fromkeys(raw_terms))[:8]
+        reduced_raw_terms[reduced_topic_id] = deduped_raw_terms
+        reduced_refined_terms[reduced_topic_id] = extract_refined_topic_terms(
+            topic_docs,
+            reduced_topic_centroids.get(reduced_topic_id),
+            deduped_raw_terms,
+        )
+
+        flags: list[str] = []
+        if reduced_topic_id == -1:
+            flags.append("outlier")
+        if member_count < TOPIC_LOW_SUPPORT_MIN_SIZE or topic_support_scores[reduced_topic_id] < TOPIC_LOW_SUPPORT_RATIO:
+            flags.append("low_support")
+        if len(reduced_refined_terms[reduced_topic_id]) < 2:
+            flags.append("weak_representation")
+        topic_flags[reduced_topic_id] = flags
+        label_source = reduced_refined_terms[reduced_topic_id] or deduped_raw_terms
+        topic_labels[reduced_topic_id] = summarize_cluster_label(label_source, f"Topic {reduced_topic_id}")
+
+    reduction_rows = [
+        {
+            "originalTopicId": original_topic_id,
+            "reducedTopicId": reduced_topic_id,
+        }
+        for original_topic_id, reduced_topic_id in sorted(reduction_map.items())
+    ]
     return {
-        "topicInfo": topic_info,
+        "stage": stage_name,
+        "topicInfo": build_topic_info(reduced_assignments, topic_labels, topic_support_scores, topic_flags),
         "hierarchy": hierarchy,
-        "representativeDocs": representative_docs,
-        "topicWords": {
-            topic_id: topic_model.get_topic(topic_id)
-            for topic_id in set(topics)
+        "topicWords": reduced_raw_terms,
+        "refinedTopicWords": reduced_refined_terms,
+        "originalTopicWords": original_topic_words,
+        "originalAssignments": original_assignments,
+        "reducedAssignments": reduced_assignments,
+        "reduction": {
+            "applied": original_assignments != reduced_assignments,
+            "mapping": reduction_rows,
+            "topicCountBeforeReduction": count_non_outlier_topics(original_assignments),
+            "topicCountAfterReduction": count_non_outlier_topics(reduced_assignments),
         },
-    }, list(topics)
+        "topicSupportScores": topic_support_scores,
+        "topicSimilarityScores": topic_similarity_scores,
+        "topicFlags": topic_flags,
+        "topicMemberIndexes": {
+            str(topic_id): indexes
+            for topic_id, indexes in topic_member_indexes.items()
+        },
+    }, reduced_assignments
 
 
 def write_topic_artifact(app_data_dir: str, job_id: str, file_name: str, payload: dict[str, Any]) -> str:
@@ -886,6 +1111,15 @@ def validate_cluster_decision(
     if int(cluster.get("topicSize") or 0) < 2 and cluster_decision["actionType"] != "abstain":
         cluster_decision["actionType"] = "abstain"
         cluster_decision["rationale"] = "Low-support topics are downgraded to manual review instead of direct taxonomy actions."
+    if "low_support" in (cluster.get("stabilityFlags") or []) and cluster_decision["actionType"] != "abstain":
+        cluster_decision["actionType"] = "abstain"
+        cluster_decision["rationale"] = "Topic stability checks marked this cluster low-support, so it was downgraded to manual review."
+    if cluster_decision["actionType"] == "merge_existing" and float(cluster.get("topicSimilarityScore") or 0.0) < TOPIC_MERGE_SIMILARITY_THRESHOLD:
+        cluster_decision["actionType"] = "abstain"
+        cluster_decision["rationale"] = "Merge actions require high reduced-topic similarity and this cluster did not meet that threshold."
+    if cluster_decision["actionType"] == "split_existing" and len(cluster.get("preReductionTopicIds") or []) < 2:
+        cluster_decision["actionType"] = "abstain"
+        cluster_decision["rationale"] = "Split actions require multiple pre-reduction topics feeding the reduced cluster."
     if not cluster.get("supportingChunkKeys"):
         cluster_decision["actionType"] = "abstain"
         cluster_decision["rationale"] = "Cluster had no valid evidence chunk keys and was downgraded to abstain."
@@ -1117,14 +1351,24 @@ def build_cluster_prompt(question: dict[str, Any], cluster: dict[str, Any], opti
         Topic size: {cluster.get("topicSize")}
         Outlier topic: {cluster.get("isOutlier")}
         Representation source: {cluster.get("representationSource") or ""}
+        Pre-reduction topic ids: {json.dumps(cluster.get("preReductionTopicIds", []), ensure_ascii=False)}
+        Topic reduction applied: {cluster.get("topicReductionApplied")}
+        Topic support score: {cluster.get("topicSupportScore")}
+        Topic similarity score: {cluster.get("topicSimilarityScore")}
+        Stability flags: {json.dumps(cluster.get("stabilityFlags", []), ensure_ascii=False)}
+        Discovery topic ids: {json.dumps(cluster.get("discoveryTopicIds", []), ensure_ascii=False)}
+        Discovery agreement: {cluster.get("discoveryAgreement")}
         Candidate topics: {json.dumps(cluster.get("tokens", []), ensure_ascii=False)}
-        Top terms: {json.dumps(cluster.get("topTerms", []), ensure_ascii=False)}
+        Raw top terms: {json.dumps(cluster.get("rawTopTerms", []), ensure_ascii=False)}
+        Refined top terms: {json.dumps(cluster.get("refinedTopTerms", []), ensure_ascii=False)}
+        Representative chunk keys: {json.dumps(cluster.get("representativeChunkKeys", []), ensure_ascii=False)}
         Supporting evidence:
         {os.linesep.join(evidence_lines)}
 
         Return one taxonomy action: create_new, split_existing, merge_existing, or abstain.
         Use split_existing only when one existing option should be divided into multiple new options.
         Use merge_existing only when two or more existing options are semantically overlapping and should be merged.
+        In the rationale, explicitly say whether the recommendation comes from discovery agreement, taxonomy guidance, or both.
         """
     ).strip()
 
@@ -1209,7 +1453,10 @@ def build_report_html(report_json: dict[str, Any]) -> str:
     for record in report_json["records"]:
         suggestions_html = []
         for suggestion in record["suggestions"]:
-            evidence = suggestion["evidenceSpans"][0] if suggestion["evidenceSpans"] else {}
+            evidence_items = suggestion.get("evidenceSpans")
+            if not isinstance(evidence_items, list):
+                evidence_items = suggestion.get("evidence")
+            evidence = evidence_items[0] if isinstance(evidence_items, list) and evidence_items else {}
             suggestions_html.append(
                 f"""
                 <div class="suggestion">
@@ -1248,9 +1495,22 @@ def build_report_html(report_json: dict[str, Any]) -> str:
             <tr>
               <td>{escape(topic.get("mappingQuestionTitle") or "")}</td>
               <td>{escape(str(topic.get("topicId")))}</td>
-              <td>{escape(", ".join(topic.get("topTerms") or []))}</td>
+              <td>{escape(", ".join(topic.get("refinedTopTerms") or topic.get("topTerms") or []))}</td>
               <td>{topic.get("topicSize") or 0}</td>
               <td>{escape("yes" if topic.get("isOutlier") else "no")}</td>
+            </tr>
+            """
+        )
+
+    downgraded_rows = []
+    for topic in report_json.get("topicAppendix", {}).get("downgradedTopics", []):
+        downgraded_rows.append(
+            f"""
+            <tr>
+              <td>{escape(topic.get("mappingQuestionTitle") or "")}</td>
+              <td>{escape(str(topic.get("topicId")))}</td>
+              <td>{escape(", ".join(topic.get("stabilityFlags") or []))}</td>
+              <td>{escape(topic.get("reason") or "")}</td>
             </tr>
             """
         )
@@ -1274,6 +1534,7 @@ def build_report_html(report_json: dict[str, Any]) -> str:
   <h1>{escape(report_json["title"])}</h1>
   <p>Model: {escape(report_json["run"]["model"])}, extractor: {escape(report_json["run"]["extractor"])}</p>
   <p>Analysis mode: {escape(report_json["run"].get("analysisMode") or "standard")}, embedding model: {escape(report_json["run"].get("embeddingModel") or "n/a")}, BERTopic: {escape(report_json["run"].get("bertopicVersion") or "n/a")}</p>
+  <p>Representation model: {escape(report_json["run"].get("representationModel") or "n/a")}, reduction applied: {escape("yes" if report_json["run"].get("topicReductionApplied") else "no")}, topics {report_json["run"].get("topicCountBeforeReduction") or 0} → {report_json["run"].get("topicCountAfterReduction") or 0}</p>
   <p>Reuse existing: {report_json["summary"]["actionCounts"]["reuse_existing"]}, create new: {report_json["summary"]["actionCounts"]["create_new"]}, split: {report_json["summary"]["actionCounts"]["split_existing"]}, merge: {report_json["summary"]["actionCounts"]["merge_existing"]}, abstain: {report_json["summary"]["actionCounts"]["abstain"]}</p>
   <p>Embedding cache: {report_json["run"].get("cacheSummary", {}).get("hits", 0)} hits, {report_json["run"].get("cacheSummary", {}).get("misses", 0)} misses, {report_json["run"].get("cacheSummary", {}).get("writes", 0)} writes</p>
   <h2>Taxonomy Actions</h2>
@@ -1285,6 +1546,11 @@ def build_report_html(report_json: dict[str, Any]) -> str:
   <table>
     <thead><tr><th>Question</th><th>Topic</th><th>Top terms</th><th>Size</th><th>Outlier</th></tr></thead>
     <tbody>{''.join(topic_rows) or '<tr><td colspan="5">No advanced topic appendix</td></tr>'}</tbody>
+  </table>
+  <h2>Downgraded Topics</h2>
+  <table>
+    <thead><tr><th>Question</th><th>Topic</th><th>Flags</th><th>Reason</th></tr></thead>
+    <tbody>{''.join(downgraded_rows) or '<tr><td colspan="4">No downgraded topics</td></tr>'}</tbody>
   </table>
   <h2>Records</h2>
   {''.join(records_html)}
@@ -1303,7 +1569,12 @@ def create_report(
     *,
     analysis_mode: str = "standard",
     embedding_model: str | None = None,
+    representation_model: str | None = None,
     bertopic_version: str | None = None,
+    topic_reduction_applied: bool = False,
+    topic_count_before_reduction: int | None = None,
+    topic_count_after_reduction: int | None = None,
+    downgraded_topic_count: int = 0,
     cache_summary: dict[str, int] | None = None,
     topic_artifact_path: str | None = None,
     topic_appendix: dict[str, Any] | None = None,
@@ -1329,7 +1600,12 @@ def create_report(
             "extractor": "pymupdf+grobid+ocr",
             "analysisMode": analysis_mode,
             "embeddingModel": embedding_model,
+            "representationModel": representation_model,
             "bertopicVersion": bertopic_version,
+            "topicReductionApplied": topic_reduction_applied,
+            "topicCountBeforeReduction": topic_count_before_reduction,
+            "topicCountAfterReduction": topic_count_after_reduction,
+            "downgradedTopicCount": downgraded_topic_count,
             "cacheSummary": cache_summary or {"hits": 0, "misses": 0, "writes": 0},
             "topicArtifactPath": topic_artifact_path,
         },
@@ -1570,7 +1846,12 @@ def run_keywording_standard(payload: dict[str, Any]) -> dict[str, Any]:
     return {
         "analysisMode": "standard",
         "embeddingModel": None,
+        "representationModel": None,
         "bertopicVersion": None,
+        "topicReductionApplied": False,
+        "topicCountBeforeReduction": None,
+        "topicCountAfterReduction": None,
+        "downgradedTopicCount": 0,
         "cacheSummary": {"hits": 0, "misses": 0, "writes": 0},
         "topicArtifactPath": None,
         "reportPath": report_path,
@@ -1786,11 +2067,23 @@ def run_keywording_advanced(payload: dict[str, Any]) -> dict[str, Any]:
         record_pack_texts.append(record_pack)
         record_pack_embeddings.append(record_pack_embedding)
 
+    independent_record_topic_lookup: dict[int, int] = {}
+    guided_topic_count_before_total = 0
+    guided_topic_count_after_total = 0
+    topic_reduction_applied = False
+    downgraded_topics: list[dict[str, Any]] = []
+
     if len(eligible_records) >= 3:
         independent_payload, independent_assignments = run_bertopic_model(
             record_pack_texts,
             np.vstack(record_pack_embeddings),
+            stage_name="discovery",
         )
+        independent_record_topic_lookup = {
+            eligible_records[index]["record"]["id"]: int(topic_id)
+            for index, topic_id in enumerate(independent_assignments)
+        }
+        topic_reduction_applied = topic_reduction_applied or bool(independent_payload.get("reduction", {}).get("applied"))
         independent_topics = {
             "status": "completed",
             "topicInfo": independent_payload.get("topicInfo", []),
@@ -1799,9 +2092,14 @@ def run_keywording_advanced(payload: dict[str, Any]) -> dict[str, Any]:
                 {
                     "recordId": eligible_records[index]["record"]["id"],
                     "topicId": topic_id,
+                    "preReductionTopicId": independent_payload.get("originalAssignments", [])[index] if index < len(independent_payload.get("originalAssignments", [])) else topic_id,
                 }
                 for index, topic_id in enumerate(independent_assignments)
             ],
+            "reduction": independent_payload.get("reduction", {}),
+            "topicWords": independent_payload.get("topicWords", {}),
+            "refinedTopicWords": independent_payload.get("refinedTopicWords", {}),
+            "topicFlags": independent_payload.get("topicFlags", {}),
         }
     else:
         independent_topics = {
@@ -1886,14 +2184,16 @@ def run_keywording_advanced(payload: dict[str, Any]) -> dict[str, Any]:
                     cache_summary=cache_summary,
                 )
 
-            question_records.append({
-                "recordId": record["id"],
-                "title": record.get("title"),
-                "suggestion": suggestion,
-                "selectedChunks": selected_chunks,
-                "evidencePack": evidence_pack or bundle["recordPack"],
-            })
             if aggregate_embedding is not None:
+                question_records.append({
+                    "recordId": record["id"],
+                    "title": record.get("title"),
+                    "suggestion": suggestion,
+                    "selectedChunks": selected_chunks,
+                    "evidencePack": evidence_pack or bundle["recordPack"],
+                    "aggregateEmbedding": aggregate_embedding,
+                    "discoveryTopicId": independent_record_topic_lookup.get(record["id"]),
+                })
                 question_texts.append(evidence_pack or bundle["recordPack"])
                 question_embeddings.append(aggregate_embedding)
 
@@ -1907,50 +2207,89 @@ def run_keywording_advanced(payload: dict[str, Any]) -> dict[str, Any]:
             "assignments": [],
         }
         if len(question_embeddings) >= 3:
+            guidance_document = build_guidance_document(question)
             topic_payload, topic_assignments = run_bertopic_model(
                 question_texts,
                 np.vstack(question_embeddings),
+                stage_name=f"guided-question-{question['id']}",
                 zero_shot_topics=build_question_seed_topics(question),
+                seed_topic_list=build_seed_topic_list(question),
             )
+            topic_reduction_applied = topic_reduction_applied or bool(topic_payload.get("reduction", {}).get("applied"))
+            guided_topic_count_before_total += int(topic_payload.get("reduction", {}).get("topicCountBeforeReduction") or 0)
+            guided_topic_count_after_total += int(topic_payload.get("reduction", {}).get("topicCountAfterReduction") or 0)
             question_topic_payload = {
                 "mappingQuestionId": question["id"],
                 "mappingQuestionTitle": question.get("title"),
                 "status": "completed",
                 "topicInfo": topic_payload.get("topicInfo", []),
                 "hierarchy": topic_payload.get("hierarchy", []),
+                "reduction": topic_payload.get("reduction", {}),
                 "assignments": [
                     {
                         "recordId": question_records[index]["recordId"],
                         "topicId": topic_id,
+                        "preReductionTopicId": topic_payload.get("originalAssignments", [])[index] if index < len(topic_payload.get("originalAssignments", [])) else topic_id,
                     }
                     for index, topic_id in enumerate(topic_assignments)
                 ],
                 "topicWords": topic_payload.get("topicWords", {}),
+                "refinedTopicWords": topic_payload.get("refinedTopicWords", {}),
+                "originalTopicWords": topic_payload.get("originalTopicWords", {}),
+                "topicFlags": topic_payload.get("topicFlags", {}),
+                "topicSupportScores": topic_payload.get("topicSupportScores", {}),
+                "topicSimilarityScores": topic_payload.get("topicSimilarityScores", {}),
+                "guidanceDocument": guidance_document,
             }
 
             parent_lookup = build_parent_topic_lookup(topic_payload.get("hierarchy", []))
-            topic_info_by_id = {
-                item.get("Topic"): item
-                for item in topic_payload.get("topicInfo", [])
-                if isinstance(item, dict) and isinstance(item.get("Topic"), int)
-            }
             assignments_by_topic: dict[int, list[dict[str, Any]]] = defaultdict(list)
             for index, topic_id in enumerate(topic_assignments):
                 if index < len(question_records):
                     assignments_by_topic[int(topic_id)].append(question_records[index])
 
             for topic_id, members in assignments_by_topic.items():
-                topic_info = topic_info_by_id.get(topic_id, {})
-                top_terms = normalize_topic_terms(topic_payload.get("topicWords", {}).get(topic_id))
-                supporting_chunk_keys = sorted(
-                    {
-                        evidence_item.get("chunkKey")
-                        for member in members
-                        for evidence_item in member["suggestion"].get("evidence", [])
-                        if isinstance(evidence_item.get("chunkKey"), str)
-                    }
-                )
-                representative_chunk_keys = supporting_chunk_keys[:6]
+                raw_top_terms = list(topic_payload.get("topicWords", {}).get(topic_id, []))
+                refined_top_terms = list(topic_payload.get("refinedTopicWords", {}).get(topic_id, []))
+                topic_support_score = float(topic_payload.get("topicSupportScores", {}).get(topic_id, 0.0))
+                topic_similarity_score = float(topic_payload.get("topicSimilarityScores", {}).get(topic_id, 0.0))
+                stability_flags = list(topic_payload.get("topicFlags", {}).get(topic_id, []))
+                topic_member_indexes = topic_payload.get("topicMemberIndexes", {}).get(str(topic_id), [])
+                pre_reduction_topic_ids = sorted({
+                    int(topic_payload.get("originalAssignments", [])[index])
+                    for index in topic_member_indexes
+                    if index < len(topic_payload.get("originalAssignments", []))
+                })
+
+                centroid = None
+                member_vectors = [
+                    member.get("aggregateEmbedding")
+                    for member in members
+                    if isinstance(member.get("aggregateEmbedding"), np.ndarray)
+                ]
+                if member_vectors:
+                    centroid = np.mean(np.vstack(member_vectors), axis=0)
+
+                scored_chunks = []
+                supporting_chunk_keys = set()
+                for member in members:
+                    member_similarity = 0.0
+                    if centroid is not None and isinstance(member.get("aggregateEmbedding"), np.ndarray):
+                        member_similarity = float(cosine_scores(centroid, np.vstack([member["aggregateEmbedding"]]))[0])
+                    for chunk in member.get("selectedChunks", []):
+                        chunk_key = chunk.get("chunkKey")
+                        if not isinstance(chunk_key, str):
+                            continue
+                        supporting_chunk_keys.add(chunk_key)
+                        combined_score = (0.65 * float(chunk.get("_retrieval_score") or 0.0)) + (0.35 * member_similarity)
+                        scored_chunks.append((combined_score, chunk_key))
+                scored_chunks.sort(key=lambda item: item[0], reverse=True)
+                representative_chunk_keys = []
+                for _score, chunk_key in scored_chunks:
+                    if chunk_key not in representative_chunk_keys:
+                        representative_chunk_keys.append(chunk_key)
+                    if len(representative_chunk_keys) >= 6:
+                        break
                 supporting_evidence = [
                     {
                         "recordId": member["recordId"],
@@ -1961,33 +2300,67 @@ def run_keywording_advanced(payload: dict[str, Any]) -> dict[str, Any]:
                     for member in members
                     for evidence_item in member["suggestion"].get("evidence", [])[:2]
                 ][:8]
+                discovery_topic_ids = sorted({
+                    int(member["discoveryTopicId"])
+                    for member in members
+                    if member.get("discoveryTopicId") is not None
+                })
+                discovery_agreement = "none"
+                if discovery_topic_ids:
+                    discovery_agreement = "aligned" if len(discovery_topic_ids) == 1 else "mixed"
+                downgrade_reason = None
+                if "outlier" in stability_flags:
+                    downgrade_reason = "Outlier topic"
+                elif "low_support" in stability_flags:
+                    downgrade_reason = "Low support after reduction"
+                elif "weak_representation" in stability_flags:
+                    downgrade_reason = "Weak topic representation"
 
                 candidate_cluster = {
                     "mappingQuestionId": question["id"],
                     "clusterKey": f"question-{question['id']}-topic-{topic_id}",
-                    "label": summarize_cluster_label(top_terms, f"Topic {topic_id}"),
+                    "label": summarize_cluster_label(refined_top_terms or raw_top_terms, f"Topic {topic_id}"),
                     "topicId": topic_id,
                     "parentTopicId": parent_lookup.get(topic_id),
                     "isOutlier": topic_id == -1,
-                    "topTerms": top_terms,
+                    "topTerms": refined_top_terms or raw_top_terms,
+                    "rawTopTerms": raw_top_terms,
+                    "refinedTopTerms": refined_top_terms,
+                    "preReductionTopicIds": pre_reduction_topic_ids,
+                    "topicReductionApplied": bool(topic_payload.get("reduction", {}).get("applied")),
+                    "topicSupportScore": topic_support_score,
+                    "topicSimilarityScore": topic_similarity_score,
+                    "stabilityFlags": stability_flags,
+                    "discoveryTopicIds": discovery_topic_ids,
+                    "discoveryAgreement": discovery_agreement,
                     "representativeChunkKeys": representative_chunk_keys,
-                    "representationSource": "bertopic-taxonomy-aware",
+                    "representationSource": "bertopic-guided-reduced",
                     "topicSize": len(members),
                     "supportingRecordIds": sorted({member["recordId"] for member in members}),
-                    "supportingChunkKeys": supporting_chunk_keys,
+                    "supportingChunkKeys": sorted(supporting_chunk_keys),
                     "supportingEvidence": supporting_evidence,
-                    "tokens": top_terms,
+                    "tokens": refined_top_terms or raw_top_terms,
                 }
                 topic_appendix_rows.append({
                     "mappingQuestionId": question["id"],
                     "mappingQuestionTitle": question.get("title"),
                     "topicId": topic_id,
                     "parentTopicId": parent_lookup.get(topic_id),
-                    "topTerms": top_terms,
+                    "topTerms": raw_top_terms,
+                    "refinedTopTerms": refined_top_terms,
                     "topicSize": len(members),
                     "isOutlier": topic_id == -1,
-                    "representationSource": "bertopic-taxonomy-aware",
+                    "representationSource": "bertopic-guided-reduced",
+                    "stabilityFlags": stability_flags,
                 })
+                if downgrade_reason:
+                    downgraded_topics.append({
+                        "mappingQuestionId": question["id"],
+                        "mappingQuestionTitle": question.get("title"),
+                        "topicId": topic_id,
+                        "stabilityFlags": stability_flags,
+                        "reason": downgrade_reason,
+                    })
                 try:
                     cluster_decision = call_openai_structured(
                         build_cluster_prompt(question, candidate_cluster, question.get("options", [])),
@@ -2030,12 +2403,16 @@ def run_keywording_advanced(payload: dict[str, Any]) -> dict[str, Any]:
                 if cluster_entry["confidence"] < 60:
                     low_confidence_count += 1
                     manual_review_count += 1
-                if cluster_entry["isOutlier"] or action_type == "abstain":
+                if cluster_entry["isOutlier"] or action_type == "abstain" or stability_flags:
                     manual_review_count += 1
 
         taxonomy_topics.append(question_topic_payload)
 
     outlier_topic_count = sum(1 for cluster in clusters if cluster.get("isOutlier"))
+    downgraded_topic_count = len(downgraded_topics)
+    if guided_topic_count_before_total == 0 and guided_topic_count_after_total == 0 and independent_topics.get("status") == "completed":
+        guided_topic_count_before_total = int(independent_topics.get("reduction", {}).get("topicCountBeforeReduction") or 0)
+        guided_topic_count_after_total = int(independent_topics.get("reduction", {}).get("topicCountAfterReduction") or 0)
     summary = {
         "existingSuggestionCount": sum(1 for item in suggestions if item["actionType"] == "reuse_existing"),
         "newSuggestionCount": sum(1 for item in suggestions if item["actionType"] == "create_new"),
@@ -2059,8 +2436,19 @@ def run_keywording_advanced(payload: dict[str, Any]) -> dict[str, Any]:
         "bertopicVersion": get_bertopic_version(),
         "configVersion": ADVANCED_TOPIC_CONFIG_VERSION,
         "cacheSummary": cache_summary,
-        "independentDiscovery": independent_topics,
-        "taxonomyAwareTopics": taxonomy_topics,
+        "discovery": independent_topics,
+        "guided": taxonomy_topics,
+        "reduction": {
+            "applied": topic_reduction_applied,
+            "topicCountBeforeReduction": guided_topic_count_before_total,
+            "topicCountAfterReduction": guided_topic_count_after_total,
+        },
+        "representations": {
+            "model": ADVANCED_REPRESENTATION_MODEL,
+        },
+        "stability": {
+            "downgradedTopics": downgraded_topics,
+        },
     }
     topic_artifact_path = write_topic_artifact(app_data_dir, job_id, "advanced-topic-artifact.json", topic_artifact_payload)
     report_path = create_report(
@@ -2073,12 +2461,18 @@ def run_keywording_advanced(payload: dict[str, Any]) -> dict[str, Any]:
         clusters,
         analysis_mode="advanced",
         embedding_model=SPECTER2_MODEL_NAME,
+        representation_model=ADVANCED_REPRESENTATION_MODEL,
         bertopic_version=get_bertopic_version(),
+        topic_reduction_applied=topic_reduction_applied,
+        topic_count_before_reduction=guided_topic_count_before_total,
+        topic_count_after_reduction=guided_topic_count_after_total,
+        downgraded_topic_count=downgraded_topic_count,
         cache_summary=cache_summary,
         topic_artifact_path=topic_artifact_path,
         topic_appendix={
             "independentDiscovery": independent_topics,
             "questionTopics": topic_appendix_rows,
+            "downgradedTopics": downgraded_topics,
         },
     )
 
@@ -2090,7 +2484,12 @@ def run_keywording_advanced(payload: dict[str, Any]) -> dict[str, Any]:
     return {
         "analysisMode": "advanced",
         "embeddingModel": SPECTER2_MODEL_NAME,
+        "representationModel": ADVANCED_REPRESENTATION_MODEL,
         "bertopicVersion": get_bertopic_version(),
+        "topicReductionApplied": topic_reduction_applied,
+        "topicCountBeforeReduction": guided_topic_count_before_total,
+        "topicCountAfterReduction": guided_topic_count_after_total,
+        "downgradedTopicCount": downgraded_topic_count,
         "cacheSummary": cache_summary,
         "topicArtifactPath": topic_artifact_path,
         "reportPath": report_path,

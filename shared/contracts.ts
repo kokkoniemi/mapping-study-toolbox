@@ -156,7 +156,12 @@ export type KeywordingJobSnapshot = {
   analysisMode: KeywordingAnalysisMode;
   reuseEmbeddingCache: boolean;
   embeddingModel: string | null;
+  representationModel: string | null;
   bertopicVersion: string | null;
+  topicReductionApplied: boolean;
+  topicCountBeforeReduction: number | null;
+  topicCountAfterReduction: number | null;
+  downgradedTopicCount: number;
   topicArtifactPath: string | null;
   cacheSummary: KeywordingCacheSummary;
   reportPath: string | null;

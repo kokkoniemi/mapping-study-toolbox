@@ -70,7 +70,11 @@
             </span>
             <span v-if="job.analysisMode === 'advanced'">
               cache {{ job.cacheSummary.hits }} hit / {{ job.cacheSummary.misses }} miss / {{ job.cacheSummary.writes }} write,
-              outliers {{ job.summary.outlierTopicCount }}
+              topics {{ job.topicCountBeforeReduction ?? 0 }} -> {{ job.topicCountAfterReduction ?? 0 }},
+              outliers {{ job.summary.outlierTopicCount }},
+              downgraded {{ job.downgradedTopicCount }},
+              reduction {{ job.topicReductionApplied ? "on" : "off" }},
+              representation {{ job.representationModel || "n/a" }}
             </span>
           </div>
           <div class="keywording-tools__job-actions">

@@ -80,7 +80,12 @@ const buildJobSnapshot = (job: KeywordingJobModel): KeywordingJobSnapshot => ({
   analysisMode: job.analysisMode ?? "standard",
   reuseEmbeddingCache: Boolean(job.reuseEmbeddingCache),
   embeddingModel: job.embeddingModel,
+  representationModel: job.representationModel,
   bertopicVersion: job.bertopicVersion,
+  topicReductionApplied: Boolean(job.topicReductionApplied),
+  topicCountBeforeReduction: job.topicCountBeforeReduction ?? null,
+  topicCountAfterReduction: job.topicCountAfterReduction ?? null,
+  downgradedTopicCount: job.downgradedTopicCount ?? 0,
   topicArtifactPath: job.topicArtifactPath,
   cacheSummary: job.cacheSummary ?? { hits: 0, misses: 0, writes: 0 },
   reportPath: job.reportPath,
@@ -419,7 +424,12 @@ const runQueuedJobs = async () => {
           refreshedJob.finishedAt = new Date();
           refreshedJob.summary = normalizeSummary(workerResponse.summary);
           refreshedJob.embeddingModel = workerResponse.embeddingModel;
+          refreshedJob.representationModel = workerResponse.representationModel;
           refreshedJob.bertopicVersion = workerResponse.bertopicVersion;
+          refreshedJob.topicReductionApplied = workerResponse.topicReductionApplied;
+          refreshedJob.topicCountBeforeReduction = workerResponse.topicCountBeforeReduction;
+          refreshedJob.topicCountAfterReduction = workerResponse.topicCountAfterReduction;
+          refreshedJob.downgradedTopicCount = workerResponse.downgradedTopicCount;
           refreshedJob.topicArtifactPath = workerResponse.topicArtifactPath;
           refreshedJob.cacheSummary = workerResponse.cacheSummary;
           await refreshedJob.save();
@@ -430,7 +440,12 @@ const runQueuedJobs = async () => {
         job.processed = records.length;
         job.summary = normalizeSummary(workerResponse.summary);
         job.embeddingModel = workerResponse.embeddingModel;
+        job.representationModel = workerResponse.representationModel;
         job.bertopicVersion = workerResponse.bertopicVersion;
+        job.topicReductionApplied = workerResponse.topicReductionApplied;
+        job.topicCountBeforeReduction = workerResponse.topicCountBeforeReduction;
+        job.topicCountAfterReduction = workerResponse.topicCountAfterReduction;
+        job.downgradedTopicCount = workerResponse.downgradedTopicCount;
         job.topicArtifactPath = workerResponse.topicArtifactPath;
         job.cacheSummary = workerResponse.cacheSummary;
         job.reportPath = workerResponse.reportPath;
@@ -475,7 +490,12 @@ export const createKeywordingJob = async (
     analysisMode,
     reuseEmbeddingCache,
     embeddingModel: null,
+    representationModel: null,
     bertopicVersion: null,
+    topicReductionApplied: false,
+    topicCountBeforeReduction: null,
+    topicCountAfterReduction: null,
+    downgradedTopicCount: 0,
     cacheSummary: { hits: 0, misses: 0, writes: 0 },
     topicArtifactPath: null,
     total: records.length,

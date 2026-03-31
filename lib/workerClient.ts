@@ -157,7 +157,12 @@ export type WorkerKeywordingCluster = {
 export type WorkerKeywordingResponse = {
   analysisMode: KeywordingAnalysisMode;
   embeddingModel: string | null;
+  representationModel: string | null;
   bertopicVersion: string | null;
+  topicReductionApplied: boolean;
+  topicCountBeforeReduction: number | null;
+  topicCountAfterReduction: number | null;
+  downgradedTopicCount: number;
   cacheSummary: {
     hits: number;
     misses: number;
