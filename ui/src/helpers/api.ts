@@ -89,6 +89,8 @@ type RequestOptions<TBody> = {
   data?: TBody | undefined;
   timeoutMs?: number | undefined;
 };
+
+type RequestConfig = Pick<RequestOptions<never>, "params" | "timeoutMs">;
 export type FileDownloadResponse = {
   blob: Blob;
   filename: string;
@@ -304,25 +306,25 @@ const requestForm = async <TResponse = unknown>(
 };
 
 export const http = {
-  get: <TResponse>(path: string, { params }: { params?: QueryParams | undefined } = {}) =>
-    request<TResponse>("GET", path, { params }),
+  get: <TResponse>(path: string, { params, timeoutMs }: RequestConfig = {}) =>
+    request<TResponse>("GET", path, { params, timeoutMs }),
   post: <TResponse, TBody = unknown>(
     path: string,
     data: TBody,
-    { params }: { params?: QueryParams | undefined } = {},
-  ) => request<TResponse, TBody>("POST", path, { params, data }),
+    { params, timeoutMs }: RequestConfig = {},
+  ) => request<TResponse, TBody>("POST", path, { params, data, timeoutMs }),
   put: <TResponse, TBody = unknown>(
     path: string,
     data: TBody,
-    { params }: { params?: QueryParams | undefined } = {},
-  ) => request<TResponse, TBody>("PUT", path, { params, data }),
+    { params, timeoutMs }: RequestConfig = {},
+  ) => request<TResponse, TBody>("PUT", path, { params, data, timeoutMs }),
   patch: <TResponse, TBody = unknown>(
     path: string,
     data: TBody,
-    { params }: { params?: QueryParams | undefined } = {},
-  ) => request<TResponse, TBody>("PATCH", path, { params, data }),
-  delete: <TResponse>(path: string, { params }: { params?: QueryParams | undefined } = {}) =>
-    request<TResponse>("DELETE", path, { params }),
+    { params, timeoutMs }: RequestConfig = {},
+  ) => request<TResponse, TBody>("PATCH", path, { params, data, timeoutMs }),
+  delete: <TResponse>(path: string, { params, timeoutMs }: RequestConfig = {}) =>
+    request<TResponse>("DELETE", path, { params, timeoutMs }),
 };
 
 export interface MappingOption {
