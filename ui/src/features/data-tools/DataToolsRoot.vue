@@ -1,6 +1,12 @@
 <template>
   <section class="data-tab">
-    <section class="data-tools" :class="{ 'data-tools--workspace': !showDataGrid }">
+    <section
+      class="data-tools"
+      :class="{
+        'data-tools--workspace': !showDataGrid,
+        'data-tools--split-panel': showDataGrid && ['pdfs', 'keywording'].includes(toolsTab),
+      }"
+    >
       <div class="data-tools__tabs">
         <button
           type="button"
@@ -194,6 +200,7 @@
         :keywordingError="keywordingError"
         :keywordingMessage="keywordingMessage"
         :keywordingJobs="keywordingJobs"
+        :deletingJobIds="keywordingDeletingJobIds"
         @reload="reloadKeywordingJobs"
         @toggle-question="toggleKeywordingQuestion"
         @update-analysis-mode="onKeywordingAnalysisModeChange"
@@ -201,6 +208,7 @@
         @start="startKeywordingJob"
         @cancel="cancelKeywordingJobRun"
         @download="downloadKeywordingReport"
+        @remove="removeKeywordingJobRun"
       />
 
       <ComparePanel
@@ -507,6 +515,7 @@ const keywordingLoading = ref(false);
 const keywordingStarting = ref(false);
 const keywordingError = ref("");
 const keywordingMessage = ref("");
+const keywordingDeletingJobIds = ref<Record<string, boolean>>({});
 const keywordingQuestionIds = ref<number[]>([]);
 const keywordingAnalysisMode = ref<"standard" | "advanced">("standard");
 const keywordingReuseEmbeddingCache = ref(true);
@@ -2318,6 +2327,22 @@ const downloadKeywordingReport = async (jobId: string) => {
     keywordingMessage.value = `Downloaded ${response.filename}.`;
   } catch (error) {
     keywordingError.value = getApiErrorMessage(error);
+  }
+};
+
+const removeKeywordingJobRun = async (jobId: string) => {
+  keywordingError.value = "";
+  keywordingMessage.value = "";
+  keywordingDeletingJobIds.value = { ...keywordingDeletingJobIds.value, [jobId]: true };
+
+  try {
+    await keywording.remove(jobId);
+    keywordingMessage.value = `Deleted keywording job ${jobId}.`;
+    await loadKeywordingJobs();
+  } catch (error) {
+    keywordingError.value = getApiErrorMessage(error);
+  } finally {
+    keywordingDeletingJobIds.value = { ...keywordingDeletingJobIds.value, [jobId]: false };
   }
 };
 

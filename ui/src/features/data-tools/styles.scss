@@ -81,6 +81,14 @@
     margin-bottom: 0;
   }
 
+  &--split-panel {
+    flex: 0 1 min(46vh, 36rem);
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
   &__panel--workspace {
     flex: 1;
     min-height: 0;
@@ -293,11 +301,15 @@
 
 .pdf-tools,
 .keywording-tools {
+  min-width: 0;
+  min-height: 0;
+
   &__header {
     display: flex;
     justify-content: space-between;
     gap: 12px;
     align-items: flex-start;
+    flex-wrap: wrap;
 
     h4, h5 {
       margin: 0;
@@ -333,6 +345,10 @@
 }
 
 .pdf-tools {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+
   &__list,
   &__documents {
     list-style: none;
@@ -344,6 +360,9 @@
     display: flex;
     flex-direction: column;
     gap: 10px;
+    min-height: 0;
+    overflow: auto;
+    padding-right: 2px;
   }
 
   &__item,
@@ -351,43 +370,91 @@
     border: 1px solid #e5e7eb;
     padding: 10px;
     background: #fff;
+    min-width: 0;
   }
 
   &__item-head,
   &__document {
-    display: flex;
-    justify-content: space-between;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
     gap: 10px;
     align-items: flex-start;
   }
 
+  &__item-summary,
   &__status,
   &__document-meta {
     display: flex;
     flex-direction: column;
     gap: 4px;
     color: var(--ui-text-secondary);
+    min-width: 0;
+  }
+
+  &__item-summary strong,
+  &__status span,
+  &__document-meta strong,
+  &__document-meta span {
+    overflow-wrap: anywhere;
   }
 
   &__upload {
     display: flex;
     flex-direction: column;
     gap: 4px;
+    flex-shrink: 0;
   }
 
   &__document-actions {
     display: inline-flex;
     gap: 8px;
     flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: flex-end;
+    flex-shrink: 0;
   }
 }
 
 .keywording-tools {
+  display: grid;
+  grid-template-columns: minmax(18rem, 24rem) minmax(0, 1fr);
+  gap: 12px;
+
+  &__header,
+  &__error,
+  &__message {
+    grid-column: 1 / -1;
+  }
+
   &__setup,
   &__jobs {
     border: 1px solid #e5e7eb;
     padding: 12px;
     background: #fff;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  &__setup {
+    overflow: auto;
+  }
+
+  &__jobs {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  &__field,
+  &__checkbox {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  &__checkbox {
+    flex-direction: row;
+    align-items: center;
   }
 
   &__questions {
@@ -410,20 +477,30 @@
     display: flex;
     flex-direction: column;
     gap: 10px;
+    min-height: 0;
+    overflow: auto;
+    padding-right: 2px;
   }
 
   &__job {
-    display: flex;
-    justify-content: space-between;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
     gap: 12px;
     border: 1px solid #e5e7eb;
     padding: 10px;
+    min-width: 0;
   }
 
   &__job-meta {
     display: flex;
     flex-direction: column;
     gap: 4px;
+    min-width: 0;
+  }
+
+  &__job-meta strong,
+  &__job-meta span {
+    overflow-wrap: anywhere;
   }
 
   &__job-actions {
@@ -431,6 +508,37 @@
     gap: 8px;
     flex-wrap: wrap;
     align-items: flex-start;
+    justify-content: flex-end;
+    flex-shrink: 0;
+  }
+}
+
+@media (max-width: 1100px) {
+  .keywording-tools {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 900px) {
+  .pdf-tools {
+    &__item-head,
+    &__document {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    &__document-actions {
+      justify-content: flex-start;
+    }
+  }
+
+  .keywording-tools {
+    &__job {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    &__job-actions {
+      justify-content: flex-start;
+    }
   }
 }
 

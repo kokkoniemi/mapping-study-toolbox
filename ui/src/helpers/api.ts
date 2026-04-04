@@ -71,6 +71,7 @@ const resolveApiRoot = () => {
 
 const API_ROOT = resolveApiRoot();
 const REQUEST_TIMEOUT_MS = 10000;
+const PDF_EXTRACTION_REQUEST_TIMEOUT_MS = 300000;
 const REQUEST_RETRY_COUNT = 3;
 const REQUEST_RETRY_DELAY_MS = 300;
 
@@ -86,6 +87,7 @@ export type HttpResponse<T> = {
 type RequestOptions<TBody> = {
   params?: QueryParams | undefined;
   data?: TBody | undefined;
+  timeoutMs?: number | undefined;
 };
 export type FileDownloadResponse = {
   blob: Blob;
@@ -152,14 +154,14 @@ const parseResponse = async <TResponse>(response: Response): Promise<TResponse> 
 const request = async <TResponse = unknown, TBody = unknown>(
   method: HttpMethod,
   path: string,
-  { params, data }: RequestOptions<TBody> = {},
+  { params, data, timeoutMs }: RequestOptions<TBody> = {},
 ): Promise<HttpResponse<TResponse>> => {
   const maxAttempts = method === "GET" ? REQUEST_RETRY_COUNT : 1;
   let lastError: unknown;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs ?? REQUEST_TIMEOUT_MS);
 
     try {
       const response = await fetch(buildUrl(path, params), {
@@ -523,7 +525,7 @@ export const records = {
       http.post<RecordDocumentExtractResponse, Record<string, never>>(
         `records/${recordId}/documents/${documentId}/extract`,
         {},
-        { params },
+        { params, timeoutMs: PDF_EXTRACTION_REQUEST_TIMEOUT_MS },
       ),
   },
   mappingOptions: {
@@ -553,6 +555,8 @@ export const keywording = {
     http.get<KeywordingJob>(`keywording-jobs/${jobId}`, { params }),
   cancel: (jobId: string, params?: QueryParams) =>
     http.post<KeywordingJob, Record<string, never>>(`keywording-jobs/${jobId}/cancel`, {}, { params }),
+  remove: (jobId: string, params?: QueryParams) =>
+    http.delete<KeywordingJob>(`keywording-jobs/${jobId}`, { params }),
   downloadReport: (jobId: string) =>
     requestFile("GET", `keywording-jobs/${jobId}/report`),
 };

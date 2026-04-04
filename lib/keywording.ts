@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import { randomUUID } from "node:crypto";
+import path from "node:path";
 
 import db from "../models";
 import type {
@@ -548,6 +549,67 @@ export const cancelKeywordingJob = async (jobId: string): Promise<KeywordingJobS
   }
   await job.save();
   return buildJobSnapshot(job);
+};
+
+const removeStoragePath = (relativePath: string | null | undefined, options?: { removeParentDir?: boolean }) => {
+  if (!relativePath) {
+    return;
+  }
+
+  const absolutePath = toAbsoluteStoragePath(relativePath);
+  if (!fs.existsSync(absolutePath)) {
+    return;
+  }
+
+  const stats = fs.statSync(absolutePath);
+  if (stats.isDirectory()) {
+    fs.rmSync(absolutePath, { recursive: true, force: true });
+    return;
+  }
+
+  const parentDir = path.dirname(absolutePath);
+  if (options?.removeParentDir && fs.existsSync(parentDir)) {
+    fs.rmSync(parentDir, { recursive: true, force: true });
+    return;
+  }
+
+  fs.rmSync(absolutePath, { force: true });
+
+  if (fs.existsSync(parentDir) && fs.readdirSync(parentDir).length === 0) {
+    fs.rmSync(parentDir, { recursive: true, force: true });
+  }
+};
+
+export const deleteKeywordingJob = async (jobId: string): Promise<KeywordingJobSnapshot> => {
+  const job = await db.KeywordingJob.findOne({ where: { jobId } });
+  if (!job) {
+    throw notFound(`Keywording job ${jobId} not found`);
+  }
+  if (job.status === "queued" || job.status === "running" || job.status === "cancelling") {
+    throw badRequest(`Keywording job ${jobId} cannot be deleted while it is ${job.status}`);
+  }
+
+  const snapshot = buildJobSnapshot(job);
+  const suggestions = await db.KeywordingSuggestion.findAll({
+    where: { keywordingJobId: job.id },
+    attributes: ["id"],
+  });
+  const suggestionIds = suggestions.map((suggestion) => suggestion.id);
+  if (suggestionIds.length > 0) {
+    await db.KeywordingEvidenceSpan.destroy({
+      where: {
+        keywordingSuggestionId: suggestionIds,
+      },
+    });
+  }
+  await db.KeywordingSuggestion.destroy({ where: { keywordingJobId: job.id } });
+  await db.KeywordingCluster.destroy({ where: { keywordingJobId: job.id } });
+
+  removeStoragePath(job.reportPath, { removeParentDir: true });
+  removeStoragePath(job.topicArtifactPath);
+
+  await job.destroy();
+  return snapshot;
 };
 
 export const getKeywordingReport = async (jobId: string) => {

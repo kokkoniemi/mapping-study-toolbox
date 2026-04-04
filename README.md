@@ -97,6 +97,7 @@ Notes:
 - You can pin image tag with `MAPPING_TOOL_IMAGE=ghcr.io/<owner>/<repo>:<tag>`.
 - If you want to use OpenAlex for data enrichment, add api key (it's free) to OPENALEX_API_KEY variable in docker-compose.yml. See https://developers.openalex.org/guides/authentication.
 - For GPT-backed taxonomy audit runs, set `OPENAI_API_KEY` and optionally `OPENAI_MODEL` (default `gpt-5.4`) in the compose file or shell environment before `docker compose up`.
+- Advanced keywording can run longer than standard jobs because it makes multiple sequential model calls. If needed, raise `KEYWORDING_ADVANCED_WORKER_TIMEOUT_MS` on the app service (default `1200000`, 20 minutes). `KEYWORDING_WORKER_TIMEOUT_MS` still controls the default timeout for standard worker calls (default `180000`, 3 minutes).
 - Requires Docker Compose v2.
 - Port `3000` must be available (or adjust the port mapping in the compose file).
 
@@ -146,6 +147,11 @@ python3 -m venv .venv
 . .venv/bin/activate
 pip install -r worker/requirements.txt
 uvicorn worker.app:app --host 0.0.0.0 --port 8001
+```
+
+If you run the backend outside Docker, export worker timeout overrides in the same shell before `npm start` when advanced jobs need more time:
+```shell
+export KEYWORDING_ADVANCED_WORKER_TIMEOUT_MS=1200000
 ```
 
 ### Quality checks (recommended before commit)

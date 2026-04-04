@@ -1448,7 +1448,285 @@ def heuristic_cluster_decision(cluster: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def normalize_report_group_key(value: str | None) -> str:
+    return re.sub(r"\s+", " ", (value or "").strip().lower())
+
+
+def report_decision_label(action_type: str | None) -> str:
+    return {
+        "reuse_existing": "keep existing",
+        "create_new": "create new",
+        "abstain": "leave out",
+    }.get(action_type or "", action_type or "unknown")
+
+
+def enrich_suggestions_for_report(
+    records: list[dict[str, Any]],
+    questions: list[dict[str, Any]],
+    suggestions: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    record_lookup = {record["id"]: record for record in records}
+    question_lookup = {question["id"]: question for question in questions}
+    option_lookup = {
+        (question["id"], option.get("id")): option.get("title")
+        for question in questions
+        for option in question.get("options", [])
+    }
+
+    enriched_suggestions = []
+    for suggestion in suggestions:
+        question = question_lookup.get(suggestion["mappingQuestionId"], {})
+        record = record_lookup.get(suggestion["recordId"], {})
+        existing_option_id = suggestion.get("existingOptionId")
+        enriched_suggestions.append({
+            **suggestion,
+            "mappingQuestionTitle": question.get("title"),
+            "recordTitle": record.get("title"),
+            "existingOptionTitle": option_lookup.get((suggestion["mappingQuestionId"], existing_option_id)),
+            "reportDecision": report_decision_label(suggestion.get("actionType")),
+        })
+    return enriched_suggestions
+
+
+def build_question_summaries(
+    questions: list[dict[str, Any]],
+    suggestions: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    by_question: dict[int, list[dict[str, Any]]] = defaultdict(list)
+    for suggestion in suggestions:
+        by_question[suggestion["mappingQuestionId"]].append(suggestion)
+
+    question_summaries = []
+    for question in questions:
+        question_id = question["id"]
+        keep_groups: dict[int, dict[str, Any]] = {}
+        create_groups: dict[str, dict[str, Any]] = {}
+        leave_out_groups: dict[str, dict[str, Any]] = {}
+
+        for suggestion in by_question.get(question_id, []):
+            action_type = suggestion.get("actionType")
+            record_id = suggestion["recordId"]
+            record_title = suggestion.get("recordTitle")
+
+            if action_type == "reuse_existing":
+                existing_option_id = suggestion.get("existingOptionId")
+                if existing_option_id is None:
+                    continue
+                group = keep_groups.setdefault(existing_option_id, {
+                    "existingOptionId": existing_option_id,
+                    "existingOptionTitle": suggestion.get("existingOptionTitle"),
+                    "supportingRecordIds": set(),
+                    "supportingRecordTitles": set(),
+                })
+                group["supportingRecordIds"].add(record_id)
+                if record_title:
+                    group["supportingRecordTitles"].add(record_title)
+                continue
+
+            if action_type == "create_new":
+                proposed_label = (suggestion.get("proposedOptionLabel") or "").strip()
+                normalized_label = normalize_report_group_key(proposed_label)
+                if not normalized_label:
+                    normalized_label = "unlabeled"
+                    proposed_label = "Unlabeled candidate"
+                group = create_groups.setdefault(normalized_label, {
+                    "proposedOptionLabel": proposed_label,
+                    "normalizedProposedOptionLabel": normalized_label,
+                    "supportingRecordIds": set(),
+                    "supportingRecordTitles": set(),
+                })
+                group["supportingRecordIds"].add(record_id)
+                if record_title:
+                    group["supportingRecordTitles"].add(record_title)
+                continue
+
+            leave_out_summary = (suggestion.get("reviewerNote") or suggestion.get("rationale") or "No mapping recommendation created.").strip()
+            normalized_summary = normalize_report_group_key(leave_out_summary) or "leave-out"
+            group = leave_out_groups.setdefault(normalized_summary, {
+                "summary": leave_out_summary,
+                "rationale": suggestion.get("rationale"),
+                "reviewerNote": suggestion.get("reviewerNote"),
+                "supportingRecordIds": set(),
+                "supportingRecordTitles": set(),
+            })
+            group["supportingRecordIds"].add(record_id)
+            if record_title:
+                group["supportingRecordTitles"].add(record_title)
+
+        keep_entries = []
+        for group in keep_groups.values():
+            supporting_record_ids = sorted(group["supportingRecordIds"])
+            keep_entries.append({
+                "existingOptionId": group["existingOptionId"],
+                "existingOptionTitle": group.get("existingOptionTitle"),
+                "supportCount": len(supporting_record_ids),
+                "supportingRecordIds": supporting_record_ids,
+                "supportingRecordTitles": sorted(group["supportingRecordTitles"]),
+            })
+        keep_entries.sort(key=lambda item: (-item["supportCount"], item.get("existingOptionTitle") or "", item["existingOptionId"]))
+
+        create_entries = []
+        for group in create_groups.values():
+            supporting_record_ids = sorted(group["supportingRecordIds"])
+            create_entries.append({
+                "proposedOptionLabel": group["proposedOptionLabel"],
+                "normalizedProposedOptionLabel": group["normalizedProposedOptionLabel"],
+                "supportCount": len(supporting_record_ids),
+                "supportingRecordIds": supporting_record_ids,
+                "supportingRecordTitles": sorted(group["supportingRecordTitles"]),
+            })
+        create_entries.sort(key=lambda item: (-item["supportCount"], item["normalizedProposedOptionLabel"]))
+
+        leave_out_entries = []
+        for group in leave_out_groups.values():
+            supporting_record_ids = sorted(group["supportingRecordIds"])
+            leave_out_entries.append({
+                "summary": group["summary"],
+                "rationale": group.get("rationale"),
+                "reviewerNote": group.get("reviewerNote"),
+                "supportCount": len(supporting_record_ids),
+                "supportingRecordIds": supporting_record_ids,
+                "supportingRecordTitles": sorted(group["supportingRecordTitles"]),
+            })
+        leave_out_entries.sort(key=lambda item: (-item["supportCount"], item["summary"]))
+
+        question_summaries.append({
+            "mappingQuestionId": question_id,
+            "mappingQuestionTitle": question.get("title"),
+            "keep": keep_entries,
+            "create": create_entries,
+            "leaveOut": leave_out_entries,
+        })
+
+    return question_summaries
+
+
 def build_report_html(report_json: dict[str, Any]) -> str:
+    simplified_advanced = report_json["run"].get("analysisMode") == "advanced" and not report_json["run"].get("bertopicVersion")
+
+    if simplified_advanced:
+        record_sections = []
+        for record in report_json["records"]:
+            decision_blocks = []
+            for suggestion in record["suggestions"]:
+                evidence_items = suggestion.get("evidenceSpans")
+                if not isinstance(evidence_items, list):
+                    evidence_items = suggestion.get("evidence")
+                evidence_items = evidence_items if isinstance(evidence_items, list) else []
+                evidence = evidence_items[0] if evidence_items else {}
+                target_label = (
+                    suggestion.get("existingOptionTitle")
+                    or suggestion.get("proposedOptionLabel")
+                    or "No option selected"
+                )
+                decision_blocks.append(
+                    f"""
+                    <div class="suggestion">
+                      <div><strong>{escape(suggestion.get("mappingQuestionTitle") or "")}</strong></div>
+                      <div><strong>{escape(suggestion.get("reportDecision") or "")}</strong> • {escape(target_label)}</div>
+                      <div>Confidence {suggestion.get("confidence")}</div>
+                      <div>{escape(suggestion.get("rationale") or "")}</div>
+                      {"<div><em>" + escape(suggestion.get("reviewerNote") or "") + "</em></div>" if suggestion.get("reviewerNote") else ""}
+                      <div class="excerpt">{escape(evidence.get("excerptText", ""))}</div>
+                    </div>
+                    """
+                )
+            if not decision_blocks:
+                decision_blocks.append('<div class="suggestion">No keywording decisions for this record.</div>')
+            record_sections.append(
+                f"""
+                <section class="record">
+                  <h3>#{record["id"]} {escape(record.get("title") or "(untitled)")}</h3>
+                  {''.join(decision_blocks)}
+                </section>
+                """
+            )
+
+        question_sections = []
+        for summary in report_json.get("questionSummaries", []):
+            keep_rows = []
+            for item in summary.get("keep", []):
+                keep_rows.append(
+                    f"""
+                    <tr>
+                      <td>{escape(item.get("existingOptionTitle") or "")}</td>
+                      <td>{item.get("supportCount")}</td>
+                      <td>{escape(", ".join(str(record_id) for record_id in item.get("supportingRecordIds", [])))}</td>
+                    </tr>
+                    """
+                )
+            create_rows = []
+            for item in summary.get("create", []):
+                create_rows.append(
+                    f"""
+                    <tr>
+                      <td>{escape(item.get("proposedOptionLabel") or "")}</td>
+                      <td>{item.get("supportCount")}</td>
+                      <td>{escape(", ".join(str(record_id) for record_id in item.get("supportingRecordIds", [])))}</td>
+                    </tr>
+                    """
+                )
+            leave_out_rows = []
+            for item in summary.get("leaveOut", []):
+                leave_out_rows.append(
+                    f"""
+                    <tr>
+                      <td>{escape(item.get("summary") or "")}</td>
+                      <td>{item.get("supportCount")}</td>
+                      <td>{escape(", ".join(str(record_id) for record_id in item.get("supportingRecordIds", [])))}</td>
+                    </tr>
+                    """
+                )
+            question_sections.append(
+                f"""
+                <section class="question-summary">
+                  <h3>{escape(summary.get("mappingQuestionTitle") or "")}</h3>
+                  <h4>Keep existing</h4>
+                  <table>
+                    <thead><tr><th>Option</th><th>Support</th><th>Record IDs</th></tr></thead>
+                    <tbody>{''.join(keep_rows) or '<tr><td colspan="3">No keep-existing recommendations</td></tr>'}</tbody>
+                  </table>
+                  <h4>Create new</h4>
+                  <table>
+                    <thead><tr><th>Candidate</th><th>Support</th><th>Record IDs</th></tr></thead>
+                    <tbody>{''.join(create_rows) or '<tr><td colspan="3">No create-new recommendations</td></tr>'}</tbody>
+                  </table>
+                  <h4>Leave out</h4>
+                  <table>
+                    <thead><tr><th>Summary</th><th>Support</th><th>Record IDs</th></tr></thead>
+                    <tbody>{''.join(leave_out_rows) or '<tr><td colspan="3">No leave-out recommendations</td></tr>'}</tbody>
+                  </table>
+                </section>
+                """
+            )
+
+        return f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>{escape(report_json["title"])}</title>
+  <style>
+    body {{ font-family: sans-serif; margin: 2rem; color: #1f2937; }}
+    h1, h2, h3, h4 {{ margin-bottom: 0.5rem; }}
+    .record, .question-summary {{ border-top: 1px solid #d1d5db; padding: 1rem 0; }}
+    .suggestion {{ margin: 0.75rem 0; padding: 0.75rem; background: #f8fafc; border-radius: 0.5rem; }}
+    .excerpt {{ color: #374151; font-style: italic; margin-top: 0.5rem; }}
+    table {{ border-collapse: collapse; width: 100%; margin-bottom: 1rem; }}
+    th, td {{ border: 1px solid #d1d5db; padding: 0.5rem; text-align: left; vertical-align: top; }}
+  </style>
+</head>
+<body>
+  <h1>{escape(report_json["title"])}</h1>
+  <p>Model: {escape(report_json["run"]["model"])}, extractor: {escape(report_json["run"]["extractor"])}</p>
+  <p>Analysis mode: {escape(report_json["run"].get("analysisMode") or "standard")}</p>
+  <p>Keep existing: {report_json["summary"]["actionCounts"]["reuse_existing"]}, create new: {report_json["summary"]["actionCounts"]["create_new"]}, leave out: {report_json["summary"]["actionCounts"]["abstain"]}</p>
+  <h2>Record Decisions</h2>
+  {''.join(record_sections)}
+  <h2>Question Summaries</h2>
+  {''.join(question_sections)}
+</body>
+</html>"""
+
     records_html = []
     for record in report_json["records"]:
         suggestions_html = []
@@ -1580,16 +1858,17 @@ def create_report(
     topic_appendix: dict[str, Any] | None = None,
 ) -> str:
     question_lookup = {question["id"]: question for question in questions}
+    enriched_suggestions = enrich_suggestions_for_report(records, questions, suggestions)
+    suggestions_by_record_id: dict[int, list[dict[str, Any]]] = defaultdict(list)
+    for suggestion in enriched_suggestions:
+        suggestions_by_record_id[suggestion["recordId"]].append(suggestion)
+
     records_payload = []
     for record in records:
         records_payload.append({
             "id": record["id"],
             "title": record.get("title"),
-            "suggestions": [
-                suggestion
-                for suggestion in suggestions
-                if suggestion["recordId"] == record["id"]
-            ],
+            "suggestions": suggestions_by_record_id.get(record["id"], []),
         })
 
     report_json = {
@@ -1611,6 +1890,8 @@ def create_report(
         },
         "summary": summary,
         "questions": questions,
+        "suggestions": enriched_suggestions,
+        "questionSummaries": build_question_summaries(questions, enriched_suggestions),
         "records": records_payload,
         "clusters": [
             {
@@ -1660,8 +1941,6 @@ def run_keywording_standard(payload: dict[str, Any]) -> dict[str, Any]:
     low_confidence_count = 0
     manual_review_count = 0
     quality_failed_record_count = 0
-
-    record_by_id = {record["id"]: record for record in records}
 
     decision_schema = {
         "type": "object",
@@ -1838,10 +2117,12 @@ def run_keywording_standard(payload: dict[str, Any]) -> dict[str, Any]:
         analysis_mode="standard",
         cache_summary={"hits": 0, "misses": 0, "writes": 0},
     )
-    for suggestion in suggestions:
-        record = record_by_id.get(suggestion["recordId"]) or {}
-        suggestion["mappingQuestionTitle"] = question_lookup.get(suggestion["mappingQuestionId"], {}).get("title")
-        suggestion["recordTitle"] = record.get("title")
+    enriched_suggestions = enrich_suggestions_for_report(records, questions, suggestions)
+    for original, suggestion in zip(suggestions, enriched_suggestions, strict=False):
+        original["mappingQuestionTitle"] = suggestion.get("mappingQuestionTitle")
+        original["recordTitle"] = suggestion.get("recordTitle")
+        original["existingOptionTitle"] = suggestion.get("existingOptionTitle")
+        original["reportDecision"] = suggestion.get("reportDecision")
 
     return {
         "analysisMode": "standard",
@@ -1862,19 +2143,10 @@ def run_keywording_standard(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def run_keywording_advanced(payload: dict[str, Any]) -> dict[str, Any]:
-    if not ADVANCED_LIBS_AVAILABLE:
-        raise RuntimeError("Advanced keywording mode requires BERTopic/SPECTER2 worker dependencies.")
-
     app_data_dir = str(payload["appDataDir"])
-    job_id = str(payload["jobId"])
-    reuse_cache = payload.get("reuseEmbeddingCache", True) is not False
     records = payload["records"]
     questions = payload["mappingQuestions"]
-    question_lookup = {question["id"]: question for question in questions}
-    record_by_id = {record["id"]: record for record in records}
-    cache_summary = {"hits": 0, "misses": 0, "writes": 0}
     suggestions: list[dict[str, Any]] = []
-    clusters: list[dict[str, Any]] = []
     action_counts = {
         "reuse_existing": 0,
         "create_new": 0,
@@ -1887,13 +2159,6 @@ def run_keywording_advanced(payload: dict[str, Any]) -> dict[str, Any]:
     low_confidence_count = 0
     manual_review_count = 0
     quality_failed_record_count = 0
-
-    eligible_records: list[dict[str, Any]] = []
-    record_pack_texts: list[str] = []
-    record_pack_embeddings: list[np.ndarray] = []
-    independent_topics: dict[str, Any] = {"status": "not-run", "reason": "No eligible records available."}
-    taxonomy_topics: list[dict[str, Any]] = []
-    topic_appendix_rows: list[dict[str, Any]] = []
 
     decision_schema = {
         "type": "object",
@@ -1918,27 +2183,6 @@ def run_keywording_advanced(payload: dict[str, Any]) -> dict[str, Any]:
             "rationale": {"type": "string"},
             "reviewerNote": {"type": ["string", "null"]},
             "evidenceChunkKeys": {
-                "type": "array",
-                "items": {"type": "string"},
-            },
-        },
-    }
-    cluster_schema = {
-        "type": "object",
-        "additionalProperties": False,
-        "required": ["actionType", "confidence", "rationale", "existingOptionIds", "proposedOptionLabels"],
-        "properties": {
-            "actionType": {
-                "type": "string",
-                "enum": ["create_new", "split_existing", "merge_existing", "abstain"],
-            },
-            "confidence": {"type": "integer", "minimum": 0, "maximum": 100},
-            "rationale": {"type": "string"},
-            "existingOptionIds": {
-                "type": "array",
-                "items": {"type": "integer"},
-            },
-            "proposedOptionLabels": {
                 "type": "array",
                 "items": {"type": "string"},
             },
@@ -1973,7 +2217,7 @@ def run_keywording_advanced(payload: dict[str, Any]) -> dict[str, Any]:
             continue
 
         chunks = json.loads(chunk_manifest_path.read_text("utf-8"))
-        if not isinstance(chunks, list) or len(chunks) == 0:
+        if not isinstance(chunks, list) or not chunks:
             failed_records.append({
                 "recordId": record["id"],
                 "title": record.get("title"),
@@ -1981,150 +2225,10 @@ def run_keywording_advanced(payload: dict[str, Any]) -> dict[str, Any]:
             })
             continue
 
-        chunk_embeddings: list[np.ndarray] = []
-        chunk_embedding_map: dict[str, np.ndarray] = {}
-        for chunk in chunks:
-            chunk_key = chunk.get("chunkKey")
-            text = chunk.get("text") or ""
-            if not isinstance(chunk_key, str) or not text:
-                continue
-            checksum = sha256_text(
-                "\n".join(
-                    [
-                        str(document.get("checksum") or ""),
-                        chunk_key,
-                        text,
-                        SPECTER2_MODEL_NAME,
-                        SPECTER2_EMBEDDING_VERSION,
-                    ]
-                )
-            )
-            vector, metadata = load_or_create_embedding(
-                app_data_dir=app_data_dir,
-                record_id=int(record["id"]),
-                document_id=int(document["id"]),
-                artifact_key=chunk_key,
-                cache_checksum=checksum,
-                text=text,
-                reuse_cache=reuse_cache,
-                cache_summary=cache_summary,
-            )
-            chunk_embeddings.append(vector)
-            chunk_embedding_map[chunk_key] = vector
-            chunk.update(metadata)
+        chunk_lookup = {chunk["chunkKey"]: chunk for chunk in chunks if isinstance(chunk.get("chunkKey"), str)}
 
-        write_chunk_manifest(chunk_manifest_path, chunks)
-        if not chunk_embeddings:
-            failed_records.append({
-                "recordId": record["id"],
-                "title": record.get("title"),
-                "reason": "No chunk embeddings could be created for this document.",
-            })
-            continue
-
-        record_pack = build_record_evidence_pack(record, chunks)
-        if not record_pack:
-            failed_records.append({
-                "recordId": record["id"],
-                "title": record.get("title"),
-                "reason": "Record evidence pack was empty after extraction and chunking.",
-            })
-            continue
-
-        record_pack_checksum = sha256_text(
-            "\n".join(
-                [
-                    str(document.get("checksum") or ""),
-                    "record-pack",
-                    record_pack,
-                    SPECTER2_MODEL_NAME,
-                    SPECTER2_EMBEDDING_VERSION,
-                ]
-            )
-        )
-        record_pack_embedding, record_pack_metadata = load_or_create_embedding(
-            app_data_dir=app_data_dir,
-            record_id=int(record["id"]),
-            document_id=int(document["id"]),
-            artifact_key="record-pack",
-            cache_checksum=record_pack_checksum,
-            text=record_pack,
-            reuse_cache=reuse_cache,
-            cache_summary=cache_summary,
-        )
-
-        eligible_records.append({
-            "record": record,
-            "document": document,
-            "chunks": chunks,
-            "chunkLookup": {chunk["chunkKey"]: chunk for chunk in chunks if isinstance(chunk.get("chunkKey"), str)},
-            "chunkEmbeddingMap": chunk_embedding_map,
-            "chunkEmbeddingsMatrix": np.vstack(chunk_embeddings),
-            "recordPack": record_pack,
-            "recordPackEmbedding": record_pack_embedding,
-            "recordPackEmbeddingMetadata": record_pack_metadata,
-        })
-        record_pack_texts.append(record_pack)
-        record_pack_embeddings.append(record_pack_embedding)
-
-    independent_record_topic_lookup: dict[int, int] = {}
-    guided_topic_count_before_total = 0
-    guided_topic_count_after_total = 0
-    topic_reduction_applied = False
-    downgraded_topics: list[dict[str, Any]] = []
-
-    if len(eligible_records) >= 3:
-        independent_payload, independent_assignments = run_bertopic_model(
-            record_pack_texts,
-            np.vstack(record_pack_embeddings),
-            stage_name="discovery",
-        )
-        independent_record_topic_lookup = {
-            eligible_records[index]["record"]["id"]: int(topic_id)
-            for index, topic_id in enumerate(independent_assignments)
-        }
-        topic_reduction_applied = topic_reduction_applied or bool(independent_payload.get("reduction", {}).get("applied"))
-        independent_topics = {
-            "status": "completed",
-            "topicInfo": independent_payload.get("topicInfo", []),
-            "hierarchy": independent_payload.get("hierarchy", []),
-            "assignments": [
-                {
-                    "recordId": eligible_records[index]["record"]["id"],
-                    "topicId": topic_id,
-                    "preReductionTopicId": independent_payload.get("originalAssignments", [])[index] if index < len(independent_payload.get("originalAssignments", [])) else topic_id,
-                }
-                for index, topic_id in enumerate(independent_assignments)
-            ],
-            "reduction": independent_payload.get("reduction", {}),
-            "topicWords": independent_payload.get("topicWords", {}),
-            "refinedTopicWords": independent_payload.get("refinedTopicWords", {}),
-            "topicFlags": independent_payload.get("topicFlags", {}),
-        }
-    else:
-        independent_topics = {
-            "status": "skipped",
-            "reason": "Advanced corpus discovery requires at least 3 eligible extracted records.",
-        }
-
-    for question in questions:
-        question_records: list[dict[str, Any]] = []
-        question_texts: list[str] = []
-        question_embeddings: list[np.ndarray] = []
-
-        for bundle in eligible_records:
-            record = bundle["record"]
-            chunks = bundle["chunks"]
-            selected_chunks = choose_best_chunks_advanced(
-                question,
-                chunks,
-                bundle["chunkEmbeddingsMatrix"],
-                app_data_dir,
-                cache_summary,
-                reuse_cache,
-                int(record["id"]),
-                int(bundle["document"]["id"]),
-            )
+        for question in questions:
+            selected_chunks = choose_best_chunks(question, chunks)
             prompt = build_record_prompt(record, question, selected_chunks)
             try:
                 raw_decision = call_openai_structured(prompt, "mapping_record_decision", decision_schema)
@@ -2135,8 +2239,8 @@ def run_keywording_advanced(payload: dict[str, Any]) -> dict[str, Any]:
             if raw_decision is None:
                 raw_decision = heuristic_suggestion(record, question, selected_chunks)
 
-            decision = validate_record_decision(raw_decision, question, bundle["chunkLookup"])
-            evidence = collect_evidence(bundle["chunkLookup"], decision.get("evidenceChunkKeys", []))
+            decision = validate_record_decision(raw_decision, question, chunk_lookup)
+            evidence = collect_evidence(chunk_lookup, decision.get("evidenceChunkKeys", []))
             suggestion = {
                 "recordId": record["id"],
                 "mappingQuestionId": question["id"],
@@ -2156,346 +2260,62 @@ def run_keywording_advanced(payload: dict[str, Any]) -> dict[str, Any]:
             if suggestion["actionType"] == "abstain" or suggestion.get("reviewerNote"):
                 manual_review_count += 1
 
-            evidence_pack = compact_text("\n\n".join(evidence_item.get("excerptText") or "" for evidence_item in evidence))
-            if not evidence_pack:
-                evidence_pack = compact_text("\n\n".join(chunk.get("text") or "" for chunk in selected_chunks))
-
-            aggregate_embedding = aggregate_chunk_embeddings(selected_chunks, bundle["chunkEmbeddingMap"])
-            if aggregate_embedding is None and evidence_pack:
-                fallback_checksum = sha256_text(
-                    "\n".join(
-                        [
-                            str(bundle["document"].get("checksum") or ""),
-                            f"question-{question['id']}-record-{record['id']}",
-                            evidence_pack,
-                            SPECTER2_MODEL_NAME,
-                            SPECTER2_EMBEDDING_VERSION,
-                        ]
-                    )
-                )
-                aggregate_embedding, _unused_metadata = load_or_create_embedding(
-                    app_data_dir=app_data_dir,
-                    record_id=int(record["id"]),
-                    document_id=int(bundle["document"]["id"]),
-                    artifact_key=f"question-{question['id']}-record-{record['id']}",
-                    cache_checksum=fallback_checksum,
-                    text=evidence_pack,
-                    reuse_cache=reuse_cache,
-                    cache_summary=cache_summary,
-                )
-
-            if aggregate_embedding is not None:
-                question_records.append({
-                    "recordId": record["id"],
-                    "title": record.get("title"),
-                    "suggestion": suggestion,
-                    "selectedChunks": selected_chunks,
-                    "evidencePack": evidence_pack or bundle["recordPack"],
-                    "aggregateEmbedding": aggregate_embedding,
-                    "discoveryTopicId": independent_record_topic_lookup.get(record["id"]),
-                })
-                question_texts.append(evidence_pack or bundle["recordPack"])
-                question_embeddings.append(aggregate_embedding)
-
-        question_topic_payload: dict[str, Any] = {
-            "mappingQuestionId": question["id"],
-            "mappingQuestionTitle": question.get("title"),
-            "status": "skipped",
-            "reason": "At least 3 eligible evidence packs are required for BERTopic.",
-            "topicInfo": [],
-            "hierarchy": [],
-            "assignments": [],
-        }
-        if len(question_embeddings) >= 3:
-            guidance_document = build_guidance_document(question)
-            topic_payload, topic_assignments = run_bertopic_model(
-                question_texts,
-                np.vstack(question_embeddings),
-                stage_name=f"guided-question-{question['id']}",
-                zero_shot_topics=build_question_seed_topics(question),
-                seed_topic_list=build_seed_topic_list(question),
-            )
-            topic_reduction_applied = topic_reduction_applied or bool(topic_payload.get("reduction", {}).get("applied"))
-            guided_topic_count_before_total += int(topic_payload.get("reduction", {}).get("topicCountBeforeReduction") or 0)
-            guided_topic_count_after_total += int(topic_payload.get("reduction", {}).get("topicCountAfterReduction") or 0)
-            question_topic_payload = {
-                "mappingQuestionId": question["id"],
-                "mappingQuestionTitle": question.get("title"),
-                "status": "completed",
-                "topicInfo": topic_payload.get("topicInfo", []),
-                "hierarchy": topic_payload.get("hierarchy", []),
-                "reduction": topic_payload.get("reduction", {}),
-                "assignments": [
-                    {
-                        "recordId": question_records[index]["recordId"],
-                        "topicId": topic_id,
-                        "preReductionTopicId": topic_payload.get("originalAssignments", [])[index] if index < len(topic_payload.get("originalAssignments", [])) else topic_id,
-                    }
-                    for index, topic_id in enumerate(topic_assignments)
-                ],
-                "topicWords": topic_payload.get("topicWords", {}),
-                "refinedTopicWords": topic_payload.get("refinedTopicWords", {}),
-                "originalTopicWords": topic_payload.get("originalTopicWords", {}),
-                "topicFlags": topic_payload.get("topicFlags", {}),
-                "topicSupportScores": topic_payload.get("topicSupportScores", {}),
-                "topicSimilarityScores": topic_payload.get("topicSimilarityScores", {}),
-                "guidanceDocument": guidance_document,
-            }
-
-            parent_lookup = build_parent_topic_lookup(topic_payload.get("hierarchy", []))
-            assignments_by_topic: dict[int, list[dict[str, Any]]] = defaultdict(list)
-            for index, topic_id in enumerate(topic_assignments):
-                if index < len(question_records):
-                    assignments_by_topic[int(topic_id)].append(question_records[index])
-
-            for topic_id, members in assignments_by_topic.items():
-                raw_top_terms = list(topic_payload.get("topicWords", {}).get(topic_id, []))
-                refined_top_terms = list(topic_payload.get("refinedTopicWords", {}).get(topic_id, []))
-                topic_support_score = float(topic_payload.get("topicSupportScores", {}).get(topic_id, 0.0))
-                topic_similarity_score = float(topic_payload.get("topicSimilarityScores", {}).get(topic_id, 0.0))
-                stability_flags = list(topic_payload.get("topicFlags", {}).get(topic_id, []))
-                topic_member_indexes = topic_payload.get("topicMemberIndexes", {}).get(str(topic_id), [])
-                pre_reduction_topic_ids = sorted({
-                    int(topic_payload.get("originalAssignments", [])[index])
-                    for index in topic_member_indexes
-                    if index < len(topic_payload.get("originalAssignments", []))
-                })
-
-                centroid = None
-                member_vectors = [
-                    member.get("aggregateEmbedding")
-                    for member in members
-                    if isinstance(member.get("aggregateEmbedding"), np.ndarray)
-                ]
-                if member_vectors:
-                    centroid = np.mean(np.vstack(member_vectors), axis=0)
-
-                scored_chunks = []
-                supporting_chunk_keys = set()
-                for member in members:
-                    member_similarity = 0.0
-                    if centroid is not None and isinstance(member.get("aggregateEmbedding"), np.ndarray):
-                        member_similarity = float(cosine_scores(centroid, np.vstack([member["aggregateEmbedding"]]))[0])
-                    for chunk in member.get("selectedChunks", []):
-                        chunk_key = chunk.get("chunkKey")
-                        if not isinstance(chunk_key, str):
-                            continue
-                        supporting_chunk_keys.add(chunk_key)
-                        combined_score = (0.65 * float(chunk.get("_retrieval_score") or 0.0)) + (0.35 * member_similarity)
-                        scored_chunks.append((combined_score, chunk_key))
-                scored_chunks.sort(key=lambda item: item[0], reverse=True)
-                representative_chunk_keys = []
-                for _score, chunk_key in scored_chunks:
-                    if chunk_key not in representative_chunk_keys:
-                        representative_chunk_keys.append(chunk_key)
-                    if len(representative_chunk_keys) >= 6:
-                        break
-                supporting_evidence = [
-                    {
-                        "recordId": member["recordId"],
-                        "excerptText": evidence_item.get("excerptText"),
-                        "pageStart": evidence_item.get("pageStart"),
-                        "sectionName": evidence_item.get("sectionName"),
-                    }
-                    for member in members
-                    for evidence_item in member["suggestion"].get("evidence", [])[:2]
-                ][:8]
-                discovery_topic_ids = sorted({
-                    int(member["discoveryTopicId"])
-                    for member in members
-                    if member.get("discoveryTopicId") is not None
-                })
-                discovery_agreement = "none"
-                if discovery_topic_ids:
-                    discovery_agreement = "aligned" if len(discovery_topic_ids) == 1 else "mixed"
-                downgrade_reason = None
-                if "outlier" in stability_flags:
-                    downgrade_reason = "Outlier topic"
-                elif "low_support" in stability_flags:
-                    downgrade_reason = "Low support after reduction"
-                elif "weak_representation" in stability_flags:
-                    downgrade_reason = "Weak topic representation"
-
-                candidate_cluster = {
-                    "mappingQuestionId": question["id"],
-                    "clusterKey": f"question-{question['id']}-topic-{topic_id}",
-                    "label": summarize_cluster_label(refined_top_terms or raw_top_terms, f"Topic {topic_id}"),
-                    "topicId": topic_id,
-                    "parentTopicId": parent_lookup.get(topic_id),
-                    "isOutlier": topic_id == -1,
-                    "topTerms": refined_top_terms or raw_top_terms,
-                    "rawTopTerms": raw_top_terms,
-                    "refinedTopTerms": refined_top_terms,
-                    "preReductionTopicIds": pre_reduction_topic_ids,
-                    "topicReductionApplied": bool(topic_payload.get("reduction", {}).get("applied")),
-                    "topicSupportScore": topic_support_score,
-                    "topicSimilarityScore": topic_similarity_score,
-                    "stabilityFlags": stability_flags,
-                    "discoveryTopicIds": discovery_topic_ids,
-                    "discoveryAgreement": discovery_agreement,
-                    "representativeChunkKeys": representative_chunk_keys,
-                    "representationSource": "bertopic-guided-reduced",
-                    "topicSize": len(members),
-                    "supportingRecordIds": sorted({member["recordId"] for member in members}),
-                    "supportingChunkKeys": sorted(supporting_chunk_keys),
-                    "supportingEvidence": supporting_evidence,
-                    "tokens": refined_top_terms or raw_top_terms,
-                }
-                topic_appendix_rows.append({
-                    "mappingQuestionId": question["id"],
-                    "mappingQuestionTitle": question.get("title"),
-                    "topicId": topic_id,
-                    "parentTopicId": parent_lookup.get(topic_id),
-                    "topTerms": raw_top_terms,
-                    "refinedTopTerms": refined_top_terms,
-                    "topicSize": len(members),
-                    "isOutlier": topic_id == -1,
-                    "representationSource": "bertopic-guided-reduced",
-                    "stabilityFlags": stability_flags,
-                })
-                if downgrade_reason:
-                    downgraded_topics.append({
-                        "mappingQuestionId": question["id"],
-                        "mappingQuestionTitle": question.get("title"),
-                        "topicId": topic_id,
-                        "stabilityFlags": stability_flags,
-                        "reason": downgrade_reason,
-                    })
-                try:
-                    cluster_decision = call_openai_structured(
-                        build_cluster_prompt(question, candidate_cluster, question.get("options", [])),
-                        "mapping_cluster_decision",
-                        cluster_schema,
-                    )
-                except Exception:
-                    cluster_decision = heuristic_cluster_decision(candidate_cluster)
-
-                if cluster_decision is None:
-                    cluster_decision = heuristic_cluster_decision(candidate_cluster)
-
-                cluster_decision = validate_cluster_decision(cluster_decision, question, candidate_cluster)
-                action_type = cluster_decision.get("actionType", "abstain")
-                if action_type not in {"create_new", "split_existing", "merge_existing", "abstain"}:
-                    action_type = "abstain"
-
-                cluster_entry = {
-                    "mappingQuestionId": question["id"],
-                    "clusterKey": candidate_cluster["clusterKey"],
-                    "label": candidate_cluster["label"],
-                    "actionType": action_type,
-                    "topicId": candidate_cluster["topicId"],
-                    "parentTopicId": candidate_cluster["parentTopicId"],
-                    "isOutlier": candidate_cluster["isOutlier"],
-                    "topTerms": candidate_cluster["topTerms"],
-                    "representativeChunkKeys": candidate_cluster["representativeChunkKeys"],
-                    "representationSource": candidate_cluster["representationSource"],
-                    "topicSize": candidate_cluster["topicSize"],
-                    "confidence": int(cluster_decision.get("confidence") or 0),
-                    "rationale": cluster_decision.get("rationale") or "",
-                    "existingOptionIds": cluster_decision.get("existingOptionIds", []),
-                    "proposedOptionLabels": cluster_decision.get("proposedOptionLabels", []),
-                    "supportingRecordIds": candidate_cluster["supportingRecordIds"],
-                    "supportingChunkKeys": candidate_cluster["supportingChunkKeys"],
-                    "supportingEvidence": candidate_cluster["supportingEvidence"],
-                }
-                clusters.append(cluster_entry)
-                action_counts[action_type] += 1
-                if cluster_entry["confidence"] < 60:
-                    low_confidence_count += 1
-                    manual_review_count += 1
-                if cluster_entry["isOutlier"] or action_type == "abstain" or stability_flags:
-                    manual_review_count += 1
-
-        taxonomy_topics.append(question_topic_payload)
-
-    outlier_topic_count = sum(1 for cluster in clusters if cluster.get("isOutlier"))
-    downgraded_topic_count = len(downgraded_topics)
-    if guided_topic_count_before_total == 0 and guided_topic_count_after_total == 0 and independent_topics.get("status") == "completed":
-        guided_topic_count_before_total = int(independent_topics.get("reduction", {}).get("topicCountBeforeReduction") or 0)
-        guided_topic_count_after_total = int(independent_topics.get("reduction", {}).get("topicCountAfterReduction") or 0)
     summary = {
         "existingSuggestionCount": sum(1 for item in suggestions if item["actionType"] == "reuse_existing"),
         "newSuggestionCount": sum(1 for item in suggestions if item["actionType"] == "create_new"),
         "lowConfidenceCount": low_confidence_count,
-        "clusterDecisionCount": len(clusters),
+        "clusterDecisionCount": 0,
         "manualReviewCount": manual_review_count,
         "qualityFailedRecordCount": quality_failed_record_count,
-        "outlierTopicCount": outlier_topic_count,
+        "outlierTopicCount": 0,
         "actionCounts": action_counts,
         "skippedRecords": skipped_records,
         "failedRecords": failed_records,
     }
 
-    topic_artifact_payload = {
-        "jobId": job_id,
-        "generatedAt": datetime.now(timezone.utc).isoformat(),
-        "analysisMode": "advanced",
-        "embeddingModel": SPECTER2_MODEL_NAME,
-        "embeddingTask": SPECTER2_EMBEDDING_TASK,
-        "embeddingVersion": SPECTER2_EMBEDDING_VERSION,
-        "bertopicVersion": get_bertopic_version(),
-        "configVersion": ADVANCED_TOPIC_CONFIG_VERSION,
-        "cacheSummary": cache_summary,
-        "discovery": independent_topics,
-        "guided": taxonomy_topics,
-        "reduction": {
-            "applied": topic_reduction_applied,
-            "topicCountBeforeReduction": guided_topic_count_before_total,
-            "topicCountAfterReduction": guided_topic_count_after_total,
-        },
-        "representations": {
-            "model": ADVANCED_REPRESENTATION_MODEL,
-        },
-        "stability": {
-            "downgradedTopics": downgraded_topics,
-        },
-    }
-    topic_artifact_path = write_topic_artifact(app_data_dir, job_id, "advanced-topic-artifact.json", topic_artifact_payload)
     report_path = create_report(
         app_data_dir,
-        job_id,
+        payload["jobId"],
         records,
         questions,
         summary,
         suggestions,
-        clusters,
+        [],
         analysis_mode="advanced",
-        embedding_model=SPECTER2_MODEL_NAME,
-        representation_model=ADVANCED_REPRESENTATION_MODEL,
-        bertopic_version=get_bertopic_version(),
-        topic_reduction_applied=topic_reduction_applied,
-        topic_count_before_reduction=guided_topic_count_before_total,
-        topic_count_after_reduction=guided_topic_count_after_total,
-        downgraded_topic_count=downgraded_topic_count,
-        cache_summary=cache_summary,
-        topic_artifact_path=topic_artifact_path,
-        topic_appendix={
-            "independentDiscovery": independent_topics,
-            "questionTopics": topic_appendix_rows,
-            "downgradedTopics": downgraded_topics,
-        },
+        embedding_model=None,
+        representation_model=None,
+        bertopic_version=None,
+        topic_reduction_applied=False,
+        topic_count_before_reduction=None,
+        topic_count_after_reduction=None,
+        downgraded_topic_count=0,
+        cache_summary={"hits": 0, "misses": 0, "writes": 0},
+        topic_artifact_path=None,
+        topic_appendix={},
     )
 
-    for suggestion in suggestions:
-        record = record_by_id.get(suggestion["recordId"]) or {}
-        suggestion["mappingQuestionTitle"] = question_lookup.get(suggestion["mappingQuestionId"], {}).get("title")
-        suggestion["recordTitle"] = record.get("title")
+    enriched_suggestions = enrich_suggestions_for_report(records, questions, suggestions)
+    for original, suggestion in zip(suggestions, enriched_suggestions, strict=False):
+        original["mappingQuestionTitle"] = suggestion.get("mappingQuestionTitle")
+        original["recordTitle"] = suggestion.get("recordTitle")
+        original["existingOptionTitle"] = suggestion.get("existingOptionTitle")
+        original["reportDecision"] = suggestion.get("reportDecision")
 
     return {
         "analysisMode": "advanced",
-        "embeddingModel": SPECTER2_MODEL_NAME,
-        "representationModel": ADVANCED_REPRESENTATION_MODEL,
-        "bertopicVersion": get_bertopic_version(),
-        "topicReductionApplied": topic_reduction_applied,
-        "topicCountBeforeReduction": guided_topic_count_before_total,
-        "topicCountAfterReduction": guided_topic_count_after_total,
-        "downgradedTopicCount": downgraded_topic_count,
-        "cacheSummary": cache_summary,
-        "topicArtifactPath": topic_artifact_path,
+        "embeddingModel": None,
+        "representationModel": None,
+        "bertopicVersion": None,
+        "topicReductionApplied": False,
+        "topicCountBeforeReduction": None,
+        "topicCountAfterReduction": None,
+        "downgradedTopicCount": 0,
+        "cacheSummary": {"hits": 0, "misses": 0, "writes": 0},
+        "topicArtifactPath": None,
         "reportPath": report_path,
         "summary": summary,
         "suggestions": suggestions,
-        "clusters": clusters,
+        "clusters": [],
     }
 
 

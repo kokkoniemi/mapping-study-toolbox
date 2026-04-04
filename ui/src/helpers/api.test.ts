@@ -163,6 +163,24 @@ describe("http", () => {
     expect(headers["Content-Type"]).toBeUndefined();
   });
 
+  it("uses a 5 minute timeout for PDF extraction requests", async () => {
+    const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({
+        document: { id: 1, recordId: 5, extractionStatus: "completed" },
+        extractedCharacters: 1234,
+        chunkCount: 10,
+      }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+
+    await records.documents.extract(5, 9);
+
+    expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 300_000);
+  });
+
   it("downloads keywording reports with GET file requests", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(new Blob(["zip"]), {
@@ -204,5 +222,22 @@ describe("http", () => {
       analysisMode: "advanced",
       reuseEmbeddingCache: false,
     }));
+  });
+
+  it("deletes keywording jobs with DELETE requests", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(
+        new Response(JSON.stringify({ jobId: "kw-1", status: "completed" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+
+    await keywording.remove("kw-1");
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain("/api/keywording-jobs/kw-1");
+    expect(init.method).toBe("DELETE");
   });
 });

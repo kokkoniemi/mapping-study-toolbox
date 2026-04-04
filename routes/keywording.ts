@@ -4,6 +4,7 @@ import type { CreateKeywordingJobPayload, KeywordingAnalysisMode } from "../shar
 import {
   cancelKeywordingJob,
   createKeywordingJob,
+  deleteKeywordingJob,
   getKeywordingJob,
   getKeywordingReport,
   listKeywordingJobs,
@@ -72,6 +73,15 @@ export const cancel = async (req: Request, res: Response) => {
     maxLength: 120,
   }) as string;
   return res.send(await cancelKeywordingJob(jobId));
+};
+
+export const remove = async (req: Request, res: Response) => {
+  const jobId = parseString(req.params.jobId, "jobId", {
+    trim: true,
+    allowEmpty: false,
+    maxLength: 120,
+  }) as string;
+  return res.send(await deleteKeywordingJob(jobId));
 };
 
 export const report = async (req: Request, res: Response) => {

@@ -67,6 +67,7 @@ const keywordingMock = vi.hoisted(() => ({
   listKeywordingJobs: vi.fn(),
   getKeywordingJob: vi.fn(),
   cancelKeywordingJob: vi.fn(),
+  deleteKeywordingJob: vi.fn(),
   getKeywordingReport: vi.fn(),
 }));
 
@@ -135,6 +136,7 @@ describeWhenSocketAllowed("API integration", () => {
     keywordingMock.listKeywordingJobs.mockReset();
     keywordingMock.getKeywordingJob.mockReset();
     keywordingMock.cancelKeywordingJob.mockReset();
+    keywordingMock.deleteKeywordingJob.mockReset();
     keywordingMock.getKeywordingReport.mockReset();
   });
 
@@ -620,6 +622,22 @@ describeWhenSocketAllowed("API integration", () => {
     expect(response.status).toBe(200);
     expect(response.headers["content-type"]).toContain("application/zip");
     expect(response.headers["content-disposition"]).toContain("keywording-report-kw-1.zip");
+  });
+
+  it("DELETE /api/keywording-jobs/:jobId deletes a terminal job", async () => {
+    keywordingMock.deleteKeywordingJob.mockResolvedValue({
+      jobId: "kw-1",
+      status: "completed",
+    });
+
+    const app = createApp();
+    const response = await request(app).delete("/api/keywording-jobs/kw-1");
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      jobId: "kw-1",
+      status: "completed",
+    });
   });
 
   it("GET /api/records/enrichment-jobs/:id returns created job", async () => {

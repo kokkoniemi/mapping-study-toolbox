@@ -1,5 +1,5 @@
 <template>
-  <div class="data-tools__panel data-tools__panel--keywording data-tools__panel--workspace">
+  <div class="data-tools__panel data-tools__panel--keywording data-tools__panel--workspace keywording-tools">
     <div class="keywording-tools__header">
       <div>
         <h4>Keywording audit</h4>
@@ -24,7 +24,7 @@
           <span>Analysis mode</span>
           <select :value="analysisMode" @change="onAnalysisModeChange">
             <option value="standard">Standard</option>
-            <option value="advanced">Advanced (BERTopic + SPECTER2)</option>
+            <option value="advanced">Advanced (record-first GPT)</option>
           </select>
         </label>
         <label class="keywording-tools__checkbox">
@@ -36,7 +36,7 @@
           <span>Reuse cached embeddings when possible</span>
         </label>
         <p class="keywording-tools__hint" v-if="analysisMode === 'advanced'">
-          Advanced mode uses local SPECTER2 embeddings, BERTopic clustering, and GPT adjudication. Completed jobs will include cache and topic metadata.
+          Advanced mode uses record-first GPT decisions and report summaries for keep existing, create new, and leave out recommendations.
         </p>
       </div>
       <div class="keywording-tools__questions">
@@ -69,12 +69,10 @@
               review {{ job.summary.manualReviewCount }}
             </span>
             <span v-if="job.analysisMode === 'advanced'">
-              cache {{ job.cacheSummary.hits }} hit / {{ job.cacheSummary.misses }} miss / {{ job.cacheSummary.writes }} write,
-              topics {{ job.topicCountBeforeReduction ?? 0 }} -> {{ job.topicCountAfterReduction ?? 0 }},
-              outliers {{ job.summary.outlierTopicCount }},
-              downgraded {{ job.downgradedTopicCount }},
-              reduction {{ job.topicReductionApplied ? "on" : "off" }},
-              representation {{ job.representationModel || "n/a" }}
+              record-first report summary,
+              keep {{ job.summary.actionCounts.reuse_existing }},
+              create {{ job.summary.actionCounts.create_new }},
+              leave out {{ job.summary.actionCounts.abstain }}
             </span>
           </div>
           <div class="keywording-tools__job-actions">
@@ -87,6 +85,13 @@
             </button>
             <button type="button" :disabled="!job.reportReady" @click="emit('download', job.jobId)">
               Download report
+            </button>
+            <button
+              type="button"
+              :disabled="job.status === 'queued' || job.status === 'running' || job.status === 'cancelling' || Boolean(deletingJobIds[job.jobId])"
+              @click="emit('remove', job.jobId)"
+            >
+              {{ deletingJobIds[job.jobId] ? "Deleting..." : "Delete" }}
             </button>
           </div>
         </li>
@@ -114,6 +119,7 @@ defineProps<{
   keywordingError: string;
   keywordingMessage: string;
   keywordingJobs: KeywordingJob[];
+  deletingJobIds: Record<string, boolean>;
 }>();
 
 const emit = defineEmits<{
@@ -124,6 +130,7 @@ const emit = defineEmits<{
   start: [];
   cancel: [jobId: string];
   download: [jobId: string];
+  remove: [jobId: string];
 }>();
 
 const onAnalysisModeChange = (event: Event) => {

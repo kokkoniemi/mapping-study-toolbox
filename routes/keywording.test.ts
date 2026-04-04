@@ -7,12 +7,13 @@ const keywordingMock = vi.hoisted(() => ({
   listKeywordingJobs: vi.fn(),
   getKeywordingJob: vi.fn(),
   cancelKeywordingJob: vi.fn(),
+  deleteKeywordingJob: vi.fn(),
   getKeywordingReport: vi.fn(),
 }));
 
 vi.mock("../lib/keywording", () => keywordingMock);
 
-import { cancel, create, get, listing, report } from "./keywording";
+import { cancel, create, get, listing, remove, report } from "./keywording";
 
 const mockResponse = () => {
   const res = {
@@ -31,6 +32,7 @@ describe("routes/keywording", () => {
     keywordingMock.listKeywordingJobs.mockReset();
     keywordingMock.getKeywordingJob.mockReset();
     keywordingMock.cancelKeywordingJob.mockReset();
+    keywordingMock.deleteKeywordingJob.mockReset();
     keywordingMock.getKeywordingReport.mockReset();
   });
 
@@ -88,6 +90,7 @@ describe("routes/keywording", () => {
   it("get/cancel/report forward the job id", async () => {
     keywordingMock.getKeywordingJob.mockResolvedValue({ jobId: "kw-2" });
     keywordingMock.cancelKeywordingJob.mockResolvedValue({ jobId: "kw-2", status: "cancelled" });
+    keywordingMock.deleteKeywordingJob.mockResolvedValue({ jobId: "kw-2", status: "completed" });
     keywordingMock.getKeywordingReport.mockResolvedValue({
       fileName: "report.zip",
       contentType: "application/zip",
@@ -103,6 +106,10 @@ describe("routes/keywording", () => {
     const cancelRes = mockResponse();
     await cancel(req, cancelRes);
     expect(cancelRes.send).toHaveBeenCalledWith({ jobId: "kw-2", status: "cancelled" });
+
+    const removeRes = mockResponse();
+    await remove(req, removeRes);
+    expect(removeRes.send).toHaveBeenCalledWith({ jobId: "kw-2", status: "completed" });
 
     const reportRes = mockResponse();
     await report(req, reportRes);

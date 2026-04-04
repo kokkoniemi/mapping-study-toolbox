@@ -71,6 +71,7 @@ router.get("/keywording-jobs", keywording.listing);
 router.post("/keywording-jobs", keywording.create);
 router.get("/keywording-jobs/:jobId", keywording.get);
 router.post("/keywording-jobs/:jobId/cancel", keywording.cancel);
+router.delete("/keywording-jobs/:jobId", keywording.remove);
 router.get("/keywording-jobs/:jobId/report", keywording.report);
 
 // FORUMS

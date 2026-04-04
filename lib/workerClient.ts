@@ -9,11 +9,34 @@ const WORKER_ROOT = (() => {
   return "http://localhost:8001/";
 })();
 
-const WORKER_TIMEOUT_MS = Number.parseInt(process.env.KEYWORDING_WORKER_TIMEOUT_MS ?? "", 10) || 180_000;
+const parseTimeoutMs = (rawValue: string | undefined, fallback: number) => {
+  const parsed = Number.parseInt(rawValue ?? "", 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+const WORKER_TIMEOUT_MS = parseTimeoutMs(process.env.KEYWORDING_WORKER_TIMEOUT_MS, 180_000);
+const ADVANCED_WORKER_TIMEOUT_MS = Math.max(
+  WORKER_TIMEOUT_MS,
+  parseTimeoutMs(process.env.KEYWORDING_ADVANCED_WORKER_TIMEOUT_MS, 1_200_000),
+);
+
+const formatTimeoutMs = (timeoutMs: number) => {
+  if (timeoutMs % 60_000 === 0) {
+    const minutes = timeoutMs / 60_000;
+    return `${minutes} minute${minutes === 1 ? "" : "s"}`;
+  }
+  if (timeoutMs % 1_000 === 0) {
+    const seconds = timeoutMs / 1_000;
+    return `${seconds} second${seconds === 1 ? "" : "s"}`;
+  }
+  return `${timeoutMs} ms`;
+};
 
 type WorkerRequestOptions = {
   method?: "GET" | "POST";
   body?: unknown;
+  timeoutMs?: number;
+  timeoutMessage?: string;
 };
 
 const parseWorkerResponse = async <T>(response: Response): Promise<T> => {
@@ -26,7 +49,12 @@ const parseWorkerResponse = async <T>(response: Response): Promise<T> => {
 
 const workerRequest = async <T>(path: string, options: WorkerRequestOptions = {}): Promise<T> => {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), WORKER_TIMEOUT_MS);
+  const timeoutMs = options.timeoutMs ?? WORKER_TIMEOUT_MS;
+  let timedOut = false;
+  const timeoutId = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
 
   try {
     const response = await fetch(new URL(path, WORKER_ROOT), {
@@ -60,6 +88,13 @@ const workerRequest = async <T>(path: string, options: WorkerRequestOptions = {}
   } catch (error) {
     if (error instanceof ApiError) {
       throw error;
+    }
+    if (timedOut) {
+      throw new ApiError(
+        504,
+        "WORKER_TIMEOUT",
+        options.timeoutMessage ?? `Keywording worker request timed out after ${formatTimeoutMs(timeoutMs)}.`,
+      );
     }
     throw new ApiError(
       502,
@@ -192,7 +227,10 @@ export const requestWorkerExtraction = (payload: {
   absolutePdfPath: string;
   appDataDir: string;
   relativePdfPath: string;
-}) => workerRequest<WorkerExtractionResponse>("extract-document", { body: payload });
+}) => workerRequest<WorkerExtractionResponse>("extract-document", {
+  body: payload,
+  timeoutMessage: `Document extraction timed out waiting for the keywording worker after ${formatTimeoutMs(WORKER_TIMEOUT_MS)}. Increase KEYWORDING_WORKER_TIMEOUT_MS and try again.`,
+});
 
 export const requestWorkerKeywording = (payload: {
   jobId: string;
@@ -201,7 +239,19 @@ export const requestWorkerKeywording = (payload: {
   reuseEmbeddingCache: boolean;
   records: Array<Record<string, unknown>>;
   mappingQuestions: Array<Record<string, unknown>>;
-}) => workerRequest<WorkerKeywordingResponse>("keywording-jobs/run", { body: payload });
+}) => {
+  const timeoutMs = payload.analysisMode === "advanced" ? ADVANCED_WORKER_TIMEOUT_MS : WORKER_TIMEOUT_MS;
+  const timeoutMessage =
+    payload.analysisMode === "advanced"
+      ? `Advanced keywording timed out waiting for the worker after ${formatTimeoutMs(timeoutMs)}. Increase KEYWORDING_ADVANCED_WORKER_TIMEOUT_MS or KEYWORDING_WORKER_TIMEOUT_MS and try again.`
+      : `Keywording timed out waiting for the worker after ${formatTimeoutMs(timeoutMs)}. Increase KEYWORDING_WORKER_TIMEOUT_MS and try again.`;
+
+  return workerRequest<WorkerKeywordingResponse>("keywording-jobs/run", {
+    body: payload,
+    timeoutMs,
+    timeoutMessage,
+  });
+};
 
 export const getWorkerHealth = () =>
   workerRequest<{ status: string }>("health", { method: "GET" });

@@ -1,5 +1,5 @@
 <template>
-  <div class="data-tools__panel data-tools__panel--pdfs data-tools__panel--workspace">
+  <div class="data-tools__panel data-tools__panel--pdfs data-tools__panel--workspace pdf-tools">
     <div class="pdf-tools__header">
       <div>
         <h4>PDF evidence</h4>
@@ -23,7 +23,7 @@
     <ul v-else class="pdf-tools__list">
       <li v-for="record in selectedRecords" :key="record.id" class="pdf-tools__item">
         <div class="pdf-tools__item-head">
-          <div>
+          <div class="pdf-tools__item-summary">
             <strong>#{{ record.id }} {{ record.title || "(untitled)" }}</strong>
             <div class="pdf-tools__status">
               <span v-if="recordDocuments[record.id]?.length">
