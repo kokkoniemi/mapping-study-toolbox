@@ -49,12 +49,13 @@ describe("lib/workerClient", () => {
 
     const { requestWorkerKeywording } = await import("../lib/workerClient");
     const promise = requestWorkerKeywording(keywordingPayload);
-    await vi.advanceTimersByTimeAsync(600_000);
-
-    await expect(promise).rejects.toMatchObject({
+    const assertion = expect(promise).rejects.toMatchObject({
       code: "WORKER_TIMEOUT",
       message: "Advanced keywording timed out waiting for the worker after 10 minutes. Increase KEYWORDING_ADVANCED_WORKER_TIMEOUT_MS or KEYWORDING_WORKER_TIMEOUT_MS and try again.",
       status: 504,
     });
+    await vi.advanceTimersByTimeAsync(600_000);
+
+    await assertion;
   });
 });
