@@ -1,4 +1,6 @@
 import type {
+  CreateMappingQuestionPayload as SharedCreateMappingQuestionPayload,
+  CreateKeywordingJobPayload,
   AssessmentCompareResponse as SharedAssessmentCompareResponse,
   AssessmentResolvePayload as SharedAssessmentResolvePayload,
   AssessmentSelection as SharedAssessmentSelection,
@@ -13,6 +15,7 @@ import type {
   CreateEnrichmentJobPayload,
   CreateUserProfilePayload as SharedCreateUserProfilePayload,
   UpdateUserProfilePayload as SharedUpdateUserProfilePayload,
+  UpdateMappingQuestionPayload as SharedUpdateMappingQuestionPayload,
   UpsertAssessmentSelectionPayload as SharedUpsertAssessmentSelectionPayload,
   EnrichmentMode,
   EnrichmentJobSnapshot,
@@ -24,6 +27,11 @@ import type {
   ImportPreviewRecord as SharedImportPreviewRecord,
   ImportPreviewResponse as SharedImportPreviewResponse,
   ImportsIndexResponse as SharedImportsIndexResponse,
+  KeywordingJobSnapshot as SharedKeywordingJobSnapshot,
+  KeywordingJobsIndexResponse as SharedKeywordingJobsIndexResponse,
+  RecordDocumentExtractResponse as SharedRecordDocumentExtractResponse,
+  RecordDocumentsIndexResponse as SharedRecordDocumentsIndexResponse,
+  RecordDocumentSummary as SharedRecordDocumentSummary,
   DeleteImportResponse as SharedDeleteImportResponse,
   ForumMergePayload as SharedForumMergePayload,
   ForumMergeResponse as SharedForumMergeResponse,
@@ -63,6 +71,7 @@ const resolveApiRoot = () => {
 
 const API_ROOT = resolveApiRoot();
 const REQUEST_TIMEOUT_MS = 10000;
+const PDF_EXTRACTION_REQUEST_TIMEOUT_MS = 300000;
 const REQUEST_RETRY_COUNT = 3;
 const REQUEST_RETRY_DELAY_MS = 300;
 
@@ -78,7 +87,10 @@ export type HttpResponse<T> = {
 type RequestOptions<TBody> = {
   params?: QueryParams | undefined;
   data?: TBody | undefined;
+  timeoutMs?: number | undefined;
 };
+
+type RequestConfig = Pick<RequestOptions<never>, "params" | "timeoutMs">;
 export type FileDownloadResponse = {
   blob: Blob;
   filename: string;
@@ -144,14 +156,14 @@ const parseResponse = async <TResponse>(response: Response): Promise<TResponse> 
 const request = async <TResponse = unknown, TBody = unknown>(
   method: HttpMethod,
   path: string,
-  { params, data }: RequestOptions<TBody> = {},
+  { params, data, timeoutMs }: RequestOptions<TBody> = {},
 ): Promise<HttpResponse<TResponse>> => {
   const maxAttempts = method === "GET" ? REQUEST_RETRY_COUNT : 1;
   let lastError: unknown;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs ?? REQUEST_TIMEOUT_MS);
 
     try {
       const response = await fetch(buildUrl(path, params), {
@@ -218,9 +230,9 @@ const parseFilenameFromDisposition = (disposition: string | null, fallback: stri
 };
 
 const requestFile = async <TBody = unknown>(
-  method: Exclude<HttpMethod, "GET">,
+  method: HttpMethod,
   path: string,
-  data: TBody,
+  data?: TBody,
 ): Promise<FileDownloadResponse> => {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -230,9 +242,9 @@ const requestFile = async <TBody = unknown>(
       method,
       headers: {
         Accept: "*/*",
-        "Content-Type": "application/json",
+        ...(data !== undefined ? { "Content-Type": "application/json" } : {}),
       },
-      body: JSON.stringify(data),
+      ...(data !== undefined ? { body: JSON.stringify(data) } : {}),
       signal: controller.signal,
     });
 
@@ -264,26 +276,55 @@ const requestFile = async <TBody = unknown>(
   }
 };
 
+const requestForm = async <TResponse = unknown>(
+  method: Exclude<HttpMethod, "GET">,
+  path: string,
+  data: FormData,
+): Promise<HttpResponse<TResponse>> => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(buildUrl(path), {
+      method,
+      headers: {
+        Accept: "application/json",
+      },
+      body: data,
+      signal: controller.signal,
+    });
+
+    const payload = await parseResponse<TResponse>(response);
+    if (!response.ok) {
+      throw new HttpError(`HTTP ${response.status} for ${method} ${path}`, response.status, payload);
+    }
+
+    return { data: payload, status: response.status };
+  } finally {
+    clearTimeout(timeoutId);
+  }
+};
+
 export const http = {
-  get: <TResponse>(path: string, { params }: { params?: QueryParams | undefined } = {}) =>
-    request<TResponse>("GET", path, { params }),
+  get: <TResponse>(path: string, { params, timeoutMs }: RequestConfig = {}) =>
+    request<TResponse>("GET", path, { params, timeoutMs }),
   post: <TResponse, TBody = unknown>(
     path: string,
     data: TBody,
-    { params }: { params?: QueryParams | undefined } = {},
-  ) => request<TResponse, TBody>("POST", path, { params, data }),
+    { params, timeoutMs }: RequestConfig = {},
+  ) => request<TResponse, TBody>("POST", path, { params, data, timeoutMs }),
   put: <TResponse, TBody = unknown>(
     path: string,
     data: TBody,
-    { params }: { params?: QueryParams | undefined } = {},
-  ) => request<TResponse, TBody>("PUT", path, { params, data }),
+    { params, timeoutMs }: RequestConfig = {},
+  ) => request<TResponse, TBody>("PUT", path, { params, data, timeoutMs }),
   patch: <TResponse, TBody = unknown>(
     path: string,
     data: TBody,
-    { params }: { params?: QueryParams | undefined } = {},
-  ) => request<TResponse, TBody>("PATCH", path, { params, data }),
-  delete: <TResponse>(path: string, { params }: { params?: QueryParams | undefined } = {}) =>
-    request<TResponse>("DELETE", path, { params }),
+    { params, timeoutMs }: RequestConfig = {},
+  ) => request<TResponse, TBody>("PATCH", path, { params, data, timeoutMs }),
+  delete: <TResponse>(path: string, { params, timeoutMs }: RequestConfig = {}) =>
+    request<TResponse>("DELETE", path, { params, timeoutMs }),
 };
 
 export interface MappingOption {
@@ -300,6 +341,12 @@ export interface MappingQuestion {
   title: string;
   type: string;
   position: number;
+  description: string | null;
+  decisionGuidance: string | null;
+  positiveExamples: string[];
+  negativeExamples: string[];
+  evidenceInstructions: string | null;
+  allowNewOption: boolean;
   MappingOptions?: MappingOption[];
   [key: string]: unknown;
 }
@@ -406,6 +453,11 @@ export type ImportPreviewResponse = SharedImportPreviewResponse;
 export type ImportCreateResponse = SharedImportCreateResponse;
 export type ImportsIndexResponse = SharedImportsIndexResponse;
 export type DeleteImportResponse = SharedDeleteImportResponse;
+export type RecordDocumentSummary = SharedRecordDocumentSummary;
+export type RecordDocumentsIndexResponse = SharedRecordDocumentsIndexResponse;
+export type RecordDocumentExtractResponse = SharedRecordDocumentExtractResponse;
+export type KeywordingJob = SharedKeywordingJobSnapshot;
+export type KeywordingJobsIndexResponse = SharedKeywordingJobsIndexResponse;
 export type ExportRequestPayload = SharedExportRequestPayload;
 export type UserProfile = SharedUserProfile;
 export type UserProfilesIndexResponse = SharedUserProfilesIndexResponse;
@@ -431,12 +483,18 @@ type SaveMappingOptionPayload = {
 };
 
 type SaveQuestionPayload = {
-  title: string;
-  type: string;
-  position: number;
+  title: SharedCreateMappingQuestionPayload["title"];
+  type: SharedCreateMappingQuestionPayload["type"];
+  position: SharedCreateMappingQuestionPayload["position"];
+  description: SharedCreateMappingQuestionPayload["description"];
+  decisionGuidance: SharedCreateMappingQuestionPayload["decisionGuidance"];
+  positiveExamples: SharedCreateMappingQuestionPayload["positiveExamples"];
+  negativeExamples: SharedCreateMappingQuestionPayload["negativeExamples"];
+  evidenceInstructions: SharedCreateMappingQuestionPayload["evidenceInstructions"];
+  allowNewOption: SharedCreateMappingQuestionPayload["allowNewOption"];
 };
 
-type UpdateQuestionPayload = Partial<SaveQuestionPayload>;
+type UpdateQuestionPayload = SharedUpdateMappingQuestionPayload;
 type SaveQuestionOptionPayload = {
   title: string;
   position: number;
@@ -453,6 +511,25 @@ export const records = {
   patch: (id: number, data: PatchRecordPayload, params?: QueryParams) =>
     http.patch<RecordItem, PatchRecordPayload>(`records/${id}`, data, { params }),
   exportFile: (data: ExportRequestPayload) => requestFile<ExportRequestPayload>("POST", "records/export", data),
+  documents: {
+    list: (recordId: number, params?: QueryParams) =>
+      http.get<RecordDocumentsIndexResponse>(`records/${recordId}/documents`, { params }),
+    get: (recordId: number, documentId: number, params?: QueryParams) =>
+      http.get<RecordDocumentSummary>(`records/${recordId}/documents/${documentId}`, { params }),
+    upload: (recordId: number, file: File) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      return requestForm<RecordDocumentSummary>("POST", `records/${recordId}/documents`, formData);
+    },
+    remove: (recordId: number, documentId: number, params?: QueryParams) =>
+      http.delete<RecordDocumentSummary>(`records/${recordId}/documents/${documentId}`, { params }),
+    extract: (recordId: number, documentId: number, params?: QueryParams) =>
+      http.post<RecordDocumentExtractResponse, Record<string, never>>(
+        `records/${recordId}/documents/${documentId}/extract`,
+        {},
+        { params, timeoutMs: PDF_EXTRACTION_REQUEST_TIMEOUT_MS },
+      ),
+  },
   mappingOptions: {
     save: (id: number, data: SaveMappingOptionPayload, params?: QueryParams) =>
       http.post<MappingOption, SaveMappingOptionPayload>(`records/${id}/mapping-options`, data, {
@@ -469,6 +546,21 @@ export const records = {
     cancelJob: (jobId: string, params?: QueryParams) =>
       http.post<EnrichmentJob, Record<string, never>>(`records/enrichment-jobs/${jobId}/cancel`, {}, { params }),
   },
+};
+
+export const keywording = {
+  index: (params?: QueryParams) =>
+    http.get<KeywordingJobsIndexResponse>("keywording-jobs", { params }),
+  create: (data: CreateKeywordingJobPayload, params?: QueryParams) =>
+    http.post<KeywordingJob, CreateKeywordingJobPayload>("keywording-jobs", data, { params }),
+  get: (jobId: string, params?: QueryParams) =>
+    http.get<KeywordingJob>(`keywording-jobs/${jobId}`, { params }),
+  cancel: (jobId: string, params?: QueryParams) =>
+    http.post<KeywordingJob, Record<string, never>>(`keywording-jobs/${jobId}/cancel`, {}, { params }),
+  remove: (jobId: string, params?: QueryParams) =>
+    http.delete<KeywordingJob>(`keywording-jobs/${jobId}`, { params }),
+  downloadReport: (jobId: string) =>
+    requestFile("GET", `keywording-jobs/${jobId}/report`),
 };
 
 export const forums = {

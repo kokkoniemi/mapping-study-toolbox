@@ -12,6 +12,12 @@ const defineMappingQuestion: ModelFactory<MappingQuestionModelStatic> = (
       title: DataTypes.STRING,
       type: { type: DataTypes.STRING, defaultValue: "multiSelect" },
       position: { type: DataTypes.INTEGER, defaultValue: 0 },
+      description: DataTypes.TEXT,
+      decisionGuidance: DataTypes.TEXT,
+      positiveExamples: DataTypes.JSON,
+      negativeExamples: DataTypes.JSON,
+      evidenceInstructions: DataTypes.TEXT,
+      allowNewOption: { type: DataTypes.BOOLEAN, defaultValue: true },
     },
     {
       paranoid: true,

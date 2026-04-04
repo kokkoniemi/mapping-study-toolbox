@@ -25,6 +25,12 @@ const makeQuestion = (overrides: Partial<MappingQuestion> = {}): MappingQuestion
   title: "Question",
   type: "multiSelect",
   position: 0,
+  description: "",
+  decisionGuidance: "",
+  positiveExamples: [],
+  negativeExamples: [],
+  evidenceInstructions: "",
+  allowNewOption: true,
   MappingOptions: [],
   ...overrides,
 });

@@ -17,6 +17,12 @@ export const useMappingStore = defineStore("mapping", {
         title: "",
         type: "multiSelect",
         position: this.mappingQuestions.length,
+        description: "",
+        decisionGuidance: "",
+        positiveExamples: [],
+        negativeExamples: [],
+        evidenceInstructions: "",
+        allowNewOption: true,
       });
       this.mappingQuestions = [...this.mappingQuestions, { ...question.data, MappingOptions: [] }];
     },
@@ -38,4 +44,3 @@ export const useMappingStore = defineStore("mapping", {
     },
   },
 });
-

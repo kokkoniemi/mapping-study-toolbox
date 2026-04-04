@@ -196,3 +196,28 @@ export const parseStringArray = (
     return parsed;
   });
 };
+
+type BooleanOptions = {
+  optional?: boolean;
+};
+
+export const parseBoolean = (value: unknown, fieldName: string, options: BooleanOptions = {}) => {
+  const single = getSingleValue(value);
+  if (single === undefined || single === null) {
+    if (options.optional) {
+      return undefined;
+    }
+    throw badRequest(`${fieldName} is required`);
+  }
+
+  if (typeof single === "boolean") {
+    return single;
+  }
+  if (single === "true") {
+    return true;
+  }
+  if (single === "false") {
+    return false;
+  }
+  throw badRequest(`${fieldName} must be a boolean`);
+};

@@ -63,6 +63,12 @@ const _unusedQuestionShape = (overrides: Partial<MappingQuestion> = {}): Mapping
   title: "Question",
   type: "multiSelect",
   position: 0,
+  description: "",
+  decisionGuidance: "",
+  positiveExamples: [],
+  negativeExamples: [],
+  evidenceInstructions: "",
+  allowNewOption: true,
   MappingOptions: [],
   ...overrides,
 });

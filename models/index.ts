@@ -57,6 +57,8 @@ fs.readdirSync(__dirname)
 
 const requiredModelNames = [
   "Record",
+  "RecordDocument",
+  "DocumentChunk",
   "Forum",
   "MappingQuestion",
   "MappingOption",
@@ -65,6 +67,10 @@ const requiredModelNames = [
   "UserProfile",
   "RecordAssessment",
   "RecordAssessmentOption",
+  "KeywordingJob",
+  "KeywordingSuggestion",
+  "KeywordingEvidenceSpan",
+  "KeywordingCluster",
 ] as const;
 
 requiredModelNames.forEach((name) => {

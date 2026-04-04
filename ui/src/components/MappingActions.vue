@@ -13,8 +13,52 @@
                         <label>Title</label>
                         <input type="text" :value="question.title" @input="(e) => setQuestionTitle(e, question)" />
 
+                        <label>Description</label>
+                        <textarea
+                            :value="question.description || ''"
+                            rows="4"
+                            @input="(e) => setQuestionDescription(e, question)"
+                        />
+
+                        <label>Decision guidance</label>
+                        <textarea
+                            :value="question.decisionGuidance || ''"
+                            rows="5"
+                            @input="(e) => setQuestionDecisionGuidance(e, question)"
+                        />
+
+                        <label>Positive examples</label>
+                        <textarea
+                            :value="joinExamples(question.positiveExamples)"
+                            rows="4"
+                            @input="(e) => setQuestionPositiveExamples(e, question)"
+                        />
+
+                        <label>Negative examples</label>
+                        <textarea
+                            :value="joinExamples(question.negativeExamples)"
+                            rows="4"
+                            @input="(e) => setQuestionNegativeExamples(e, question)"
+                        />
+
+                        <label>Evidence instructions</label>
+                        <textarea
+                            :value="question.evidenceInstructions || ''"
+                            rows="4"
+                            @input="(e) => setQuestionEvidenceInstructions(e, question)"
+                        />
+
+                        <label class="mapping-question__popup--checkbox">
+                            <input
+                                type="checkbox"
+                                :checked="question.allowNewOption !== false"
+                                @change="(e) => setQuestionAllowNewOption(e, question)"
+                            />
+                            <span>Allow GPT to propose new options</span>
+                        </label>
+
                         <label>Type</label>
-                        <select @change="() => null">
+                        <select :value="question.type" @change="(e) => setQuestionType(e, question)">
                             <option v-for="(o) in typeOptions" :key="o.value" :value="o.value">{{ o.label }}</option>
                         </select>
                         <!-- <v-select @input="() => null" :options="typeOptions" :value="typeOptions[0].label"
@@ -176,19 +220,65 @@ const deleteQuestion = async (id: number) => {
   activeQuestionPopup.value = null;
 };
 
-const setQuestionTitle = debounce(async (event: Event, question: MappingQuestion) => {
+const buildQuestionUpdate = (question: MappingQuestion, overrides: Partial<MappingQuestion>) => ({
+  id: question.id,
+  title: overrides.title ?? question.title,
+  type: overrides.type ?? question.type,
+  position: overrides.position ?? question.position,
+  description: overrides.description ?? question.description ?? "",
+  decisionGuidance: overrides.decisionGuidance ?? question.decisionGuidance ?? "",
+  positiveExamples: overrides.positiveExamples ?? question.positiveExamples ?? [],
+  negativeExamples: overrides.negativeExamples ?? question.negativeExamples ?? [],
+  evidenceInstructions: overrides.evidenceInstructions ?? question.evidenceInstructions ?? "",
+  allowNewOption: overrides.allowNewOption ?? question.allowNewOption ?? true,
+});
+
+const parseExamples = (value: string) =>
+  value
+    .split(/\n+/)
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+
+const joinExamples = (value: string[] | undefined) => (Array.isArray(value) ? value.join("\n") : "");
+
+const updateQuestion = debounce(async (question: MappingQuestion, overrides: Partial<MappingQuestion>) => {
   if (props.readOnly) {
     return;
   }
-  const title = (event.target as HTMLInputElement).value;
-  const { id, type, position } = question;
-  await store.updateMappingQuestion({
-    id,
-    title,
-    type,
-    position,
-  });
+  await store.updateMappingQuestion(buildQuestionUpdate(question, overrides));
 }, 1000);
+
+const setQuestionTitle = (event: Event, question: MappingQuestion) => {
+  updateQuestion(question, { title: (event.target as HTMLInputElement).value });
+};
+
+const setQuestionDescription = (event: Event, question: MappingQuestion) => {
+  updateQuestion(question, { description: (event.target as HTMLTextAreaElement).value });
+};
+
+const setQuestionDecisionGuidance = (event: Event, question: MappingQuestion) => {
+  updateQuestion(question, { decisionGuidance: (event.target as HTMLTextAreaElement).value });
+};
+
+const setQuestionPositiveExamples = (event: Event, question: MappingQuestion) => {
+  updateQuestion(question, { positiveExamples: parseExamples((event.target as HTMLTextAreaElement).value) });
+};
+
+const setQuestionNegativeExamples = (event: Event, question: MappingQuestion) => {
+  updateQuestion(question, { negativeExamples: parseExamples((event.target as HTMLTextAreaElement).value) });
+};
+
+const setQuestionEvidenceInstructions = (event: Event, question: MappingQuestion) => {
+  updateQuestion(question, { evidenceInstructions: (event.target as HTMLTextAreaElement).value });
+};
+
+const setQuestionAllowNewOption = (event: Event, question: MappingQuestion) => {
+  updateQuestion(question, { allowNewOption: (event.target as HTMLInputElement).checked });
+};
+
+const setQuestionType = (event: Event, question: MappingQuestion) => {
+  updateQuestion(question, { type: (event.target as HTMLSelectElement).value });
+};
 
 const increaseQuestionPosition = async (question: MappingQuestion, index: number) => {
   if (props.readOnly) {
@@ -199,25 +289,14 @@ const increaseQuestionPosition = async (question: MappingQuestion, index: number
     return;
   }
 
-  const { id, type, title, position } = question;
-  await store.updateMappingQuestion({
-    id,
-    type,
-    title,
-    position: position + 1,
-  });
+  await store.updateMappingQuestion(buildQuestionUpdate(question, { position: question.position + 1 }));
 
   const next = mappingQuestions.value[index + 1];
   if (!next) {
     return;
   }
 
-  await store.updateMappingQuestion({
-    id: next.id,
-    type: next.type,
-    title: next.title,
-    position: next.position - 1,
-  });
+  await store.updateMappingQuestion(buildQuestionUpdate(next, { position: next.position - 1 }));
 
   await store.fetchMappingQuestions();
 };
@@ -231,25 +310,14 @@ const decreaseQuestionPosition = async (question: MappingQuestion, index: number
     return;
   }
 
-  const { id, type, title, position } = question;
-  await store.updateMappingQuestion({
-    id,
-    type,
-    title,
-    position: position - 1,
-  });
+  await store.updateMappingQuestion(buildQuestionUpdate(question, { position: question.position - 1 }));
 
   const previous = mappingQuestions.value[index - 1];
   if (!previous) {
     return;
   }
 
-  await store.updateMappingQuestion({
-    id: previous.id,
-    type: previous.type,
-    title: previous.title,
-    position: previous.position + 1,
-  });
+  await store.updateMappingQuestion(buildQuestionUpdate(previous, { position: previous.position + 1 }));
 
   await store.fetchMappingQuestions();
 };

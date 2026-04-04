@@ -17,6 +17,10 @@ services:
     environment:
       NODE_ENV: development
       OPENALEX_API_KEY: ${OPENALEX_API_KEY:-}
+      KEYWORDING_WORKER_URL: http://keywording-worker:8001
+      KEYWORDING_WORKER_TIMEOUT_MS: ${KEYWORDING_WORKER_TIMEOUT_MS:-}
+      KEYWORDING_ADVANCED_WORKER_TIMEOUT_MS: ${KEYWORDING_ADVANCED_WORKER_TIMEOUT_MS:-}
+      GROBID_URL: http://grobid:8070
     healthcheck:
       test:
         [
@@ -29,6 +33,12 @@ services:
       timeout: 3s
       retries: 20
       start_period: 10s
+
+    depends_on:
+      keywording-worker:
+        condition: service_started
+      grobid:
+        condition: service_started
 
   frontend:
     build:
@@ -52,6 +62,34 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+
+  keywording-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    image: mapping-study-toolbox-keywording-worker-dev
+    working_dir: /workspace/worker
+    init: true
+    stop_signal: SIGTERM
+    stop_grace_period: 10s
+    command: uvicorn app:app --app-dir /workspace/worker --host 0.0.0.0 --port 8001 --reload
+    volumes:
+      - ./:/workspace
+    ports:
+      - "8001:8001"
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5.4}
+      GROBID_URL: http://grobid:8070
+      APP_DATA_DIR: /workspace
+
+  grobid:
+    image: grobid/grobid:0.6.2
+    init: true
+    stop_signal: SIGTERM
+    stop_grace_period: 20s
+    ports:
+      - "8070:8070"
 
 volumes:
   backend_node_modules:

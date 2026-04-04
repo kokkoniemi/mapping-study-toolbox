@@ -7,10 +7,19 @@ services:
     environment:
       APP_DATA_DIR: /workspace-data
       OPENALEX_API_KEY: ${OPENALEX_API_KEY:-}
+      KEYWORDING_WORKER_URL: http://keywording-worker:8001
+      KEYWORDING_WORKER_TIMEOUT_MS: ${KEYWORDING_WORKER_TIMEOUT_MS:-}
+      KEYWORDING_ADVANCED_WORKER_TIMEOUT_MS: ${KEYWORDING_ADVANCED_WORKER_TIMEOUT_MS:-}
+      GROBID_URL: http://grobid:8070
     ports:
       - "3000:3000"
     volumes:
       - ./:/workspace-data
+    depends_on:
+      keywording-worker:
+        condition: service_started
+      grobid:
+        condition: service_started
     healthcheck:
       test:
         [
@@ -23,3 +32,24 @@ services:
       timeout: 5s
       retries: 10
       start_period: 15s
+
+  keywording-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    image: ${MAPPING_TOOL_WORKER_IMAGE:-mapping-study-toolbox-keywording-worker:latest}
+    init: true
+    restart: unless-stopped
+    working_dir: /app/worker
+    environment:
+      APP_DATA_DIR: /workspace-data
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5.4}
+      GROBID_URL: http://grobid:8070
+    volumes:
+      - ./:/workspace-data
+
+  grobid:
+    image: grobid/grobid:0.6.2
+    init: true
+    restart: unless-stopped

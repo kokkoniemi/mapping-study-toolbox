@@ -10,6 +10,12 @@ export type MappingQuestionUpdate = {
   title?: string;
   type?: string;
   position?: number;
+  description?: string | null;
+  decisionGuidance?: string | null;
+  positiveExamples?: string[];
+  negativeExamples?: string[];
+  evidenceInstructions?: string | null;
+  allowNewOption?: boolean;
 };
 
 export type MappingOptionCreate = {
@@ -69,4 +75,3 @@ export const statusToFilter = (status: RecordStatus): StatusFilter => {
   }
   return status;
 };
-

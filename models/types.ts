@@ -1,6 +1,20 @@
 import type { Model, ModelStatic, Sequelize } from "sequelize";
 import type * as SequelizeModule from "sequelize";
-import type { EnrichmentProvenanceMap, RecordStatus } from "../shared/contracts";
+import type {
+  KeywordingActionType,
+  KeywordingAnalysisMode,
+  EnrichmentProvenanceMap,
+  KeywordingCacheSummary,
+  KeywordingJobSummary,
+  KeywordingJobStatus,
+  KeywordingSuggestionDecisionType,
+  RecordDocumentEmbeddingStatus,
+  RecordDocumentExtractionStatus,
+  RecordDocumentQualityStatus,
+  RecordDocumentSourceType,
+  RecordDocumentUploadStatus,
+  RecordStatus,
+} from "../shared/contracts";
 
 export type DataTypesInstance = typeof import("sequelize").DataTypes;
 
@@ -37,6 +51,12 @@ export interface MappingQuestionAttributes {
   title: string | null;
   type: string;
   position: number;
+  description: string | null;
+  decisionGuidance: string | null;
+  positiveExamples: string[] | null;
+  negativeExamples: string[] | null;
+  evidenceInstructions: string | null;
+  allowNewOption: boolean;
   createdAt: Date;
   updatedAt: Date;
   deletedAt: Date | null;
@@ -160,6 +180,72 @@ export type RecordModelStatic = AssociableModel<RecordModel> & {
   getAllByUrls: (searchUrls: string[]) => Promise<RecordModel[]>;
 };
 
+export interface RecordDocumentAttributes {
+  id: number;
+  recordId: number;
+  originalFileName: string;
+  storedPath: string;
+  mimeType: string;
+  checksum: string;
+  fileSize: number;
+  uploadStatus: RecordDocumentUploadStatus;
+  extractionStatus: RecordDocumentExtractionStatus;
+  sourceType: RecordDocumentSourceType;
+  pageCount: number | null;
+  extractorKind: string | null;
+  extractorVersion: string | null;
+  extractedTextPath: string | null;
+  structuredDocumentPath: string | null;
+  chunkManifestPath: string | null;
+  extractionError: string | null;
+  qualityStatus: RecordDocumentQualityStatus;
+  qualityScore: number | null;
+  printableTextRatio: number | null;
+  weirdCharacterRatio: number | null;
+  ocrUsed: boolean;
+  ocrConfidence: number | null;
+  extractionWarnings: string[] | null;
+  embeddingStatus: RecordDocumentEmbeddingStatus;
+  embeddingModel: string | null;
+  embeddingTask: string | null;
+  embeddingGeneratedAt: Date | null;
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export type RecordDocumentCreationAttributes = Partial<RecordDocumentAttributes>;
+export type RecordDocumentModel = BaseModel<RecordDocumentAttributes, RecordDocumentCreationAttributes>;
+export type RecordDocumentModelStatic = AssociableModel<RecordDocumentModel>;
+
+export interface DocumentChunkAttributes {
+  id: number;
+  recordDocumentId: number;
+  chunkKey: string;
+  chunkIndex: number;
+  pageStart: number | null;
+  pageEnd: number | null;
+  sectionName: string | null;
+  headingPath: string[] | null;
+  text: string;
+  charCount: number;
+  tokenCount: number;
+  embeddingReference: string | null;
+  embeddingModel: string | null;
+  embeddingTask: string | null;
+  embeddingVersion: string | null;
+  embeddingChecksum: string | null;
+  embeddingGeneratedAt: Date | null;
+  qualityScore: number | null;
+  qualityFlags: string[] | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export type DocumentChunkCreationAttributes = Partial<DocumentChunkAttributes>;
+export type DocumentChunkModel = BaseModel<DocumentChunkAttributes, DocumentChunkCreationAttributes>;
+export type DocumentChunkModelStatic = AssociableModel<DocumentChunkModel>;
+
 export interface ImportAttributes {
   id: number;
   database: string | null;
@@ -224,8 +310,119 @@ export type RecordAssessmentOptionModel = BaseModel<
 >;
 export type RecordAssessmentOptionModelStatic = AssociableModel<RecordAssessmentOptionModel>;
 
+export interface KeywordingJobAttributes {
+  id: number;
+  jobId: string;
+  status: KeywordingJobStatus;
+  cancelRequested: boolean;
+  recordIds: number[];
+  mappingQuestionIds: number[];
+  analysisMode: KeywordingAnalysisMode;
+  reuseEmbeddingCache: boolean;
+  embeddingModel: string | null;
+  representationModel: string | null;
+  bertopicVersion: string | null;
+  topicReductionApplied: boolean;
+  topicCountBeforeReduction: number | null;
+  topicCountAfterReduction: number | null;
+  downgradedTopicCount: number;
+  cacheSummary: KeywordingCacheSummary | null;
+  topicArtifactPath: string | null;
+  total: number;
+  processed: number;
+  summary: KeywordingJobSummary | null;
+  reportPath: string | null;
+  latestError: string | null;
+  startedAt: Date | null;
+  finishedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export type KeywordingJobCreationAttributes = Partial<KeywordingJobAttributes>;
+export type KeywordingJobModel = BaseModel<KeywordingJobAttributes, KeywordingJobCreationAttributes>;
+export type KeywordingJobModelStatic = AssociableModel<KeywordingJobModel>;
+
+export interface KeywordingSuggestionAttributes {
+  id: number;
+  keywordingJobId: number;
+  recordId: number;
+  mappingQuestionId: number;
+  actionType: KeywordingActionType;
+  decisionType: KeywordingSuggestionDecisionType;
+  existingOptionId: number | null;
+  proposedOptionLabel: string | null;
+  confidence: number;
+  rationale: string;
+  reviewerNote: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export type KeywordingSuggestionCreationAttributes = Partial<KeywordingSuggestionAttributes>;
+export type KeywordingSuggestionModel = BaseModel<
+  KeywordingSuggestionAttributes,
+  KeywordingSuggestionCreationAttributes
+>;
+export type KeywordingSuggestionModelStatic = AssociableModel<KeywordingSuggestionModel>;
+
+export interface KeywordingEvidenceSpanAttributes {
+  id: number;
+  keywordingSuggestionId: number;
+  recordDocumentId: number | null;
+  documentChunkId: number | null;
+  chunkKey: string | null;
+  pageStart: number | null;
+  pageEnd: number | null;
+  sectionName: string | null;
+  headingPath: string[] | null;
+  excerptText: string;
+  rank: number;
+  score: number | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export type KeywordingEvidenceSpanCreationAttributes = Partial<KeywordingEvidenceSpanAttributes>;
+export type KeywordingEvidenceSpanModel = BaseModel<
+  KeywordingEvidenceSpanAttributes,
+  KeywordingEvidenceSpanCreationAttributes
+>;
+export type KeywordingEvidenceSpanModelStatic = AssociableModel<KeywordingEvidenceSpanModel>;
+
+export interface KeywordingClusterAttributes {
+  id: number;
+  keywordingJobId: number;
+  mappingQuestionId: number;
+  clusterKey: string;
+  label: string | null;
+  actionType: KeywordingActionType;
+  topicId: number | null;
+  parentTopicId: number | null;
+  isOutlier: boolean;
+  topTerms: string[] | null;
+  representativeChunkKeys: string[] | null;
+  representationSource: string | null;
+  topicSize: number | null;
+  confidence: number;
+  rationale: string;
+  existingOptionIds: number[] | null;
+  proposedOptionLabels: string[] | null;
+  supportingRecordIds: number[] | null;
+  supportingChunkKeys: string[] | null;
+  supportingEvidence: Array<Record<string, unknown>> | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export type KeywordingClusterCreationAttributes = Partial<KeywordingClusterAttributes>;
+export type KeywordingClusterModel = BaseModel<KeywordingClusterAttributes, KeywordingClusterCreationAttributes>;
+export type KeywordingClusterModelStatic = AssociableModel<KeywordingClusterModel>;
+
 export interface DbModels {
   Record: RecordModelStatic;
+  RecordDocument: RecordDocumentModelStatic;
+  DocumentChunk: DocumentChunkModelStatic;
   Forum: ForumModelStatic;
   MappingQuestion: MappingQuestionModelStatic;
   MappingOption: MappingOptionModelStatic;
@@ -234,6 +431,10 @@ export interface DbModels {
   UserProfile: UserProfileModelStatic;
   RecordAssessment: RecordAssessmentModelStatic;
   RecordAssessmentOption: RecordAssessmentOptionModelStatic;
+  KeywordingJob: KeywordingJobModelStatic;
+  KeywordingSuggestion: KeywordingSuggestionModelStatic;
+  KeywordingEvidenceSpan: KeywordingEvidenceSpanModelStatic;
+  KeywordingCluster: KeywordingClusterModelStatic;
   sequelize: Sequelize;
   Sequelize: typeof SequelizeModule;
 }
